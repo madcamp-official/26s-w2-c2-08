@@ -74,7 +74,19 @@
 
 ## 아키텍처
 
-<!-- 실시간 인터랙션: WebSocket/SSE/WebRTC 구조도 / LLM Wrapper: API 연동 흐름도 / Cross-Platform: 플랫폼 구성도 -->
+현재 저장소에는 로컬 개발에 필요한 최소 구성만 포함한다.
+
+```text
+React + Vite (:5173)
+        │ /api proxy
+        ▼
+FastAPI (:8000)
+        │ SQLAlchemy + psycopg
+        ▼
+PostgreSQL 17 + pgvector (:5432, Docker)
+```
+
+Ollama, STT, Nginx, Cloudflare와 운영 배포 환경은 관련 기능을 구현할 때 추가한다.
 
 ---
 
@@ -94,39 +106,76 @@
 
 | Method / 방식 | Endpoint / 서비스 | 설명 | 요청 | 응답 | 비고 |
 |---|---|---|---|---|---|
-|  |  |  |  |  |  |
+| GET | `/api/health` | API 프로세스 상태 확인 | 없음 | `{"status":"ok"}` | DB 비의존 |
+| GET | `/api/health/db` | PostgreSQL 연결 확인 | 없음 | DB 연결 상태 | 장애 시 503 |
 
 ---
 
 ## 산출물 및 실행 방법
 
-- **산출물 설명:**
-- **실행 환경:**
-- **실행 방법:**
+- **산출물 설명:** React와 FastAPI로 개발하는 실시간 AI 강의 보조 서비스
+- **실행 환경:** Node.js 22, pnpm 11, Python 3.12, uv, Docker Compose
+- **실행 방법:** 아래 로컬 개발환경 실행 절차 참고
 - **시연 영상 / 이미지:** (선택)
 
-### 실행 방법
+### 사전 요구사항
+
+- Node.js 22.13 이상 23 미만
+- Corepack과 pnpm 11.11.0
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/)
+- Docker Engine과 Docker Compose
+
+### 최초 설정
 
 ```bash
-# 환경 설정
 cp .env.example .env
+corepack enable
+make setup
 
-# 의존성 설치
-npm install   # 또는 pip install -r requirements.txt 등
+# PostgreSQL 실행 및 pgvector migration
+make db-up
+make migrate
+```
 
-# 실행
-npm run dev   # 또는 python main.py 등
+### 개발 서버 실행
+
+터미널 두 개에서 각각 실행한다.
+
+```bash
+# 터미널 1: FastAPI
+make dev-api
+
+# 터미널 2: React/Vite
+make dev-web
+```
+
+접속 주소:
+
+- Frontend: <http://127.0.0.1:5173>
+- FastAPI: <http://127.0.0.1:8000>
+- API 문서: <http://127.0.0.1:8000/docs>
+
+### 검사 명령
+
+```bash
+# lint, formatting, test, frontend build 전체 실행
+make check
+
+# DB 종료
+make db-down
 ```
 
 ### 기술 구성
 
 | 분류 | 사용 기술 |
 |---|---|
-| 핵심 기술 |  |
-| 실행 환경 |  |
-| 데이터 저장 |  |
-| 외부 API / 서비스 |  |
-| 기타 |  |
+| Frontend | React 19, Vite 8, TypeScript 6, Vitest |
+| Backend | FastAPI, SQLAlchemy 2, psycopg 3, Alembic, PyMuPDF |
+| 실행 환경 | Node.js 22, pnpm 11, Python 3.12, uv, Docker Compose |
+| 데이터 저장 | PostgreSQL 17, pgvector 0.8.2, 로컬 filesystem |
+| 품질 관리 | ESLint, Prettier, Ruff, pytest, GitHub Actions |
+| 외부 API / 서비스 | 현재 없음 |
 
 ---
 
