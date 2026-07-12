@@ -251,6 +251,56 @@ function initPressedGroups() {
   });
 }
 
+function initTranscriptRangeLinks() {
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-transcript-range-link]");
+    if (!trigger) return;
+    const target = document.querySelector(trigger.dataset.transcriptTarget);
+    if (!target) return;
+    const start = Number(trigger.dataset.startSequence);
+    const end = Number(trigger.dataset.endSequence);
+    target.querySelectorAll("[data-sequence]").forEach((segment) => {
+      const sequence = Number(segment.dataset.sequence);
+      segment.classList.toggle(
+        "is-record-highlighted",
+        sequence >= start && sequence <= end,
+      );
+    });
+    const first = target.querySelector(`[data-sequence="${start}"]`);
+    if (first) {
+      first.tabIndex = -1;
+      first.focus({ preventScroll: true });
+      first.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    showToast(
+      `Transcript sequence ${start}~${end} 범위를 표시했습니다.`,
+      "info",
+    );
+  });
+}
+
+function initSharedJobRetries() {
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-shared-job-retry]");
+    if (!trigger) return;
+    const card = trigger.closest("[data-record-job]");
+    if (!card) return;
+    const attempt = card.querySelector("[data-job-attempt]");
+    const nextAttempt = Number(attempt?.dataset.attempt || "1") + 1;
+    if (attempt) {
+      attempt.dataset.attempt = String(nextAttempt);
+      attempt.textContent = `attempt ${nextAttempt}`;
+    }
+    card.dataset.jobStatus = "pending";
+    card.querySelector("[data-job-status]").textContent = "PENDING";
+    trigger.hidden = true;
+    showToast(
+      `${trigger.dataset.sharedJobRetry} 같은 Job을 재시도합니다.`,
+      "success",
+    );
+  });
+}
+
 function initStateActions() {
   document.addEventListener("click", (event) => {
     const action = event.target.closest("[data-state-action]");
@@ -350,6 +400,8 @@ initNormalizedInputs();
 initCopyActions();
 initDisclosures();
 initPressedGroups();
+initTranscriptRangeLinks();
+initSharedJobRetries();
 initGreeting();
 initCommonActions();
 initQueryToast();
