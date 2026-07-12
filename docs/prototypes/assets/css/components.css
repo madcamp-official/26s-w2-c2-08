@@ -1777,3 +1777,256 @@
     flex-direction: column;
   }
 }
+
+/* Course onboarding */
+.subpage-heading {
+  display: flex;
+  gap: var(--space-6);
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: var(--space-7);
+}
+
+.subpage-heading h1 {
+  max-width: 720px;
+  margin: 8px 0 0;
+  font-size: clamp(34px, 5vw, 54px);
+  line-height: 1.04;
+  letter-spacing: -0.052em;
+}
+
+.subpage-heading p:not(.eyebrow) {
+  max-width: 660px;
+  margin: var(--space-3) 0 0;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  margin-bottom: var(--space-6);
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.breadcrumb a:hover,
+.breadcrumb a:focus-visible {
+  color: var(--color-brand-dark);
+}
+
+.onboarding-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.58fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.form-card {
+  padding: clamp(24px, 4vw, 38px);
+}
+
+.form-card__header h2,
+.form-card__header p {
+  margin: 0;
+}
+
+.form-card__header h2 {
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.form-card__header p {
+  margin-top: 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.form-fields {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-7);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: end;
+  margin-top: var(--space-7);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-line);
+}
+
+.onboarding-aside {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.onboarding-aside .panel {
+  padding: var(--space-5);
+}
+
+.onboarding-aside h2,
+.onboarding-aside p {
+  margin: 0;
+}
+
+.onboarding-aside h2 {
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-aside p,
+.onboarding-aside li {
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.onboarding-aside ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  padding-left: 18px;
+}
+
+.result-card {
+  display: grid;
+  min-height: 410px;
+  padding: clamp(28px, 5vw, 48px);
+  place-items: center;
+  text-align: center;
+}
+
+.result-card__content {
+  width: min(100%, 560px);
+}
+
+.result-card__icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto var(--space-5);
+  place-items: center;
+  border-radius: 20px;
+  color: var(--color-success);
+  font-size: 24px;
+  font-weight: 900;
+  background: var(--color-success-soft);
+}
+
+.result-card h2,
+.result-card p {
+  margin: 0;
+}
+
+.result-card h2 {
+  font-size: clamp(28px, 4vw, 38px);
+  letter-spacing: -0.045em;
+}
+
+.result-card p {
+  margin-top: var(--space-3);
+  color: var(--color-muted);
+  line-height: 1.65;
+}
+
+.result-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-6) 0;
+  text-align: left;
+}
+
+.result-summary > div {
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: #f8f7f2;
+}
+
+.result-summary small,
+.result-summary strong {
+  display: block;
+}
+
+.result-summary small {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.result-summary strong {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.join-code-box {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-brand);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  background: var(--color-brand-soft);
+}
+
+.join-code-box small,
+.join-code-box strong {
+  display: block;
+}
+
+.join-code-box small {
+  color: var(--color-brand-dark);
+  font-size: 11px;
+}
+
+.join-code-box strong {
+  margin-top: 5px;
+  font-size: clamp(22px, 4vw, 30px);
+  letter-spacing: 0.12em;
+}
+
+.loading-card {
+  display: grid;
+  min-height: 410px;
+  gap: var(--space-5);
+  align-content: center;
+  padding: clamp(28px, 5vw, 48px);
+}
+
+@media (max-width: 900px) {
+  .subpage-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .onboarding-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .form-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .result-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .join-code-box {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
