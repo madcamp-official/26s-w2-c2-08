@@ -26,6 +26,9 @@ document.body.dataset.role = role;
 document.querySelectorAll("[data-professor-only]").forEach((e) => {
   if (role !== "professor") e.hidden = true;
 });
+document.querySelectorAll("[data-student-only]").forEach((e) => {
+  if (role !== "student") e.hidden = true;
+});
 const roleLabel = document.querySelector("[data-role-label]");
 const completeLabel = document.querySelector("[data-complete-label]");
 if (roleLabel) roleLabel.textContent = role === "professor" ? "교수자" : "학생";

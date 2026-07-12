@@ -783,6 +783,229 @@
   }
 }
 
+/* Completed class record */
+.record-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-5);
+  align-items: end;
+  margin-bottom: var(--space-5);
+}
+.record-header h1,
+.record-header p {
+  margin: 0;
+}
+.record-header h1 {
+  margin-top: 7px;
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+.record-header p:not(.eyebrow) {
+  margin-top: 10px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.record-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.record-layout > * {
+  min-width: 0;
+}
+.record-main,
+.record-sidebar {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.record-toc {
+  display: flex;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 6px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+.record-toc a {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 800;
+}
+.record-toc a:hover,
+.record-toc a:focus-visible {
+  background: var(--color-brand-soft);
+}
+.record-section {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 30px);
+  scroll-margin-top: 110px;
+}
+.record-section h2,
+.record-section h3,
+.record-section p {
+  margin-top: 0;
+}
+.record-availability {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.record-material-list,
+.record-job-list,
+.record-question-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.record-material {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: #f8f7f2;
+}
+.record-material strong,
+.record-material small {
+  display: block;
+}
+.record-material small {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.record-transcript {
+  max-height: none;
+  overflow: visible;
+}
+.record-transcript .transcript-segment {
+  background: #f8f7f2;
+}
+.transcript-segment.is-record-highlighted {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  box-shadow: var(--shadow-focus);
+}
+.record-question,
+.record-cluster,
+.record-answer {
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: #f8f7f2;
+}
+.record-question[data-question-status="answered"] {
+  opacity: 1;
+}
+.record-answer {
+  margin-top: var(--space-3);
+  border-color: rgb(98 87 232 / 24%);
+  background: var(--color-brand-soft);
+}
+.record-answer h4,
+.record-answer p {
+  margin: 0;
+}
+.record-answer p {
+  margin-top: 7px;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.range-link {
+  min-height: 44px;
+  margin-top: var(--space-3);
+  padding: 9px 12px;
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-pill);
+  color: var(--color-brand-dark);
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--color-surface);
+  cursor: pointer;
+}
+.record-job-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: #f8f7f2;
+}
+.record-job-card h3,
+.record-job-card p {
+  margin: 0;
+}
+.record-job-card p {
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+.record-chat-log {
+  display: grid;
+  gap: var(--space-3);
+  max-height: 460px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.record-chat-message {
+  width: fit-content;
+  max-width: 92%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--color-surface-soft);
+}
+.record-chat-message[data-role="user"] {
+  margin-left: auto;
+  color: #fff;
+  background: var(--color-ink);
+}
+.record-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+@media (max-width: 900px) {
+  .record-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .record-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .record-material,
+  .record-job-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .record-material .button,
+  .record-job-card .button {
+    width: 100%;
+  }
+}
+
 /* class processing */
 .processing-layout {
   display: grid;
