@@ -159,7 +159,13 @@ make dev-web
 ### 검사 명령
 
 ```bash
-# lint, formatting, test, frontend build 전체 실행
+# 공통 Skill 원본을 Codex·Claude 발견 경로에 복사한 뒤 동일성과 형식 검사
+make skills-sync
+
+# 파일을 수정하지 않고 공통 Skill 동기화 상태와 형식만 검사
+make skills-check
+
+# 공통 Skill, lint, formatting, test, frontend build 전체 실행
 make check
 
 # DB 종료

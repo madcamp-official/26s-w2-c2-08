@@ -89,7 +89,9 @@
 - 공통 Skill의 원본은 `agent-skills/<skill-name>/SKILL.md`다.
 - Codex 발견 경로는 `.agents/skills/<skill-name>/SKILL.md`다.
 - Claude Code 발견 경로는 `.claude/skills/<skill-name>/SKILL.md`다.
-- 공통 `SKILL.md`에는 `name`과 `description`만 YAML frontmatter로 사용하고 제품 전용 문법을 넣지 않는다.
-- 원본 Skill을 수정하면 두 발견 경로의 복사본을 같은 변경에서 갱신하고 byte 단위로 동일한지 확인한다.
+- 공통 `SKILL.md`에는 한 줄 문자열인 `name`과 `description`만 YAML frontmatter로 사용하고 제품 전용 문법을 넣지 않는다.
+- 원본 Skill을 수정하면 `make skills-sync`로 두 발견 경로를 순서대로 갱신하고 byte 동일성과 Skill 형식을 검사한다.
+- `make skills-check`는 파일을 수정하지 않고 Skill 집합, byte 동일성과 형식을 검사하며 CI에서도 실행한다.
+- 원본에 없는 발견 경로의 Skill은 자동 삭제하지 않는다. 원본을 삭제하거나 이름을 바꾸면 파생 복사본도 명시적으로 정리한다.
 - 상세 제품 계약을 Skill에 복사하지 말고 관련 기준 문서를 직접 읽도록 안내한다.
 - 자동 커밋, 자동 branch 전환, 자동 push와 자동 merge를 Hook으로 활성화하지 않는다.

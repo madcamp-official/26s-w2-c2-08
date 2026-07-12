@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup compose-check db-up db-down db-logs migrate dev-api dev-web lint test build check
+.PHONY: setup compose-check db-up db-down db-logs migrate dev-api dev-web skills-sync skills-check lint test build check
 
 setup:
 	cd backend && uv sync --dev
@@ -27,6 +27,12 @@ dev-api:
 dev-web:
 	cd frontend && pnpm dev
 
+skills-sync:
+	python3 scripts/sync_skills.py sync
+
+skills-check:
+	python3 scripts/sync_skills.py check
+
 lint:
 	cd backend && uv run ruff check .
 	cd backend && uv run ruff format --check .
@@ -40,4 +46,4 @@ test:
 build:
 	cd frontend && pnpm build
 
-check: compose-check lint test build
+check: skills-check compose-check lint test build
