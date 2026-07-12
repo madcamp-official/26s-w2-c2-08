@@ -29,7 +29,9 @@ export function showToast(message, tone = "info") {
 function getFocusableElements(container) {
   return [...container.querySelectorAll(focusableSelector)].filter(
     (element) =>
-      !element.hidden && element.getAttribute("aria-hidden") !== "true",
+      !element.hidden &&
+      !element.closest("[hidden]") &&
+      element.getAttribute("aria-hidden") !== "true",
   );
 }
 
