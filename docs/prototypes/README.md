@@ -40,7 +40,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 | 실시간 수업 | 교수자 실시간 class     | `LIVE_CLASS_PAGE_PROF`   | `class-live-professor.html`  | 확인 가능 |
 | 실시간 수업 | 학생 실시간 class       | `LIVE_CLASS_PAGE_STUD`   | `class-live-student.html`    | 확인 가능 |
 | 수업 종료   | 기록 정리 중            | `CLASS_PROCESSING_STATE` | `class-processing.html`      | 확인 가능 |
-| 수업 기록   | 교수자 완료 class       | `ENDED_CLASS_PAGE_PROF`  | `class-ended-professor.html` | 예정      |
+| 수업 기록   | 교수자 완료 class       | `ENDED_CLASS_PAGE_PROF`  | `class-ended-professor.html` | 확인 가능 |
 | 수업 기록   | 학생 완료 class·복습 AI | `ENDED_CLASS_PAGE_STUD`  | `class-ended-student.html`   | 예정      |
 
 ## 프로토타입과 실제 구현의 경계
