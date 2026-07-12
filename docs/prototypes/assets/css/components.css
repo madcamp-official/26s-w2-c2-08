@@ -2004,6 +2004,25 @@
   padding: clamp(28px, 5vw, 48px);
 }
 
+.join-code-input {
+  min-height: 66px !important;
+  padding-inline: var(--space-5) !important;
+  font-size: clamp(22px, 4vw, 30px) !important;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.result-card__icon--info {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+}
+
+.result-card__icon--warning {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
 @media (max-width: 900px) {
   .subpage-heading {
     align-items: stretch;
