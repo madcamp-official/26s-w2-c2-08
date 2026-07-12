@@ -1818,6 +1818,34 @@
   content: "";
 }
 
+.course-hero__main--student {
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgb(223 255 114 / 18%),
+      transparent 15rem
+    ),
+    linear-gradient(140deg, #214238, #172c26);
+}
+
+.course-access-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-access-list li {
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  background: #f8f7f2;
+}
+
 .course-hero__main h2,
 .course-hero__main p {
   position: relative;
@@ -1869,6 +1897,13 @@
   grid-template-columns: minmax(0, 1.42fr) minmax(280px, 0.58fr);
   gap: var(--space-4);
   align-items: start;
+}
+
+.course-hero > *,
+.course-detail-grid > *,
+.current-session,
+.course-side-panel {
+  min-width: 0;
 }
 
 .current-session,
@@ -2006,6 +2041,11 @@
   .current-session__footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .current-session,
+  .course-side-panel {
+    width: 100%;
   }
 
   .history-row {

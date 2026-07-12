@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="GOAL 학생 Course 상세 프로토타입" />
+    <title>GOAL · 인공지능 개론 · 학생</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <script type="module" src="assets/js/prototype.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 학생 Course 목 데이터입니다
+    </div>
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="dashboard.html" aria-label="GOAL 대시보드">
+          <span class="brand__mark" aria-hidden="true">G</span>
+          <span class="brand__copy"
+            ><strong>GOAL</strong><small>God of all lectures</small></span
+          >
+        </a>
+        <nav class="primary-nav" aria-label="주요 메뉴">
+          <a href="dashboard.html">홈</a
+          ><a href="course-student.html" aria-current="page">내 Course</a
+          ><a href="#studentHistoryTitle">강의 기록</a>
+        </nav>
+        <div class="header-actions">
+          <button
+            class="profile-button"
+            type="button"
+            data-profile-trigger
+            aria-expanded="false"
+            aria-controls="profilePopover"
+          >
+            <span class="avatar" aria-hidden="true">김</span
+            ><span class="profile-button__name">김도현</span
+            ><span aria-hidden="true">⌄</span>
+          </button>
+          <nav
+            class="profile-popover"
+            id="profilePopover"
+            data-profile-popover
+            hidden
+          >
+            <div class="profile-popover__summary">
+              <strong>김도현</strong><small>dohyun@example.com</small>
+            </div>
+            <a href="my-info.html">내 정보</a
+            ><a href="main.html?auth=default">로그아웃 상태 보기</a>
+          </nav>
+        </div>
+      </div>
+      <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
+        <a href="dashboard.html">홈</a
+        ><a href="course-student.html" aria-current="page">Course</a
+        ><a href="#studentHistoryTitle">기록</a>
+      </nav>
+    </header>
+
+    <main class="container page-main course-detail-page" id="mainContent">
+      <nav class="breadcrumb" aria-label="현재 위치">
+        <a href="dashboard.html">대시보드</a><span aria-hidden="true">/</span
+        ><span aria-current="page">학생 Course</span>
+      </nav>
+      <header class="subpage-heading">
+        <div>
+          <p class="eyebrow">COURSE_PAGE_STUD · Course별 권한</p>
+          <h1>학생 Course 상세</h1>
+          <p>현재 class에 입장하거나 완료된 강의 기록을 날짜별로 복습합니다.</p>
+        </div>
+        <div
+          class="state-switcher"
+          data-state-switcher
+          data-state-target="#studentCourseView"
+          aria-label="학생 Course 상세 상태 선택"
+        >
+          <button type="button" data-state="normal" aria-pressed="true">
+            정상</button
+          ><button type="button" data-state="loading" aria-pressed="false">
+            로딩</button
+          ><button type="button" data-state="error" aria-pressed="false">
+            오류</button
+          ><button type="button" data-state="forbidden" aria-pressed="false">
+            권한 없음</button
+          ><button type="button" data-state="expired" aria-pressed="false">
+            인증 만료
+          </button>
+        </div>
+      </header>
+
+      <section
+        id="studentCourseView"
+        data-demo-state="normal"
+        data-query-state="view"
+        data-query-default="normal"
+        aria-live="polite"
+      >
+        <div data-show-state="normal">
+          <section class="course-hero" aria-labelledby="studentCourseTitle">
+            <div class="course-hero__main course-hero__main--student">
+              <div class="cluster">
+                <span class="role-badge role-badge--student"
+                  >이 Course의 학생</span
+                ><span class="status-chip status-chip--live"
+                  >진행 중 class</span
+                >
+              </div>
+              <h2 id="studentCourseTitle">인공지능 개론</h2>
+              <p>2026 여름학기 · 이 Course에서만 학생 권한을 사용합니다.</p>
+            </div>
+            <aside class="course-hero__side">
+              <section class="panel">
+                <h2>학생이 이용할 수 있어요</h2>
+                <ul class="course-access-list">
+                  <li>진행 중 class의 실시간 Transcript와 익명 질문</li>
+                  <li>완료 class의 PDF·요약·질문 답변 기록</li>
+                  <li>선택한 class 범위의 근거 기반 복습 AI</li>
+                </ul>
+              </section>
+              <p class="notice notice--info" role="note">
+                학생 화면에는 교수자 전용 참여 코드와 class 생성·시작·종료
+                동작을 표시하지 않습니다.
+              </p>
+            </aside>
+          </section>
+
+          <div class="course-detail-grid">
+            <section
+              class="panel current-session"
+              id="studentCurrentSession"
+              data-demo-state="live"
+              data-query-state="session"
+              data-query-default="live"
+              aria-labelledby="studentCurrentSessionTitle"
+            >
+              <div class="section-heading">
+                <div>
+                  <h2 id="studentCurrentSessionTitle">현재 class</h2>
+                  <p>
+                    한 Course의 현재 진행 상태를 하나의 진입점으로 표시합니다.
+                  </p>
+                </div>
+                <div
+                  class="state-switcher"
+                  data-state-switcher
+                  data-state-target="#studentCurrentSession"
+                  aria-label="학생 현재 class 상태 선택"
+                >
+                  <button type="button" data-state="live" aria-pressed="true">
+                    진행 중</button
+                  ><button
+                    type="button"
+                    data-state="ready"
+                    aria-pressed="false"
+                  >
+                    시작 전</button
+                  ><button
+                    type="button"
+                    data-state="processing"
+                    aria-pressed="false"
+                  >
+                    정리 중</button
+                  ><button type="button" data-state="none" aria-pressed="false">
+                    없음</button
+                  ><button
+                    type="button"
+                    data-state="loading"
+                    aria-pressed="false"
+                  >
+                    로딩</button
+                  ><button
+                    type="button"
+                    data-state="error"
+                    aria-pressed="false"
+                  >
+                    오류
+                  </button>
+                </div>
+              </div>
+
+              <article class="current-session__card" data-show-state="live">
+                <div>
+                  <span class="status-chip status-chip--live">진행 중</span>
+                  <h3>CNN과 이미지 분류</h3>
+                  <p>
+                    <time datetime="2026-07-12">2026년 7월 12일</time> · 31분째
+                    진행 중
+                  </p>
+                </div>
+                <footer class="current-session__footer">
+                  <div class="cluster current-session__meta">
+                    <span>STT 연결됨</span><span>참여 58명</span
+                    ><span>익명 질문 8개</span>
+                  </div>
+                  <button
+                    class="button button--primary"
+                    type="button"
+                    data-toast="학생 실시간 class 화면은 후속 Prototype에서 연결됩니다."
+                  >
+                    실시간 class 입장
+                  </button>
+                </footer>
+              </article>
+              <article
+                class="current-session__card"
+                data-show-state="ready"
+                hidden
+              >
+                <div>
+                  <span class="status-chip status-chip--info">시작 전</span>
+                  <h3>순환 신경망</h3>
+                  <p>
+                    <time datetime="2026-07-14">2026년 7월 14일</time> ·
+                    교수자가 시작하면 입장할 수 있습니다.
+                  </p>
+                </div>
+                <footer class="current-session__footer">
+                  <span class="current-session__meta"
+                    >학생은 class를 직접 시작할 수 없습니다.</span
+                  ><button
+                    class="button button--secondary"
+                    type="button"
+                    disabled
+                  >
+                    시작 대기 중
+                  </button>
+                </footer>
+              </article>
+              <article
+                class="current-session__card"
+                data-show-state="processing"
+                hidden
+              >
+                <div>
+                  <span class="status-chip status-chip--warning">정리 중</span>
+                  <h3>딥러닝 최적화</h3>
+                  <p>Transcript 확정과 최종 요약을 만들고 있습니다.</p>
+                </div>
+                <footer class="current-session__footer">
+                  <span class="current-session__meta"
+                    >저장된 PDF·Transcript·Q&A는 준비되는 대로 먼저
+                    확인합니다.</span
+                  ><button
+                    class="button button--secondary"
+                    type="button"
+                    data-toast="class 기록 정리 중 화면은 후속 Prototype에서 연결됩니다."
+                  >
+                    정리 상태 보기
+                  </button>
+                </footer>
+              </article>
+              <div class="state-panel" data-show-state="none" hidden>
+                <div class="state-panel__content">
+                  <span class="state-panel__icon" aria-hidden="true">○</span>
+                  <h3>현재 입장할 class가 없습니다</h3>
+                  <p>교수자가 새 class를 만들고 시작하면 이곳에 표시됩니다.</p>
+                </div>
+              </div>
+              <div
+                class="loading-card"
+                data-show-state="loading"
+                hidden
+                aria-busy="true"
+              >
+                <div class="skeleton skeleton--title" aria-hidden="true"></div>
+                <div class="skeleton skeleton--line" aria-hidden="true"></div>
+                <span class="sr-only">현재 class를 불러오는 중입니다.</span>
+              </div>
+              <div
+                class="state-panel"
+                data-show-state="error"
+                hidden
+                role="alert"
+              >
+                <div class="state-panel__content">
+                  <span class="state-panel__icon" aria-hidden="true">!</span>
+                  <h3>현재 class를 불러오지 못했습니다</h3>
+                  <p>완료 class 기록은 계속 확인할 수 있습니다.</p>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-state-action
+                    data-state-target="#studentCurrentSession"
+                    data-state="live"
+                  >
+                    이 영역만 다시 시도
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <aside
+              class="panel course-side-panel"
+              aria-labelledby="studentGuideTitle"
+            >
+              <div>
+                <h2 id="studentGuideTitle">수업 전 확인</h2>
+                <p>
+                  진행 중 class 입장 전에 네트워크 상태와 브라우저 알림 설정을
+                  확인하세요.
+                </p>
+              </div>
+              <ul class="course-access-list">
+                <li>질문은 다른 참여자에게 익명으로 표시됩니다.</li>
+                <li>
+                  AI 기능에 문제가 생겨도 Transcript와 질문은 계속 사용합니다.
+                </li>
+                <li>종료된 class에는 새 질문이나 반응을 등록하지 않습니다.</li>
+              </ul>
+              <button
+                class="button button--secondary button--block"
+                type="button"
+                data-toast="현재 알림 설정은 정적 Prototype에서 변경하지 않습니다."
+              >
+                알림 상태 확인
+              </button>
+            </aside>
+          </div>
+
+          <section
+            class="course-history"
+            id="studentHistory"
+            data-demo-state="normal"
+            data-query-state="history"
+            data-query-default="normal"
+            aria-labelledby="studentHistoryTitle"
+          >
+            <div class="section-heading">
+              <div>
+                <div class="cluster">
+                  <h2 id="studentHistoryTitle">완료 class 기록</h2>
+                  <span class="badge">8</span>
+                </div>
+                <p>날짜별 final Transcript, 요약과 질문·답변을 복습합니다.</p>
+              </div>
+              <div
+                class="state-switcher"
+                data-state-switcher
+                data-state-target="#studentHistory"
+                aria-label="학생 완료 class 목록 상태 선택"
+              >
+                <button type="button" data-state="normal" aria-pressed="true">
+                  정상</button
+                ><button
+                  type="button"
+                  data-state="loading"
+                  aria-pressed="false"
+                >
+                  로딩</button
+                ><button type="button" data-state="empty" aria-pressed="false">
+                  빈 상태</button
+                ><button type="button" data-state="error" aria-pressed="false">
+                  오류
+                </button>
+              </div>
+            </div>
+            <div class="history-list" data-show-state="normal">
+              <article class="history-row">
+                <div>
+                  <time datetime="2026-07-10">7월 10일</time
+                  ><strong>합성곱 신경망</strong>
+                </div>
+                <p class="history-row__summary">
+                  PDF 2개 · final Transcript · 답변된 질문 7개
+                </p>
+                <button
+                  class="icon-button"
+                  type="button"
+                  aria-label="합성곱 신경망 기록 열기"
+                  data-toast="학생 완료 class·복습 AI 화면은 후속 Prototype에서 연결됩니다."
+                >
+                  ↗
+                </button>
+              </article>
+              <article class="history-row">
+                <div>
+                  <time datetime="2026-07-08">7월 8일</time
+                  ><strong>신경망 기초</strong>
+                </div>
+                <p class="history-row__summary">
+                  PDF 1개 · final Transcript · 답변된 질문 11개
+                </p>
+                <button
+                  class="icon-button"
+                  type="button"
+                  aria-label="신경망 기초 기록 열기"
+                  data-toast="학생 완료 class·복습 AI 화면은 후속 Prototype에서 연결됩니다."
+                >
+                  ↗
+                </button>
+              </article>
+              <article class="history-row">
+                <div>
+                  <time datetime="2026-07-05">7월 5일</time
+                  ><strong>지도 학습</strong>
+                </div>
+                <p class="history-row__summary">
+                  PDF 2개 · final Transcript · 답변된 질문 5개
+                </p>
+                <button
+                  class="icon-button"
+                  type="button"
+                  aria-label="지도 학습 기록 열기"
+                  data-toast="학생 완료 class·복습 AI 화면은 후속 Prototype에서 연결됩니다."
+                >
+                  ↗
+                </button>
+              </article>
+            </div>
+            <div
+              class="history-list"
+              data-show-state="loading"
+              hidden
+              aria-busy="true"
+            >
+              <div class="history-row skeleton-card" aria-hidden="true">
+                <div class="skeleton skeleton--title"></div>
+                <div class="skeleton skeleton--line"></div>
+              </div>
+              <span class="sr-only">완료 class를 불러오는 중입니다.</span>
+            </div>
+            <div class="state-panel" data-show-state="empty" hidden>
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">○</span>
+                <h3>완료된 class가 없습니다</h3>
+                <p>첫 class 기록 정리가 끝나면 이곳에서 복습할 수 있습니다.</p>
+              </div>
+            </div>
+            <div
+              class="state-panel"
+              data-show-state="error"
+              hidden
+              role="alert"
+            >
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">!</span>
+                <h3>완료 기록을 불러오지 못했습니다</h3>
+                <p>현재 class 상태는 계속 확인할 수 있습니다.</p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-state-action
+                  data-state-target="#studentHistory"
+                  data-state="normal"
+                >
+                  목록만 다시 시도
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section
+          class="panel course-page-loading"
+          data-show-state="loading"
+          hidden
+          aria-busy="true"
+        >
+          <div class="skeleton skeleton--title" aria-hidden="true"></div>
+          <div class="skeleton skeleton--line" aria-hidden="true"></div>
+          <div class="skeleton skeleton--line" aria-hidden="true"></div>
+          <span class="sr-only">학생 Course 상세를 불러오는 중입니다.</span>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="error"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>Course를 불러오지 못했습니다</h2>
+            <p>이전 Course와 class 목 데이터를 표시하지 않습니다.</p>
+            <button
+              class="button button--secondary"
+              type="button"
+              data-state-action
+              data-state-target="#studentCourseView"
+              data-state="normal"
+            >
+              다시 시도
+            </button>
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="forbidden"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>이 Course의 구성원이 아닙니다</h2>
+            <p>Course 정보, class 상태와 기록을 표시하지 않습니다.</p>
+            <a class="button button--primary" href="dashboard.html"
+              >내 Course로 이동</a
+            >
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="expired"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>로그인이 만료되었습니다</h2>
+            <p>모든 Course 데이터를 숨깁니다. 다시 로그인해주세요.</p>
+            <a class="button button--primary" href="main.html?auth=default"
+              >로그인 화면으로 이동</a
+            >
+          </div>
+        </section>
+      </section>
+    </main>
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>
