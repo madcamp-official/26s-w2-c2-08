@@ -1,0 +1,1053 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="GOAL class 생성과 복수 PDF 준비 프로토타입"
+    />
+    <title>GOAL · class 생성과 준비</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <script type="module" src="assets/js/class-create.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 파일과 class는 서버에 저장되지 않습니다
+    </div>
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="dashboard.html" aria-label="GOAL 대시보드"
+          ><span class="brand__mark" aria-hidden="true">G</span
+          ><span class="brand__copy"
+            ><strong>GOAL</strong><small>God of all lectures</small></span
+          ></a
+        >
+        <nav class="primary-nav" aria-label="주요 메뉴">
+          <a href="dashboard.html">홈</a
+          ><a href="course-professor.html" aria-current="page">알고리즘</a
+          ><a href="index.html">Prototype 목록</a>
+        </nav>
+        <div class="header-actions">
+          <button
+            class="profile-button"
+            type="button"
+            data-profile-trigger
+            aria-expanded="false"
+            aria-controls="profilePopover"
+          >
+            <span class="avatar" aria-hidden="true">김</span
+            ><span class="profile-button__name">김도현</span
+            ><span aria-hidden="true">⌄</span>
+          </button>
+          <nav
+            class="profile-popover"
+            id="profilePopover"
+            data-profile-popover
+            hidden
+          >
+            <div class="profile-popover__summary">
+              <strong>김도현</strong><small>dohyun@example.com</small>
+            </div>
+            <a href="my-info.html">내 정보</a
+            ><a href="main.html?auth=default">로그아웃 상태 보기</a>
+          </nav>
+        </div>
+      </div>
+      <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
+        <a href="dashboard.html">홈</a><a href="course-professor.html">Course</a
+        ><a href="class-create.html" aria-current="page">class 준비</a>
+      </nav>
+    </header>
+
+    <main class="container page-main" id="mainContent">
+      <nav class="breadcrumb" aria-label="현재 위치">
+        <a href="dashboard.html">대시보드</a><span aria-hidden="true">/</span
+        ><a href="course-professor.html">알고리즘</a
+        ><span aria-hidden="true">/</span
+        ><span aria-current="page">class 생성과 준비</span>
+      </nav>
+      <header class="subpage-heading">
+        <div>
+          <p class="eyebrow">CLASS_CREATE_PAGE · PRE-T-03~05</p>
+          <h1>class를 만들고 자료를 준비합니다.</h1>
+          <p>
+            class를 `READY`로 만든 뒤 여러 PDF를 각각 업로드하고 처리 상태를
+            확인합니다.
+          </p>
+        </div>
+        <div class="cluster">
+          <div
+            class="state-switcher"
+            data-state-switcher
+            data-state-target="#authBoundary"
+            aria-label="인증·권한 상태 선택"
+          >
+            <button type="button" data-state="valid" aria-pressed="true">
+              권한 정상</button
+            ><button type="button" data-state="expired" aria-pressed="false">
+              인증 만료</button
+            ><button type="button" data-state="forbidden" aria-pressed="false">
+              권한 없음
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section
+        id="authBoundary"
+        data-demo-state="valid"
+        data-query-state="auth"
+        data-query-default="valid"
+        aria-live="polite"
+      >
+        <div data-show-state="valid">
+          <section class="panel prep-panel" aria-labelledby="stageControlTitle">
+            <div class="section-heading">
+              <div>
+                <h2 id="stageControlTitle">class 단계 검토</h2>
+                <p>실제 API 호출 없이 Session 응답 상태별 화면을 전환합니다.</p>
+              </div>
+              <div
+                class="state-switcher"
+                data-state-switcher
+                data-state-target="#classStage"
+                aria-label="class 생성 단계 선택"
+              >
+                <button type="button" data-state="draft" aria-pressed="true">
+                  입력</button
+                ><button
+                  type="button"
+                  data-state="creating"
+                  aria-pressed="false"
+                >
+                  생성 중</button
+                ><button type="button" data-state="ready" aria-pressed="false">
+                  READY</button
+                ><button
+                  type="button"
+                  data-state="create-error"
+                  aria-pressed="false"
+                >
+                  생성 오류</button
+                ><button type="button" data-state="live" aria-pressed="false">
+                  LIVE 응답</button
+                ><button
+                  type="button"
+                  data-state="processing"
+                  aria-pressed="false"
+                >
+                  정리 중 응답</button
+                ><button
+                  type="button"
+                  data-state="completed"
+                  aria-pressed="false"
+                >
+                  완료 응답
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="classStage"
+            data-demo-state="draft"
+            data-query-state="stage"
+            data-query-default="draft"
+            aria-live="polite"
+          >
+            <section class="panel prep-panel" data-show-state="draft">
+              <div class="prep-step-heading">
+                <span class="prep-step-number" aria-hidden="true">1</span>
+                <div>
+                  <h2>class 기본 정보</h2>
+                  <p>
+                    제목과 날짜로 초기 상태가 `READY`인 Session을 생성합니다.
+                  </p>
+                </div>
+              </div>
+              <form id="sessionForm" novalidate>
+                <div class="session-form-grid">
+                  <div class="field">
+                    <label for="sessionTitle">class 제목</label
+                    ><input
+                      id="sessionTitle"
+                      name="title"
+                      type="text"
+                      placeholder="예: 그래프 탐색과 최단 경로"
+                      required
+                      aria-describedby="sessionTitleError"
+                    />
+                    <p
+                      class="field__error"
+                      id="sessionTitleError"
+                      data-field-error-for="sessionTitle"
+                      hidden
+                    >
+                      공백이 아닌 class 제목을 입력해주세요.
+                    </p>
+                  </div>
+                  <div class="field">
+                    <label for="lectureDate">수업 날짜</label
+                    ><input
+                      id="lectureDate"
+                      name="lecture_date"
+                      type="date"
+                      required
+                      aria-describedby="lectureDateError"
+                    />
+                    <p
+                      class="field__error"
+                      id="lectureDateError"
+                      data-field-error-for="lectureDate"
+                      hidden
+                    >
+                      수업 날짜를 선택해주세요.
+                    </p>
+                  </div>
+                </div>
+                <p class="notice notice--info" role="note">
+                  생성 후 제목·날짜 수정이나 class 취소 정책은 미정이므로
+                  Prototype에 해당 동작을 제공하지 않습니다.
+                </p>
+                <div class="form-actions">
+                  <a class="button button--ghost" href="course-professor.html"
+                    >Course로 돌아가기</a
+                  ><button class="button button--primary" type="submit">
+                    READY class 만들기
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section
+              class="panel course-page-loading"
+              data-show-state="creating"
+              hidden
+              aria-busy="true"
+            >
+              <div class="skeleton skeleton--title" aria-hidden="true"></div>
+              <div class="skeleton skeleton--line" aria-hidden="true"></div>
+              <span class="sr-only">READY class를 생성하는 중입니다.</span>
+            </section>
+
+            <div data-show-state="ready" hidden>
+              <div class="class-prep-layout">
+                <div class="class-prep-main">
+                  <section
+                    class="panel prep-panel"
+                    aria-labelledby="sessionSummaryTitle"
+                  >
+                    <div class="prep-step-heading">
+                      <span class="prep-step-number" aria-hidden="true">1</span>
+                      <div>
+                        <h2 id="sessionSummaryTitle">READY class 생성 완료</h2>
+                        <p>
+                          Session ID를 확보했으므로 이제 이 class에 PDF를
+                          업로드할 수 있습니다.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="session-summary-card">
+                      <div class="split">
+                        <div>
+                          <span class="status-chip status-chip--info"
+                            >시작 전 · READY</span
+                          >
+                          <h3>그래프 탐색과 최단 경로</h3>
+                        </div>
+                        <span class="role-badge">이 Course의 교수자</span>
+                      </div>
+                      <p>
+                        <time datetime="2026-07-12">2026년 7월 12일</time> ·
+                        알고리즘 · Course에 진행 중인 다른 `LIVE` class 없음
+                      </p>
+                    </div>
+                  </section>
+
+                  <section
+                    class="panel prep-panel material-uploader"
+                    id="materialState"
+                    data-demo-state="empty"
+                    data-query-state="materials"
+                    data-query-default="empty"
+                    aria-labelledby="materialsTitle"
+                    aria-live="polite"
+                  >
+                    <div class="section-heading">
+                      <div class="prep-step-heading">
+                        <span class="prep-step-number" aria-hidden="true"
+                          >2</span
+                        >
+                        <div>
+                          <h2 id="materialsTitle">강의자료 PDF</h2>
+                          <p>
+                            여러 파일을 선택할 수 있지만 서버에는 파일 하나당
+                            요청 하나를 보냅니다.
+                          </p>
+                        </div>
+                      </div>
+                      <div
+                        class="state-switcher"
+                        data-state-switcher
+                        data-state-target="#materialState"
+                        aria-label="강의자료 상태 선택"
+                      >
+                        <button
+                          type="button"
+                          data-state="empty"
+                          aria-pressed="true"
+                        >
+                          비어 있음</button
+                        ><button
+                          type="button"
+                          data-state="uploading"
+                          aria-pressed="false"
+                        >
+                          업로드</button
+                        ><button
+                          type="button"
+                          data-state="processing"
+                          aria-pressed="false"
+                        >
+                          처리 중</button
+                        ><button
+                          type="button"
+                          data-state="mixed"
+                          aria-pressed="false"
+                        >
+                          혼합</button
+                        ><button
+                          type="button"
+                          data-state="all-ready"
+                          aria-pressed="false"
+                        >
+                          모두 준비</button
+                        ><button
+                          type="button"
+                          data-state="failed"
+                          aria-pressed="false"
+                        >
+                          실패</button
+                        ><button
+                          type="button"
+                          data-state="load-error"
+                          aria-pressed="false"
+                        >
+                          조회 오류
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="material-section-body" data-show-state="empty">
+                      <div class="material-dropzone">
+                        <div class="material-dropzone__content">
+                          <span
+                            class="material-dropzone__icon"
+                            aria-hidden="true"
+                            >PDF</span
+                          >
+                          <h3>PDF 여러 개 선택</h3>
+                          <p>
+                            파일 개수와 용량의 숫자 제한은 서버 정책 확정 후
+                            안내합니다. 같은 PDF를 다시 업로드하는 것은
+                            허용됩니다.
+                          </p>
+                          <div class="field">
+                            <label
+                              class="button button--secondary"
+                              for="materialFiles"
+                              >파일 선택</label
+                            ><input
+                              id="materialFiles"
+                              name="files"
+                              type="file"
+                              multiple
+                              accept="application/pdf,.pdf"
+                              aria-describedby="materialFilesHelp materialFilesError"
+                            />
+                            <p class="field__help" id="materialFilesHelp">
+                              선택한 파일은 서버가 수락하기 전까지만 취소할 수
+                              있습니다.
+                            </p>
+                            <p
+                              class="field__error"
+                              id="materialFilesError"
+                              role="alert"
+                              hidden
+                            ></p>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="selected-files" id="selectedFilesWrap" hidden>
+                        <div class="section-heading">
+                          <div>
+                            <h3>선택 파일</h3>
+                            <p>
+                              아직 Material이 생성되지 않은 로컬 선택입니다.
+                            </p>
+                          </div>
+                          <button
+                            class="button button--primary"
+                            id="uploadSelection"
+                            type="button"
+                            disabled
+                          >
+                            파일별 업로드 상태 보기
+                          </button>
+                        </div>
+                        <ul
+                          class="material-list"
+                          id="selectedFiles"
+                          aria-label="선택한 PDF 목록"
+                        ></ul>
+                      </div>
+                    </div>
+
+                    <ul
+                      class="material-list"
+                      data-show-state="uploading"
+                      hidden
+                      aria-label="업로드 중인 PDF 목록"
+                    >
+                      <li class="material-item" data-material-state="uploading">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>07-그래프-탐색.pdf</strong
+                          ><small
+                            >파일별 `POST /materials` 요청 중 · 아직 서버 수락
+                            전</small
+                          >
+                          <div class="material-item__detail">
+                            <span class="material-status">업로드 중</span>
+                          </div>
+                          <progress
+                            class="material-progress"
+                            max="100"
+                            value="62"
+                          >
+                            62%
+                          </progress>
+                        </div>
+                        <div class="material-item__actions">
+                          <button
+                            class="button button--ghost"
+                            type="button"
+                            disabled
+                          >
+                            전송 중
+                          </button>
+                        </div>
+                      </li>
+                      <li class="material-item" data-material-state="uploaded">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>보충-예제.pdf</strong
+                          ><small
+                            >202 Accepted · Material과 MATERIAL_PROCESSING Job
+                            생성</small
+                          >
+                          <div class="material-item__detail">
+                            <span class="material-status">UPLOADED</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-small text-muted">서버 수락됨</span>
+                        </div>
+                      </li>
+                    </ul>
+
+                    <ul
+                      class="material-list"
+                      data-show-state="processing"
+                      hidden
+                      aria-label="처리 중인 PDF 목록"
+                    >
+                      <li class="material-item" data-material-state="uploaded">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>07-그래프-탐색.pdf</strong
+                          ><small>Worker가 Job을 가져가기 전 대기 중</small>
+                          <div class="material-item__detail">
+                            <span class="material-status">UPLOADED</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-small text-muted">대기</span>
+                        </div>
+                      </li>
+                      <li
+                        class="material-item"
+                        data-material-state="processing"
+                      >
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>보충-예제.pdf</strong
+                          ><small>텍스트 추출·검색용 지식 생성 중</small>
+                          <div class="material-item__detail">
+                            <span class="material-status">PROCESSING</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                          <progress
+                            class="material-progress"
+                            aria-label="보충 예제 처리 진행률"
+                          >
+                            처리 중
+                          </progress>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-small text-muted">처리 중</span>
+                        </div>
+                      </li>
+                    </ul>
+
+                    <ul
+                      class="material-list"
+                      data-show-state="mixed"
+                      hidden
+                      aria-label="서로 다른 상태의 PDF 목록"
+                    >
+                      <li class="material-item" data-material-state="ready">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>07-그래프-탐색.pdf</strong
+                          ><small>42페이지 · 검색 준비 완료</small>
+                          <div class="material-item__detail">
+                            <span class="material-status">READY</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-success text-small">준비 완료</span>
+                        </div>
+                      </li>
+                      <li
+                        class="material-item"
+                        data-material-state="processing"
+                      >
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>보충-예제.pdf</strong
+                          ><small
+                            >임베딩 생성 중 · 계산 가능한 진행률 없음</small
+                          >
+                          <div class="material-item__detail">
+                            <span class="material-status">PROCESSING</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                          <progress
+                            class="material-progress"
+                            aria-label="보충 예제 처리 중"
+                          >
+                            처리 중
+                          </progress>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-small text-muted">처리 중</span>
+                        </div>
+                      </li>
+                      <li class="material-item" data-material-state="failed">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>연습문제.pdf</strong
+                          ><small
+                            >PDF 내용을 처리하지 못했습니다. 다른 파일 상태에는
+                            영향이 없습니다.</small
+                          >
+                          <div class="material-item__detail">
+                            <span class="material-status" data-material-status
+                              >FAILED</span
+                            ><span
+                              class="material-attempt"
+                              data-material-attempt
+                              >attempt 1</span
+                            >
+                          </div>
+                        </div>
+                        <div class="material-item__actions">
+                          <button
+                            class="button button--secondary"
+                            type="button"
+                            data-material-retry="연습문제.pdf"
+                            aria-label="연습문제.pdf 처리 다시 시도"
+                          >
+                            재시도
+                          </button>
+                        </div>
+                      </li>
+                    </ul>
+
+                    <ul
+                      class="material-list"
+                      data-show-state="all-ready"
+                      hidden
+                      aria-label="준비 완료 PDF 목록"
+                    >
+                      <li class="material-item" data-material-state="ready">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>07-그래프-탐색.pdf</strong
+                          ><small>42페이지 · 검색 준비 완료</small>
+                          <div class="material-item__detail">
+                            <span class="material-status">READY</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-success text-small">준비 완료</span>
+                        </div>
+                      </li>
+                      <li class="material-item" data-material-state="ready">
+                        <span class="material-item__icon" aria-hidden="true"
+                          >PDF</span
+                        >
+                        <div class="material-item__body">
+                          <strong>보충-예제.pdf</strong
+                          ><small>18페이지 · 검색 준비 완료</small>
+                          <div class="material-item__detail">
+                            <span class="material-status">READY</span
+                            ><span class="material-attempt">attempt 1</span>
+                          </div>
+                        </div>
+                        <div class="material-item__actions">
+                          <span class="text-success text-small">준비 완료</span>
+                        </div>
+                      </li>
+                    </ul>
+
+                    <div data-show-state="failed" hidden>
+                      <ul class="material-list" aria-label="처리 실패 PDF 목록">
+                        <li class="material-item" data-material-state="failed">
+                          <span class="material-item__icon" aria-hidden="true"
+                            >PDF</span
+                          >
+                          <div class="material-item__body">
+                            <strong>손상된-자료.pdf</strong
+                            ><small
+                              >안전한 오류 안내만 표시합니다. 서버 수락 Material
+                              삭제 동작은 제공하지 않습니다.</small
+                            >
+                            <div class="material-item__detail">
+                              <span class="material-status" data-material-status
+                                >FAILED</span
+                              ><span
+                                class="material-attempt"
+                                data-material-attempt
+                                >attempt 1</span
+                              >
+                            </div>
+                          </div>
+                          <div class="material-item__actions">
+                            <button
+                              class="button button--secondary"
+                              type="button"
+                              data-material-retry="손상된-자료.pdf"
+                              aria-label="손상된-자료.pdf 처리 다시 시도"
+                            >
+                              재시도
+                            </button>
+                          </div>
+                        </li>
+                      </ul>
+                    </div>
+                    <div
+                      class="state-panel"
+                      data-show-state="load-error"
+                      hidden
+                      role="alert"
+                    >
+                      <div class="state-panel__content">
+                        <span class="state-panel__icon" aria-hidden="true"
+                          >!</span
+                        >
+                        <h3>PDF 상태를 불러오지 못했습니다</h3>
+                        <p>
+                          class 기본 정보와 시작 상태는 유지합니다. 자료 목록만
+                          다시 요청하세요.
+                        </p>
+                        <button
+                          class="button button--secondary"
+                          type="button"
+                          data-state-action
+                          data-state-target="#materialState"
+                          data-state="mixed"
+                        >
+                          자료만 다시 시도
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <aside class="class-prep-aside">
+                  <section
+                    class="panel course-side-panel"
+                    aria-labelledby="readinessTitle"
+                  >
+                    <div>
+                      <h2 id="readinessTitle">시작 준비 확인</h2>
+                      <p>정책이 확정된 항목과 미정인 항목을 구분합니다.</p>
+                    </div>
+                    <ul class="readiness-checklist">
+                      <li class="readiness-item" data-ready="true">
+                        <span class="readiness-mark" aria-hidden="true">✓</span>
+                        <div>
+                          <strong>READY class 생성</strong
+                          ><small>Session ID와 교수자 권한 확인</small>
+                        </div>
+                      </li>
+                      <li class="readiness-item" data-ready="true">
+                        <span class="readiness-mark" aria-hidden="true">✓</span>
+                        <div>
+                          <strong>Course의 LIVE class 없음</strong
+                          ><small>동시 LIVE 최대 1개</small>
+                        </div>
+                      </li>
+                      <li class="readiness-item" data-ready="warning">
+                        <span class="readiness-mark" aria-hidden="true">?</span>
+                        <div>
+                          <strong>PDF 선행 조건 미정</strong
+                          ><small
+                            >자료 없음·처리 중일 때 시작 가능 여부를 확정하지
+                            않음</small
+                          >
+                        </div>
+                      </li>
+                    </ul>
+                  </section>
+
+                  <section
+                    class="panel course-side-panel"
+                    id="startFlow"
+                    data-demo-state="idle"
+                    data-query-state="start"
+                    data-query-default="idle"
+                    aria-labelledby="startTitle"
+                    aria-live="polite"
+                  >
+                    <div>
+                      <h2 id="startTitle">class 시작</h2>
+                      <p>`READY → LIVE` 전이는 교수자만 요청할 수 있습니다.</p>
+                    </div>
+                    <div
+                      class="state-switcher"
+                      data-state-switcher
+                      data-state-target="#startFlow"
+                      aria-label="class 시작 상태 선택"
+                    >
+                      <button
+                        type="button"
+                        data-state="idle"
+                        aria-pressed="true"
+                      >
+                        대기</button
+                      ><button
+                        type="button"
+                        data-state="starting"
+                        aria-pressed="false"
+                      >
+                        시작 중</button
+                      ><button
+                        type="button"
+                        data-state="conflict"
+                        aria-pressed="false"
+                      >
+                        충돌</button
+                      ><button
+                        type="button"
+                        data-state="error"
+                        aria-pressed="false"
+                      >
+                        오류</button
+                      ><button
+                        type="button"
+                        data-state="success"
+                        aria-pressed="false"
+                      >
+                        성공
+                      </button>
+                    </div>
+                    <div data-show-state="idle">
+                      <p class="notice notice--warning" role="note">
+                        자료 없이 또는 처리 중에 시작 가능한지는 미정입니다. 이
+                        버튼은 규칙을 확정하지 않고 목 상태만 전환합니다.
+                      </p>
+                      <div class="start-actions">
+                        <button
+                          class="button button--primary button--block"
+                          type="button"
+                          data-state-action
+                          data-state-target="#startFlow"
+                          data-state="starting"
+                        >
+                          실시간 class 시작 상태 보기
+                        </button>
+                      </div>
+                    </div>
+                    <div data-show-state="starting" hidden aria-busy="true">
+                      <p class="notice notice--info">
+                        다른 `LIVE` class 여부와 현재 Session 상태를 확인
+                        중입니다.
+                      </p>
+                      <div class="cluster">
+                        <button
+                          class="button button--primary"
+                          type="button"
+                          data-state-action
+                          data-state-target="#startFlow"
+                          data-state="success"
+                        >
+                          성공 응답</button
+                        ><button
+                          class="button button--secondary"
+                          type="button"
+                          data-state-action
+                          data-state-target="#startFlow"
+                          data-state="conflict"
+                        >
+                          409 충돌</button
+                        ><button
+                          class="button button--ghost"
+                          type="button"
+                          data-state-action
+                          data-state-target="#startFlow"
+                          data-state="error"
+                        >
+                          일반 오류
+                        </button>
+                      </div>
+                    </div>
+                    <div data-show-state="conflict" hidden role="alert">
+                      <p class="notice notice--danger">
+                        다른 class가 이미 `LIVE`입니다. Course당 하나만 진행할
+                        수 있습니다.
+                      </p>
+                      <a
+                        class="button button--secondary button--block"
+                        href="course-professor.html?session=live"
+                        >진행 중 class 확인</a
+                      >
+                    </div>
+                    <div data-show-state="error" hidden role="alert">
+                      <p class="notice notice--danger">
+                        시작 요청을 완료하지 못했습니다. READY 상태와 PDF 결과는
+                        유지합니다.
+                      </p>
+                      <button
+                        class="button button--secondary button--block"
+                        type="button"
+                        data-state-action
+                        data-state-target="#startFlow"
+                        data-state="idle"
+                      >
+                        다시 시도
+                      </button>
+                    </div>
+                    <div data-show-state="success" hidden>
+                      <p class="notice notice--success">
+                        class가 `LIVE`가 되었습니다. 실시간 STT 화면으로
+                        이동합니다.
+                      </p>
+                      <button
+                        class="button button--primary button--block"
+                        type="button"
+                        data-toast="교수자 실시간 class 화면은 후속 Prototype에서 연결됩니다."
+                      >
+                        실시간 class로 이동
+                      </button>
+                    </div>
+                  </section>
+
+                  <section
+                    class="panel course-side-panel"
+                    aria-labelledby="apiMapTitle"
+                  >
+                    <div>
+                      <h2 id="apiMapTitle">실제 API 경계</h2>
+                      <p>이 Prototype에서는 아래 요청을 실행하지 않습니다.</p>
+                    </div>
+                    <ul class="api-map">
+                      <li>
+                        <code>GET /courses/{course_id}</code
+                        ><small>교수자 역할·현재 LIVE 확인</small>
+                      </li>
+                      <li>
+                        <code>POST /courses/{course_id}/sessions</code
+                        ><small>READY Session 생성</small>
+                      </li>
+                      <li>
+                        <code>GET /sessions/{session_id}</code
+                        ><small>재진입 시 Session 상태와 이동 경계 확인</small>
+                      </li>
+                      <li>
+                        <code>POST /sessions/{session_id}/materials</code
+                        ><small>PDF 한 개당 한 요청, 202 + Material·Job</small>
+                      </li>
+                      <li>
+                        <code
+                          >GET /sessions/{id}/materials · GET /materials/{id} ·
+                          GET /sessions/{id}/jobs</code
+                        ><small>목록·Material·MATERIAL_PROCESSING 상태</small>
+                      </li>
+                      <li>
+                        <code>POST /jobs/{job_id}/retry</code
+                        ><small>같은 Job 행의 attempt 증가</small>
+                      </li>
+                      <li>
+                        <code>POST /sessions/{session_id}/start</code
+                        ><small>READY → LIVE</small>
+                      </li>
+                    </ul>
+                  </section>
+                </aside>
+              </div>
+            </div>
+
+            <section
+              class="state-panel auth-expired"
+              data-show-state="create-error"
+              hidden
+              role="alert"
+            >
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">!</span>
+                <h2>class를 만들지 못했습니다</h2>
+                <p>
+                  입력값을 다시 확인하고 같은 생성 요청을 안전하게 재시도합니다.
+                </p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-state-action
+                  data-state-target="#classStage"
+                  data-state="draft"
+                >
+                  입력으로 돌아가기
+                </button>
+              </div>
+            </section>
+            <section
+              class="state-panel auth-expired"
+              data-show-state="live"
+              hidden
+            >
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">↗</span>
+                <h2>이미 진행 중인 class입니다</h2>
+                <p>
+                  편집 화면 대신 교수자 실시간 class 화면으로 이동해야 합니다.
+                </p>
+                <button
+                  class="button button--primary"
+                  type="button"
+                  data-toast="교수자 실시간 class 화면은 후속 Prototype에서 연결됩니다."
+                >
+                  실시간 class로 이동
+                </button>
+              </div>
+            </section>
+            <section
+              class="state-panel auth-expired"
+              data-show-state="processing"
+              hidden
+            >
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">…</span>
+                <h2>기록을 정리 중인 class입니다</h2>
+                <p>
+                  이 화면에서 수정하지 않고 class 기록 정리 상태로 이동합니다.
+                </p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-toast="class 기록 정리 화면은 후속 Prototype에서 연결됩니다."
+                >
+                  정리 상태로 이동
+                </button>
+              </div>
+            </section>
+            <section
+              class="state-panel auth-expired"
+              data-show-state="completed"
+              hidden
+            >
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">✓</span>
+                <h2>완료된 class입니다</h2>
+                <p>생성·준비 화면 대신 저장된 강의 기록을 확인합니다.</p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-toast="교수자 완료 class 화면은 후속 Prototype에서 연결됩니다."
+                >
+                  완료 기록으로 이동
+                </button>
+              </div>
+            </section>
+          </section>
+        </div>
+
+        <section
+          class="state-panel auth-expired"
+          data-show-state="expired"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>로그인이 만료되었습니다</h2>
+            <p>class 입력, 파일명과 처리 상태를 모두 숨깁니다.</p>
+            <a class="button button--primary" href="main.html?auth=default"
+              >로그인 화면으로 이동</a
+            >
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="forbidden"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>이 Course의 교수자 권한이 없습니다</h2>
+            <p>
+              학생이나 Course 외 사용자는 class 생성과 PDF 업로드를 할 수
+              없습니다.
+            </p>
+            <a class="button button--primary" href="dashboard.html"
+              >내 Course로 이동</a
+            >
+          </div>
+        </section>
+      </section>
+    </main>
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

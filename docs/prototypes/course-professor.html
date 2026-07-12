@@ -232,13 +232,12 @@
                 <footer class="current-session__footer">
                   <span class="current-session__meta"
                     >class 시작 전 자료 준비 화면으로 이동합니다.</span
-                  ><button
+                  ><a
                     class="button button--primary"
-                    type="button"
-                    data-toast="class 생성·PDF 준비 화면은 다음 사용자 흐름에서 연결됩니다."
+                    href="class-create.html?stage=ready&materials=mixed"
                   >
                     class 준비하기
-                  </button>
+                  </a>
                 </footer>
               </article>
               <article
@@ -268,13 +267,9 @@
                   <span class="state-panel__icon" aria-hidden="true">+</span>
                   <h3>준비 중이거나 진행 중인 class가 없습니다</h3>
                   <p>새 class를 만들고 여러 PDF를 준비할 수 있습니다.</p>
-                  <button
-                    class="button button--primary"
-                    type="button"
-                    data-toast="class 생성 화면은 다음 사용자 흐름에서 연결됩니다."
-                  >
+                  <a class="button button--primary" href="class-create.html">
                     오늘 class 만들기
-                  </button>
+                  </a>
                 </div>
               </div>
               <div
@@ -367,15 +362,14 @@
               >
                 진행 중 class 확인
               </button>
-              <button
+              <a
                 class="button button--primary button--block"
-                type="button"
-                data-toast="class 생성·PDF 준비 화면은 다음 사용자 흐름에서 연결됩니다."
+                href="class-create.html"
                 data-show-state="available"
                 hidden
               >
                 새 class 만들기
-              </button>
+              </a>
               <p
                 class="notice notice--success"
                 data-show-state="available"
