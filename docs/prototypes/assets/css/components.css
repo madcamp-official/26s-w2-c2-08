@@ -1778,6 +1778,297 @@
   }
 }
 
+/* PDF material upload and preparation status */
+.material-uploader {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.material-dropzone {
+  display: grid;
+  min-height: 190px;
+  padding: var(--space-7);
+  place-items: center;
+  border: 2px dashed var(--color-line-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+  background: #f8f7f2;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+
+.material-dropzone:hover,
+.material-dropzone:focus-within,
+.material-dropzone[data-drag-active="true"] {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+}
+
+.material-dropzone__content {
+  width: min(100%, 520px);
+}
+
+.material-dropzone__icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto var(--space-4);
+  place-items: center;
+  border-radius: 17px;
+  color: var(--color-brand-dark);
+  font-size: 22px;
+  font-weight: 900;
+  background: var(--color-brand-soft);
+}
+
+.material-dropzone h3,
+.material-dropzone p {
+  margin: 0;
+}
+
+.material-dropzone h3 {
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.material-dropzone p {
+  margin-top: 7px;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.material-dropzone .button {
+  margin-top: var(--space-4);
+}
+
+.material-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.material-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.material-item[data-material-state="failed"] {
+  border-color: rgb(185 56 49 / 32%);
+  background: linear-gradient(90deg, var(--color-danger-soft), #fff 26%);
+}
+
+.material-item[data-material-state="ready"] {
+  border-color: rgb(23 122 83 / 25%);
+}
+
+.material-item__icon {
+  display: grid;
+  width: 44px;
+  height: 50px;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--color-danger);
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--color-danger-soft);
+}
+
+.material-item__body {
+  min-width: 0;
+}
+
+.material-item__body strong,
+.material-item__body small {
+  display: block;
+}
+
+.material-item__body strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-item__body small {
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.material-item__detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--space-3);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.material-status {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 27px;
+  padding: 5px 9px;
+  border-radius: var(--radius-pill);
+  color: var(--color-info);
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--color-info-soft);
+}
+
+.material-status::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.material-item[data-material-state="processing"] .material-status,
+.material-item[data-material-state="uploading"] .material-status {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.material-item[data-material-state="ready"] .material-status {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.material-item[data-material-state="failed"] .material-status {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.material-attempt {
+  color: var(--color-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.material-progress {
+  width: min(100%, 280px);
+  height: 7px;
+  margin-top: var(--space-3);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-brand);
+  background: var(--color-surface-soft);
+}
+
+.material-progress::-webkit-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-soft);
+}
+
+.material-progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--color-brand);
+}
+
+.material-progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--color-brand);
+}
+
+.material-item__actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.readiness-checklist {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.readiness-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: #f8f7f2;
+}
+
+.readiness-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--color-surface-soft);
+}
+
+.readiness-item[data-ready="true"] .readiness-mark {
+  color: #fff;
+  background: var(--color-success);
+}
+
+.readiness-item[data-ready="warning"] .readiness-mark {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.readiness-item strong,
+.readiness-item small {
+  display: block;
+}
+
+.readiness-item strong {
+  font-size: 12px;
+}
+
+.readiness-item small {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .material-dropzone {
+    min-height: 170px;
+    padding: var(--space-5);
+  }
+
+  .material-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .material-item__actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .material-item__actions .button {
+    flex: 1;
+  }
+}
+
 /* Role-specific Course details */
 .course-detail-page {
   --stack-gap: var(--space-4);
