@@ -223,6 +223,32 @@ function initCopyActions() {
   });
 }
 
+function initDisclosures() {
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-disclosure-trigger]");
+    if (!trigger) return;
+    const panel = document.getElementById(
+      trigger.getAttribute("aria-controls"),
+    );
+    if (!panel) return;
+    const open = trigger.getAttribute("aria-expanded") !== "true";
+    trigger.setAttribute("aria-expanded", String(open));
+    panel.hidden = !open;
+  });
+}
+
+function initPressedGroups() {
+  document.querySelectorAll("[data-pressed-group]").forEach((group) => {
+    group.addEventListener("click", (event) => {
+      const button = event.target.closest("button[aria-pressed]");
+      if (!button || !group.contains(button)) return;
+      group.querySelectorAll("button[aria-pressed]").forEach((item) => {
+        item.setAttribute("aria-pressed", String(item === button));
+      });
+    });
+  });
+}
+
 function initStateActions() {
   document.addEventListener("click", (event) => {
     const action = event.target.closest("[data-state-action]");
@@ -320,6 +346,8 @@ initQueryStates();
 initDemoForms();
 initNormalizedInputs();
 initCopyActions();
+initDisclosures();
+initPressedGroups();
 initGreeting();
 initCommonActions();
 initQueryToast();
