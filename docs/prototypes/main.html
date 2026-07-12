@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="GOAL 실시간 AI 강의 보조 서비스 비로그인 메인 화면 프로토타입"
+    />
+    <title>GOAL · 강의의 모든 순간을 놓치지 않게</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <script type="module" src="assets/js/prototype.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 실제 Google 로그인을 호출하지 않습니다
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="main.html" aria-label="GOAL 비로그인 메인">
+          <span class="brand__mark" aria-hidden="true">G</span>
+          <span class="brand__copy">
+            <strong>GOAL</strong>
+            <small>God of all lectures</small>
+          </span>
+        </a>
+
+        <nav class="primary-nav" aria-label="비로그인 메뉴">
+          <a href="#features">주요 기능</a>
+          <a href="#preview">화면 미리보기</a>
+          <a href="index.html">Prototype 목록</a>
+        </nav>
+
+        <div class="header-actions">
+          <button
+            class="button button--primary"
+            type="button"
+            data-state-action
+            data-state-target="#authFlow"
+            data-state="loading"
+          >
+            Google로 시작하기
+          </button>
+        </div>
+      </div>
+      <nav class="mobile-nav" aria-label="모바일 비로그인 메뉴">
+        <a href="#features">주요 기능</a>
+        <a href="#preview">미리보기</a>
+        <a href="index.html">Prototype 목록</a>
+      </nav>
+    </header>
+
+    <main class="landing-page" id="mainContent">
+      <section class="container landing-hero" aria-labelledby="landingTitle">
+        <div class="landing-copy">
+          <p class="eyebrow">
+            <span aria-hidden="true">✶</span> Real-time AI lecture companion
+          </p>
+          <h1 id="landingTitle">
+            강의의 모든 순간을,<br /><em>놓치지 않게.</em>
+          </h1>
+          <p class="landing-copy__description">
+            실시간 Transcript와 AI 요약으로 놓친 내용을 바로 따라잡고, 익명
+            질문으로 수업에 더 깊게 참여하세요. 수업이 끝난 뒤에는 모든 기록이
+            나만의 복습 자료가 됩니다.
+          </p>
+
+          <section
+            class="auth-flow"
+            id="authFlow"
+            data-demo-state="default"
+            data-query-state="auth"
+            data-query-default="default"
+            aria-labelledby="authFlowTitle"
+          >
+            <h2 class="sr-only" id="authFlowTitle">Google 로그인 모의 흐름</h2>
+
+            <div data-show-state="default">
+              <button
+                class="google-button"
+                type="button"
+                data-state-action
+                data-state-target="#authFlow"
+                data-state="loading"
+              >
+                <span class="google-button__mark" aria-hidden="true">G</span>
+                Google 계정으로 계속하기
+              </button>
+              <p class="auth-flow__help">
+                역할은 계정이 아니라 Course별로 결정됩니다.
+              </p>
+            </div>
+
+            <div
+              class="auth-status"
+              data-show-state="loading"
+              hidden
+              aria-live="polite"
+            >
+              <span class="auth-spinner" aria-hidden="true"></span>
+              <div>
+                <strong>Google 로그인으로 이동하는 중</strong>
+                <p>
+                  정적 Prototype에서는 외부로 이동하지 않고 callback 상태만
+                  모의합니다.
+                </p>
+              </div>
+              <div class="cluster">
+                <button
+                  class="button button--primary"
+                  type="button"
+                  data-state-action
+                  data-state-target="#authFlow"
+                  data-state="success"
+                >
+                  로그인 완료 상태 보기
+                </button>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-state-action
+                  data-state-target="#authFlow"
+                  data-state="error"
+                >
+                  오류 상태 보기
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="auth-status auth-status--error"
+              data-show-state="error"
+              hidden
+              role="alert"
+            >
+              <span class="auth-status__icon" aria-hidden="true">!</span>
+              <div>
+                <strong>로그인을 완료하지 못했습니다</strong>
+                <p>
+                  요청이 취소되었거나 인증 제공자 응답을 확인할 수 없습니다.
+                </p>
+              </div>
+              <button
+                class="button button--secondary"
+                type="button"
+                data-state-action
+                data-state-target="#authFlow"
+                data-state="loading"
+              >
+                다시 시도
+              </button>
+            </div>
+
+            <div
+              class="auth-status auth-status--success"
+              data-show-state="success"
+              hidden
+              role="status"
+            >
+              <span class="auth-status__icon" aria-hidden="true">✓</span>
+              <div>
+                <strong>로그인 callback 확인 완료</strong>
+                <p>
+                  server Session이 생성됐다고 가정하고 대시보드로 이동할 수
+                  있습니다.
+                </p>
+              </div>
+              <a
+                class="button button--primary"
+                href="dashboard.html?notice=Google+로그인+모의+흐름이+완료되었습니다.&tone=success"
+              >
+                대시보드로 이동
+              </a>
+            </div>
+          </section>
+
+          <div class="feature-chips" aria-label="주요 기능 요약">
+            <span class="feature-chip"
+              ><span aria-hidden="true">●</span> 실시간 Transcript</span
+            >
+            <span class="feature-chip"
+              ><span aria-hidden="true">?</span> 익명 질문</span
+            >
+            <span class="feature-chip"
+              ><span aria-hidden="true">✶</span> AI 따라잡기</span
+            >
+          </div>
+        </div>
+
+        <div
+          class="lecture-preview"
+          id="preview"
+          aria-label="학생 실시간 강의 화면 미리보기"
+        >
+          <div class="preview-window">
+            <div class="preview-toolbar">
+              <span class="preview-dots" aria-hidden="true"
+                ><i></i><i></i><i></i
+              ></span>
+              <span class="status-chip status-chip--live">LIVE · 알고리즘</span>
+            </div>
+
+            <div class="preview-layout">
+              <section
+                class="preview-transcript"
+                aria-labelledby="previewTranscriptTitle"
+              >
+                <div class="split">
+                  <strong id="previewTranscriptTitle">실시간 Transcript</strong>
+                  <span class="status-chip status-chip--success"
+                    >STT 연결됨</span
+                  >
+                </div>
+                <ol class="transcript-list">
+                  <li>
+                    <time datetime="PT14M32S">14:32</time>
+                    <p>
+                      다익스트라 알고리즘은 시작 정점에서 다른 모든 정점까지의
+                      최단 거리를 구합니다.
+                    </p>
+                  </li>
+                  <li>
+                    <time datetime="PT14M33S">14:33</time>
+                    <p>
+                      아직 방문하지 않은 정점 중 거리가 가장 짧은 정점을 하나씩
+                      선택합니다.
+                    </p>
+                  </li>
+                  <li class="transcript-list__partial">
+                    <time datetime="PT14M34S">14:34</time>
+                    <p>
+                      단, 음수 가중치가 존재하는 그래프에서는 사용할 수 없다는
+                      점이 중요합니다.<span
+                        class="typing-caret"
+                        aria-hidden="true"
+                      ></span>
+                    </p>
+                    <small>인식 중 · 아직 저장되지 않음</small>
+                  </li>
+                </ol>
+              </section>
+
+              <aside
+                class="preview-ai"
+                aria-label="AI 따라잡기와 익명 질문 미리보기"
+              >
+                <article class="preview-summary">
+                  <small>AI CATCH-UP</small>
+                  <h2>방금 내용, 한눈에 보기</h2>
+                  <p>
+                    다익스트라는 음수가 아닌 가중치에서 최단 경로를 찾습니다. 매
+                    단계에서 현재 거리가 가장 짧은 정점을 확정합니다.
+                  </p>
+                </article>
+                <article class="preview-question">
+                  <strong>익명 질문하기</strong>
+                  <p>
+                    질문이 어렵다면 AI가 수업 맥락에 맞는 문장 후보를 제안해요.
+                  </p>
+                  <div>음수 가중치가 있으면 왜 안 되나요?</div>
+                </article>
+              </aside>
+            </div>
+          </div>
+          <p class="floating-prompt">
+            <span aria-hidden="true">✶</span> 방금 핵심만 3줄로 요약해줘
+          </p>
+        </div>
+      </section>
+
+      <section
+        class="container landing-features"
+        id="features"
+        aria-labelledby="featuresTitle"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Why GOAL</p>
+            <h2 id="featuresTitle">수업의 흐름과 복습을 하나로 연결합니다.</h2>
+          </div>
+        </div>
+        <div class="grid grid--3">
+          <article class="feature-card">
+            <span aria-hidden="true">01</span>
+            <h3>흐름을 끊지 않는 질문</h3>
+            <p>이름은 숨기고 궁금증은 실시간으로 공유합니다.</p>
+          </article>
+          <article class="feature-card">
+            <span aria-hidden="true">02</span>
+            <h3>놓친 순간을 바로 복구</h3>
+            <p>현재 Transcript와 PDF를 바탕으로 AI가 맥락을 요약합니다.</p>
+          </article>
+          <article class="feature-card">
+            <span aria-hidden="true">03</span>
+            <h3>수업 후에도 이어지는 학습</h3>
+            <p>
+              강의자료, final Transcript와 Q&amp;A가 복습 기록으로 남습니다.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section
+        class="container prototype-controls"
+        aria-labelledby="stateControlTitle"
+      >
+        <div>
+          <p class="eyebrow">Review controls</p>
+          <h2 id="stateControlTitle">로그인 상태를 직접 점검하세요.</h2>
+        </div>
+        <div
+          class="state-switcher"
+          data-state-switcher
+          data-state-target="#authFlow"
+          aria-label="로그인 상태 선택"
+        >
+          <button type="button" data-state="default" aria-pressed="true">
+            기본
+          </button>
+          <button type="button" data-state="loading" aria-pressed="false">
+            진행 중
+          </button>
+          <button type="button" data-state="error" aria-pressed="false">
+            오류
+          </button>
+          <button type="button" data-state="success" aria-pressed="false">
+            반환 성공
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

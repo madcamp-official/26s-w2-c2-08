@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="GOAL 1차 MVP 정적 화면 프로토타입 인덱스"
+    />
+    <title>GOAL · Prototype index</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">Static prototype · 실제 서비스가 아닙니다</div>
+    <main class="container container--content page-main" id="mainContent">
+      <p class="eyebrow">GOAL · Static prototype</p>
+      <h1 class="page-title">화면 흐름을 한곳에서 검토합니다.</h1>
+      <p class="page-description">
+        GOAL 1차 MVP의 역할별 화면, 처리 상태와 연결 흐름을 확인하는
+        인덱스입니다. 현재 카드들은 구현 순서를 보여주며, 화면이 준비되면 직접
+        열 수 있는 링크로 전환됩니다.
+      </p>
+
+      <section class="flow" aria-labelledby="entryFlowTitle">
+        <h2 id="entryFlowTitle">1. 서비스 진입과 대시보드</h2>
+        <div class="screen-index">
+          <a class="screen-index__card" href="main.html">
+            <small>MAIN_PAGE</small>
+            <strong>비로그인 메인</strong>
+            <span>확인 가능 · OAuth 상태 포함</span>
+          </a>
+          <a class="screen-index__card" href="dashboard.html">
+            <small>MAIN_PAGE_AUTH</small>
+            <strong>로그인 후 대시보드</strong>
+            <span>확인 가능 · 목록 상태 포함</span>
+          </a>
+          <a class="screen-index__card" href="my-info.html">
+            <small>MY_INFO_PAGE</small>
+            <strong>내 정보</strong>
+            <span>확인 가능 · 계정 상태 포함</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="flow" aria-labelledby="courseFlowTitle">
+        <h2 id="courseFlowTitle">2. Course 생성과 참여</h2>
+        <div class="screen-index">
+          <article class="screen-index__card">
+            <small>COURSE_CREATE_PAGE</small>
+            <strong>Course 생성</strong>
+            <span>예정</span>
+          </article>
+          <article class="screen-index__card">
+            <small>COURSE_JOIN_PAGE</small>
+            <strong>Course 참여</strong>
+            <span>예정</span>
+          </article>
+          <article class="screen-index__card">
+            <small>COURSE_PAGE_*</small>
+            <strong>역할별 Course</strong>
+            <span>예정</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="flow" aria-labelledby="classFlowTitle">
+        <h2 id="classFlowTitle">3. class 준비·실시간·기록</h2>
+        <div class="screen-index">
+          <article class="screen-index__card">
+            <small>CLASS_CREATE_PAGE</small>
+            <strong>class 생성과 PDF</strong>
+            <span>예정</span>
+          </article>
+          <article class="screen-index__card">
+            <small>LIVE_CLASS_PAGE_*</small>
+            <strong>역할별 실시간 class</strong>
+            <span>예정</span>
+          </article>
+          <article class="screen-index__card">
+            <small>ENDED_CLASS_PAGE_*</small>
+            <strong>정리 중·완료 기록</strong>
+            <span>예정</span>
+          </article>
+        </div>
+      </section>
+
+      <p class="notice notice--info" role="note">
+        이 페이지와 연결 화면은 제품 검토용 정적 프로토타입입니다. 실제 계정,
+        수업 데이터, STT 또는 AI 결과를 사용하지 않습니다.
+      </p>
+    </main>
+  </body>
+</html>
