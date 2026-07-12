@@ -136,6 +136,87 @@ function setDemoState(target, state) {
     });
 }
 
+function initDemoForms() {
+  document.querySelectorAll("[data-demo-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const invalidFields = [...form.querySelectorAll("[required]")].filter(
+        (field) => !field.value.trim(),
+      );
+
+      form.querySelectorAll("[required]").forEach((field) => {
+        const invalid = invalidFields.includes(field);
+        field.setAttribute("aria-invalid", String(invalid));
+        const error = document.querySelector(
+          `[data-field-error-for="${field.id}"]`,
+        );
+        if (error) error.hidden = !invalid;
+      });
+
+      if (invalidFields.length > 0) {
+        invalidFields[0].focus();
+        showToast("필수 입력을 확인해주세요.", "error");
+        return;
+      }
+
+      const target = document.querySelector(form.dataset.stateTarget);
+      setDemoState(target, form.dataset.successState || "success");
+      showToast(
+        form.dataset.successToast || "목 결과를 표시했습니다.",
+        "success",
+      );
+    });
+
+    form.addEventListener("input", (event) => {
+      if (!event.target.matches("[required]")) return;
+      event.target.setAttribute("aria-invalid", "false");
+      const error = document.querySelector(
+        `[data-field-error-for="${event.target.id}"]`,
+      );
+      if (error) error.hidden = true;
+    });
+  });
+}
+
+function initNormalizedInputs() {
+  document.querySelectorAll("[data-uppercase-input]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const start = input.selectionStart;
+      input.value = input.value.toLocaleUpperCase("en-US");
+      input.setSelectionRange(start, start);
+    });
+  });
+}
+
+function initCopyActions() {
+  document.addEventListener("click", async (event) => {
+    const trigger = event.target.closest("[data-copy]");
+    if (!trigger) return;
+    const source = document.querySelector(trigger.dataset.copy);
+    if (!source) return;
+    const value = source.value || source.textContent.trim();
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = value;
+        helper.setAttribute("aria-hidden", "true");
+        helper.style.position = "fixed";
+        helper.style.opacity = "0";
+        document.body.append(helper);
+        helper.select();
+        document.execCommand("copy");
+        helper.remove();
+      }
+      showToast(trigger.dataset.copySuccess || "복사했습니다.", "success");
+    } catch {
+      showToast("복사하지 못했습니다. 값을 직접 선택해주세요.", "error");
+    }
+  });
+}
+
 function initStateActions() {
   document.addEventListener("click", (event) => {
     const action = event.target.closest("[data-state-action]");
@@ -230,6 +311,9 @@ initProfileDisclosure();
 initStateSwitchers();
 initStateActions();
 initQueryStates();
+initDemoForms();
+initNormalizedInputs();
+initCopyActions();
 initGreeting();
 initCommonActions();
 initQueryToast();

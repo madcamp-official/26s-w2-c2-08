@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="GOAL 한 학기 Course 생성 정적 프로토타입"
+    />
+    <title>GOAL · Course 만들기</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <script type="module" src="assets/js/prototype.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 입력과 생성 결과는 저장되지 않습니다
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="dashboard.html" aria-label="GOAL 대시보드">
+          <span class="brand__mark" aria-hidden="true">G</span>
+          <span class="brand__copy">
+            <strong>GOAL</strong>
+            <small>God of all lectures</small>
+          </span>
+        </a>
+        <nav class="primary-nav" aria-label="주요 메뉴">
+          <a href="dashboard.html">홈</a>
+          <a href="dashboard.html#ownedCoursesTitle" aria-current="page"
+            >내 Course</a
+          >
+          <a href="index.html">Prototype 목록</a>
+        </nav>
+        <div class="header-actions">
+          <button
+            class="profile-button"
+            type="button"
+            data-profile-trigger
+            aria-expanded="false"
+            aria-controls="profilePopover"
+          >
+            <span class="avatar" aria-hidden="true">김</span>
+            <span class="profile-button__name">김도현</span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <nav
+            class="profile-popover"
+            id="profilePopover"
+            data-profile-popover
+            hidden
+          >
+            <div class="profile-popover__summary">
+              <strong>김도현</strong>
+              <small>dohyun@example.com</small>
+            </div>
+            <a href="my-info.html">내 정보</a>
+            <a href="main.html?auth=default">로그아웃 상태 보기</a>
+          </nav>
+        </div>
+      </div>
+      <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
+        <a href="dashboard.html">홈</a>
+        <a href="course-create.html" aria-current="page">Course 만들기</a>
+        <a href="index.html">Prototype 목록</a>
+      </nav>
+    </header>
+
+    <main class="container container--content page-main" id="mainContent">
+      <nav class="breadcrumb" aria-label="현재 위치">
+        <a href="dashboard.html">대시보드</a>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">Course 만들기</span>
+      </nav>
+
+      <header class="subpage-heading">
+        <div>
+          <p class="eyebrow">COURSE_CREATE_PAGE · PRE-T-01</p>
+          <h1>한 학기 수업방을 시작합니다.</h1>
+          <p>
+            Course를 만든 사용자는 이 Course에서 교수자가 됩니다. 계정 전체의
+            역할은 바뀌지 않습니다.
+          </p>
+        </div>
+        <div
+          class="state-switcher"
+          data-state-switcher
+          data-state-target="#createFlow"
+          aria-label="Course 생성 화면 상태 선택"
+        >
+          <button type="button" data-state="form" aria-pressed="true">
+            입력
+          </button>
+          <button type="button" data-state="submitting" aria-pressed="false">
+            생성 중
+          </button>
+          <button type="button" data-state="success" aria-pressed="false">
+            성공
+          </button>
+          <button type="button" data-state="error" aria-pressed="false">
+            오류
+          </button>
+          <button type="button" data-state="expired" aria-pressed="false">
+            인증 만료
+          </button>
+        </div>
+      </header>
+
+      <section
+        id="createFlow"
+        data-demo-state="form"
+        data-query-state="state"
+        data-query-default="form"
+        aria-live="polite"
+      >
+        <div class="onboarding-layout" data-show-state="form">
+          <form
+            class="panel form-card"
+            data-demo-form
+            data-state-target="#createFlow"
+            data-success-state="success"
+            data-success-toast="Course 생성 성공 상태를 표시했습니다."
+            novalidate
+          >
+            <div class="form-card__header">
+              <h2>Course 기본 정보</h2>
+              <p>학생들이 알아볼 수 있는 과목명과 표시용 학기를 입력하세요.</p>
+            </div>
+
+            <div class="form-fields">
+              <div class="field">
+                <label for="courseTitle">과목명</label>
+                <input
+                  id="courseTitle"
+                  name="title"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="예: 알고리즘"
+                  required
+                  aria-describedby="courseTitleHelp courseTitleError"
+                />
+                <p class="field__help" id="courseTitleHelp">
+                  구체적인 최대 길이는 아직 제품 정책에서 정하지 않았습니다.
+                </p>
+                <p
+                  class="field__error"
+                  id="courseTitleError"
+                  data-field-error-for="courseTitle"
+                  hidden
+                >
+                  공백이 아닌 과목명을 입력해주세요.
+                </p>
+              </div>
+
+              <div class="field">
+                <label for="courseSemester">학기</label>
+                <input
+                  id="courseSemester"
+                  name="semester"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="예: 2026 여름학기"
+                  required
+                  aria-describedby="courseSemesterHelp courseSemesterError"
+                />
+                <p class="field__help" id="courseSemesterHelp">
+                  현재 API는 구조화된 값이 아닌 표시용 문자열로 받습니다.
+                </p>
+                <p
+                  class="field__error"
+                  id="courseSemesterError"
+                  data-field-error-for="courseSemester"
+                  hidden
+                >
+                  공백이 아닌 학기를 입력해주세요.
+                </p>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <a class="button button--ghost" href="dashboard.html">취소</a>
+              <button class="button button--primary" type="submit">
+                Course 만들기
+              </button>
+            </div>
+          </form>
+
+          <aside class="onboarding-aside" aria-label="Course 생성 안내">
+            <section class="panel">
+              <h2>생성 후 이렇게 동작해요</h2>
+              <ul>
+                <li>생성자는 해당 Course의 교수자로 등록됩니다.</li>
+                <li>서버가 학생 참여용 고유 코드를 발급합니다.</li>
+                <li>참여 코드는 교수자 화면에서만 표시됩니다.</li>
+              </ul>
+            </section>
+            <p class="notice notice--info" role="note">
+              참여 코드의 길이와 사용 문자는 아직 미정입니다. 이 화면은 특정
+              형식을 제품 규칙으로 확정하지 않습니다.
+            </p>
+          </aside>
+        </div>
+
+        <section
+          class="panel loading-card"
+          data-show-state="submitting"
+          hidden
+          aria-busy="true"
+          aria-label="Course 생성 중"
+        >
+          <div class="skeleton skeleton--title" aria-hidden="true"></div>
+          <div class="skeleton skeleton--line" aria-hidden="true"></div>
+          <div class="skeleton skeleton--line" aria-hidden="true"></div>
+          <p class="sr-only">Course와 교수자 멤버십을 생성하는 중입니다.</p>
+        </section>
+
+        <section class="panel result-card" data-show-state="success" hidden>
+          <div class="result-card__content">
+            <span class="result-card__icon" aria-hidden="true">✓</span>
+            <h2>알고리즘 Course를 만들었습니다</h2>
+            <p>
+              김도현님은 이 Course에서 <strong>교수자</strong>입니다. 아래
+              코드는 형식 검토를 위한 목 예시입니다.
+            </p>
+            <div class="result-summary">
+              <div><small>Course</small><strong>알고리즘</strong></div>
+              <div><small>학기</small><strong>2026 여름학기</strong></div>
+            </div>
+            <div class="join-code-box">
+              <div>
+                <small>예시 참여 코드 · 실제 규격 아님</small>
+                <strong id="createdJoinCode">A7K9Q2</strong>
+              </div>
+              <button
+                class="button button--secondary"
+                type="button"
+                data-copy="#createdJoinCode"
+                data-copy-success="예시 참여 코드를 복사했습니다."
+              >
+                코드 복사
+              </button>
+            </div>
+            <div class="form-actions">
+              <button
+                class="button button--secondary"
+                type="button"
+                data-state-action
+                data-state-target="#createFlow"
+                data-state="form"
+              >
+                다른 Course 만들기
+              </button>
+              <a class="button button--primary" href="course-professor.html">
+                Course로 이동
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="state-panel"
+          data-show-state="error"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>Course를 만들지 못했습니다</h2>
+            <p>
+              입력 내용은 유지한 채 다시 요청할 수 있습니다. 중복 제출은 만들기
+              버튼을 처리 중에 비활성화해 막습니다.
+            </p>
+            <button
+              class="button button--secondary"
+              type="button"
+              data-state-action
+              data-state-target="#createFlow"
+              data-state="form"
+            >
+              입력으로 돌아가기
+            </button>
+          </div>
+        </section>
+
+        <section
+          class="state-panel auth-expired"
+          data-show-state="expired"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>로그인이 만료되었습니다</h2>
+            <p>Course 입력과 생성 결과를 숨깁니다. 다시 로그인해주세요.</p>
+            <a class="button button--primary" href="main.html?auth=default">
+              로그인 화면으로 이동
+            </a>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

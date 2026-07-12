@@ -138,23 +138,15 @@
 
             <aside class="quick-actions" aria-labelledby="quickActionsTitle">
               <h2 id="quickActionsTitle">빠른 실행</h2>
-              <button
-                class="quick-action"
-                type="button"
-                data-toast="Course 생성 화면은 PR 2에서 연결됩니다."
-              >
+              <a class="quick-action" href="course-create.html">
                 <span class="quick-action__icon" aria-hidden="true">+</span>
                 <span>
                   <strong>Course 만들기</strong>
                   <small>새 학기 수업방과 참여 코드 생성</small>
                 </span>
                 <span aria-hidden="true">→</span>
-              </button>
-              <button
-                class="quick-action"
-                type="button"
-                data-toast="Course 참여 화면은 PR 2에서 연결됩니다."
-              >
+              </a>
+              <a class="quick-action" href="course-join.html">
                 <span
                   class="quick-action__icon quick-action__icon--accent"
                   aria-hidden="true"
@@ -165,7 +157,7 @@
                   <small>교수자에게 받은 Course 코드 입력</small>
                 </span>
                 <span aria-hidden="true">→</span>
-              </button>
+              </a>
             </aside>
           </section>
 
@@ -219,14 +211,13 @@
                     <small>현재 class</small>
                     <strong>그래프 탐색과 최단 경로</strong>
                   </div>
-                  <button
+                  <a
                     class="icon-button"
-                    type="button"
                     aria-label="알고리즘 Course 열기"
-                    data-toast="교수자 Course 화면은 PR 2에서 연결됩니다."
+                    href="course-professor.html"
                   >
                     ↗
-                  </button>
+                  </a>
                 </footer>
               </article>
 
@@ -242,14 +233,13 @@
                     <small>다음 class</small>
                     <strong>7월 14일 · 전송 계층</strong>
                   </div>
-                  <button
+                  <a
                     class="icon-button"
-                    type="button"
                     aria-label="컴퓨터 네트워크 Course 열기"
-                    data-toast="교수자 Course 화면은 PR 2에서 연결됩니다."
+                    href="course-professor.html?session=ready"
                   >
                     ↗
-                  </button>
+                  </a>
                 </footer>
               </article>
             </div>
@@ -281,13 +271,9 @@
                   새 Course를 만들면 이곳에서 class와 참여 코드를 관리할 수
                   있습니다.
                 </p>
-                <button
-                  class="button button--primary"
-                  type="button"
-                  data-toast="Course 생성 화면은 PR 2에서 연결됩니다."
-                >
+                <a class="button button--primary" href="course-create.html">
                   첫 Course 만들기
-                </button>
+                </a>
               </div>
             </div>
 
@@ -372,14 +358,13 @@
                     <small>최근 기록</small>
                     <strong>CNN과 이미지 분류</strong>
                   </div>
-                  <button
+                  <a
                     class="icon-button"
-                    type="button"
                     aria-label="인공지능 개론 Course 열기"
-                    data-toast="학생 Course 화면은 PR 2에서 연결됩니다."
+                    href="course-student.html"
                   >
                     ↗
-                  </button>
+                  </a>
                 </footer>
               </article>
 
@@ -397,14 +382,13 @@
                     <small>최근 기록</small>
                     <strong>실존주의와 자유</strong>
                   </div>
-                  <button
+                  <a
                     class="icon-button"
-                    type="button"
                     aria-label="현대 철학의 이해 Course 열기"
-                    data-toast="학생 Course 화면은 PR 2에서 연결됩니다."
+                    href="course-student.html?session=none"
                   >
                     ↗
-                  </button>
+                  </a>
                 </footer>
               </article>
 
@@ -420,14 +404,13 @@
                     <small>최근 class</small>
                     <strong>사용자 여정 지도</strong>
                   </div>
-                  <button
+                  <a
                     class="icon-button"
-                    type="button"
                     aria-label="서비스 디자인 Course 열기"
-                    data-toast="기록 정리 중 화면은 후속 Prototype에서 연결됩니다."
+                    href="course-student.html?session=processing"
                   >
                     ↗
-                  </button>
+                  </a>
                 </footer>
               </article>
             </div>
@@ -456,13 +439,9 @@
                 <span class="state-panel__icon" aria-hidden="true">#</span>
                 <h3>아직 참여 중인 Course가 없습니다</h3>
                 <p>교수자에게 받은 참여 코드로 Course에 참여해보세요.</p>
-                <button
-                  class="button button--primary"
-                  type="button"
-                  data-toast="Course 참여 화면은 PR 2에서 연결됩니다."
-                >
+                <a class="button button--primary" href="course-join.html">
                   코드로 참여하기
-                </button>
+                </a>
               </div>
             </div>
 
