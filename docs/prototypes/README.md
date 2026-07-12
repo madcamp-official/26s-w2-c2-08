@@ -27,21 +27,21 @@ python3 -m http.server 4173 --directory docs/prototypes
 
 ## 화면 진행표
 
-| 사용자 흐름 | 화면                    | IA 노드                  | 파일                         | 상태    |
-| ----------- | ----------------------- | ------------------------ | ---------------------------- | ------- |
-| 서비스 진입 | 비로그인 메인           | `MAIN_PAGE`              | `main.html`                  | 준비 중 |
-| 서비스 진입 | 로그인 후 대시보드      | `MAIN_PAGE_AUTH`         | `dashboard.html`             | 준비 중 |
-| 서비스 진입 | 내 정보                 | `MY_INFO_PAGE`           | `my-info.html`               | 준비 중 |
-| Course      | Course 생성             | `COURSE_CREATE_PAGE`     | `course-create.html`         | 예정    |
-| Course      | Course 참여             | `COURSE_JOIN_PAGE`       | `course-join.html`           | 예정    |
-| Course      | 교수자 Course           | `COURSE_PAGE_PROF`       | `course-professor.html`      | 예정    |
-| Course      | 학생 Course             | `COURSE_PAGE_STUD`       | `course-student.html`        | 예정    |
-| 수업 준비   | class 생성·PDF          | `CLASS_CREATE_PAGE`      | `class-create.html`          | 예정    |
-| 실시간 수업 | 교수자 실시간 class     | `LIVE_CLASS_PAGE_PROF`   | `class-live-professor.html`  | 예정    |
-| 실시간 수업 | 학생 실시간 class       | `LIVE_CLASS_PAGE_STUD`   | `class-live-student.html`    | 예정    |
-| 수업 종료   | 기록 정리 중            | `CLASS_PROCESSING_STATE` | `class-processing.html`      | 예정    |
-| 수업 기록   | 교수자 완료 class       | `ENDED_CLASS_PAGE_PROF`  | `class-ended-professor.html` | 예정    |
-| 수업 기록   | 학생 완료 class·복습 AI | `ENDED_CLASS_PAGE_STUD`  | `class-ended-student.html`   | 예정    |
+| 사용자 흐름 | 화면                    | IA 노드                  | 파일                         | 상태      |
+| ----------- | ----------------------- | ------------------------ | ---------------------------- | --------- |
+| 서비스 진입 | 비로그인 메인           | `MAIN_PAGE`              | `main.html`                  | 확인 가능 |
+| 서비스 진입 | 로그인 후 대시보드      | `MAIN_PAGE_AUTH`         | `dashboard.html`             | 준비 중   |
+| 서비스 진입 | 내 정보                 | `MY_INFO_PAGE`           | `my-info.html`               | 준비 중   |
+| Course      | Course 생성             | `COURSE_CREATE_PAGE`     | `course-create.html`         | 예정      |
+| Course      | Course 참여             | `COURSE_JOIN_PAGE`       | `course-join.html`           | 예정      |
+| Course      | 교수자 Course           | `COURSE_PAGE_PROF`       | `course-professor.html`      | 예정      |
+| Course      | 학생 Course             | `COURSE_PAGE_STUD`       | `course-student.html`        | 예정      |
+| 수업 준비   | class 생성·PDF          | `CLASS_CREATE_PAGE`      | `class-create.html`          | 예정      |
+| 실시간 수업 | 교수자 실시간 class     | `LIVE_CLASS_PAGE_PROF`   | `class-live-professor.html`  | 예정      |
+| 실시간 수업 | 학생 실시간 class       | `LIVE_CLASS_PAGE_STUD`   | `class-live-student.html`    | 예정      |
+| 수업 종료   | 기록 정리 중            | `CLASS_PROCESSING_STATE` | `class-processing.html`      | 예정      |
+| 수업 기록   | 교수자 완료 class       | `ENDED_CLASS_PAGE_PROF`  | `class-ended-professor.html` | 예정      |
+| 수업 기록   | 학생 완료 class·복습 AI | `ENDED_CLASS_PAGE_STUD`  | `class-ended-student.html`   | 예정      |
 
 ## 프로토타입과 실제 구현의 경계
 

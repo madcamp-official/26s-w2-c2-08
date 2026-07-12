@@ -116,6 +116,46 @@ function initStateSwitchers() {
   });
 }
 
+function setDemoState(target, state) {
+  if (!target || !state) return;
+  target.dataset.demoState = state;
+  target.querySelectorAll("[data-show-state]").forEach((item) => {
+    const states = item.dataset.showState.split(" ");
+    item.hidden = !states.includes(state);
+  });
+
+  if (!target.id) return;
+  document
+    .querySelectorAll(
+      `[data-state-switcher][data-state-target="#${target.id}"]`,
+    )
+    .forEach((switcher) => {
+      switcher.querySelectorAll("[data-state]").forEach((item) => {
+        item.setAttribute("aria-pressed", String(item.dataset.state === state));
+      });
+    });
+}
+
+function initStateActions() {
+  document.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-state-action]");
+    if (!action) return;
+    const target = document.querySelector(action.dataset.stateTarget);
+    setDemoState(target, action.dataset.state);
+  });
+}
+
+function initQueryStates() {
+  const params = new URLSearchParams(window.location.search);
+  document.querySelectorAll("[data-query-state]").forEach((target) => {
+    const state =
+      params.get(target.dataset.queryState) ||
+      target.dataset.queryDefault ||
+      "default";
+    setDemoState(target, state);
+  });
+}
+
 function initGreeting() {
   const greeting = document.querySelector("[data-greeting]");
   const date = document.querySelector("[data-today]");
@@ -188,6 +228,8 @@ function initQueryToast() {
 
 initProfileDisclosure();
 initStateSwitchers();
+initStateActions();
+initQueryStates();
 initGreeting();
 initCommonActions();
 initQueryToast();
