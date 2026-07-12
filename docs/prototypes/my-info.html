@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="GOAL 내 정보 조회 화면 프로토타입" />
+    <title>GOAL · 내 정보</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <script type="module" src="assets/js/prototype.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 계정과 Course 정보는 모두 목 데이터입니다
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="dashboard.html" aria-label="GOAL 대시보드">
+          <span class="brand__mark" aria-hidden="true">G</span>
+          <span class="brand__copy">
+            <strong>GOAL</strong>
+            <small>God of all lectures</small>
+          </span>
+        </a>
+        <nav class="primary-nav" aria-label="주요 메뉴">
+          <a href="dashboard.html">홈</a>
+          <a href="dashboard.html#ownedCoursesTitle">내 Course</a>
+          <a href="my-info.html" aria-current="page">내 정보</a>
+        </nav>
+        <div class="header-actions">
+          <a class="button button--secondary" href="dashboard.html"
+            >대시보드로 돌아가기</a
+          >
+        </div>
+      </div>
+      <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
+        <a href="dashboard.html">홈</a>
+        <a href="dashboard.html#ownedCoursesTitle">내 Course</a>
+        <a href="my-info.html" aria-current="page">내 정보</a>
+      </nav>
+    </header>
+
+    <main
+      class="container container--content page-main account-page"
+      id="mainContent"
+    >
+      <section
+        id="accountBoundary"
+        data-demo-state="valid"
+        data-query-state="auth"
+        data-query-default="valid"
+      >
+        <div data-show-state="valid">
+          <header class="account-heading">
+            <div>
+              <p class="eyebrow">Account</p>
+              <h1 class="page-title">내 정보</h1>
+              <p class="page-description">
+                Google 계정 기본 정보와 Course별 역할을 확인합니다. GOAL
+                계정에는 고정된 교수자·학생 역할이 없습니다.
+              </p>
+            </div>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#accountContent"
+              aria-label="내 정보 화면 상태 선택"
+            >
+              <button type="button" data-state="normal" aria-pressed="true">
+                정상
+              </button>
+              <button type="button" data-state="loading" aria-pressed="false">
+                로딩
+              </button>
+              <button type="button" data-state="empty" aria-pressed="false">
+                Course 없음
+              </button>
+              <button type="button" data-state="error" aria-pressed="false">
+                오류
+              </button>
+            </div>
+          </header>
+
+          <section
+            id="accountContent"
+            data-demo-state="normal"
+            data-query-state="state"
+            data-query-default="normal"
+            aria-live="polite"
+          >
+            <div class="account-layout" data-show-state="normal">
+              <article class="panel profile-card">
+                <div class="profile-card__identity">
+                  <span class="avatar profile-card__avatar" aria-hidden="true"
+                    >김</span
+                  >
+                  <div>
+                    <span class="status-chip status-chip--success"
+                      >Google 연결됨</span
+                    >
+                    <h2>김도현</h2>
+                    <p>dohyun@example.com</p>
+                  </div>
+                </div>
+                <dl class="account-details">
+                  <div>
+                    <dt>로그인 방식</dt>
+                    <dd>Google OAuth</dd>
+                  </div>
+                  <div>
+                    <dt>가입일</dt>
+                    <dd><time datetime="2026-07-02">2026년 7월 2일</time></dd>
+                  </div>
+                  <div>
+                    <dt>계정 역할</dt>
+                    <dd>고정 역할 없음</dd>
+                  </div>
+                </dl>
+                <p class="notice notice--info">
+                  이름과 이메일 수정은 1차 MVP 선택 기능입니다. 이
+                  Prototype에서는 조회만 제공합니다.
+                </p>
+              </article>
+
+              <div class="stack account-side">
+                <article class="panel course-summary-card">
+                  <div>
+                    <span class="role-badge">교수자</span>
+                    <strong>2</strong>
+                    <p>관리 중인 Course</p>
+                  </div>
+                  <a
+                    class="button button--secondary"
+                    href="dashboard.html#ownedCoursesTitle"
+                  >
+                    관리 Course 보기
+                  </a>
+                </article>
+                <article class="panel course-summary-card">
+                  <div>
+                    <span class="role-badge role-badge--student">학생</span>
+                    <strong>3</strong>
+                    <p>참여 중인 Course</p>
+                  </div>
+                  <a
+                    class="button button--secondary"
+                    href="dashboard.html#joinedCoursesTitle"
+                  >
+                    참여 Course 보기
+                  </a>
+                </article>
+                <article class="panel account-security">
+                  <div>
+                    <h2>로그인 Session</h2>
+                    <p>공용 기기에서는 이용 후 반드시 로그아웃하세요.</p>
+                  </div>
+                  <button
+                    class="button button--danger"
+                    type="button"
+                    data-dialog-open="logoutDialog"
+                  >
+                    로그아웃
+                  </button>
+                </article>
+              </div>
+            </div>
+
+            <div
+              class="account-layout"
+              data-show-state="loading"
+              hidden
+              aria-busy="true"
+            >
+              <article class="panel stack" aria-hidden="true">
+                <div class="skeleton skeleton--title"></div>
+                <div class="skeleton skeleton--line"></div>
+                <div class="skeleton skeleton--line"></div>
+                <div class="skeleton skeleton--line"></div>
+              </article>
+              <div class="stack" aria-hidden="true">
+                <article class="panel stack">
+                  <div class="skeleton skeleton--title"></div>
+                  <div class="skeleton skeleton--line"></div>
+                </article>
+                <article class="panel stack">
+                  <div class="skeleton skeleton--title"></div>
+                  <div class="skeleton skeleton--line"></div>
+                </article>
+              </div>
+              <span class="sr-only"
+                >계정과 Course 요약을 불러오는 중입니다.</span
+              >
+            </div>
+
+            <div class="account-layout" data-show-state="empty" hidden>
+              <article class="panel profile-card">
+                <div class="profile-card__identity">
+                  <span class="avatar profile-card__avatar" aria-hidden="true"
+                    >김</span
+                  >
+                  <div>
+                    <span class="status-chip status-chip--success"
+                      >Google 연결됨</span
+                    >
+                    <h2>김도현</h2>
+                    <p>dohyun@example.com</p>
+                  </div>
+                </div>
+                <p class="notice notice--info">
+                  계정 정보는 정상입니다. 아직 역할을 가진 Course가 없습니다.
+                </p>
+              </article>
+              <div class="state-panel">
+                <div class="state-panel__content">
+                  <span class="state-panel__icon" aria-hidden="true">0</span>
+                  <h2>연결된 Course가 없습니다</h2>
+                  <p>
+                    대시보드에서 Course를 만들거나 참여 코드로 참여할 수
+                    있습니다.
+                  </p>
+                  <a class="button button--primary" href="dashboard.html"
+                    >대시보드로 이동</a
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="state-panel account-error"
+              data-show-state="error"
+              hidden
+              role="alert"
+            >
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">!</span>
+                <h2>내 정보를 불러오지 못했습니다</h2>
+                <p>
+                  계정 정보를 표시하지 않습니다. 잠시 후 이 화면만 다시
+                  요청하세요.
+                </p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-state-action
+                  data-state-target="#accountContent"
+                  data-state="normal"
+                >
+                  다시 시도
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section
+          class="state-panel auth-expired"
+          data-show-state="expired"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h1>로그인이 만료되었습니다</h1>
+            <p>계정 정보를 표시하지 않습니다. 다시 로그인해주세요.</p>
+            <a class="button button--primary" href="main.html?auth=default"
+              >로그인 화면으로 이동</a
+            >
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div class="dialog-backdrop" id="logoutDialog" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="logoutDialogTitle"
+        aria-describedby="logoutDialogDescription"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="logoutDialogTitle">GOAL에서 로그아웃할까요?</h2>
+            <p id="logoutDialogDescription">
+              정적 Prototype에서는 server Session 삭제를 모의하고 비로그인
+              화면으로 이동합니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </header>
+        <p class="notice notice--warning">
+          실제 서비스에서는 <code>POST /api/v1/auth/logout</code>이 성공한 뒤
+          화면을 전환합니다.
+        </p>
+        <footer class="dialog__actions">
+          <button
+            class="button button--secondary"
+            type="button"
+            data-dialog-close
+          >
+            취소
+          </button>
+          <button
+            class="button button--secondary"
+            type="button"
+            data-toast="로그아웃 요청에 실패한 상태를 모의했습니다. 현재 화면을 유지합니다."
+            data-toast-tone="error"
+          >
+            오류 상태 보기
+          </button>
+          <a
+            class="button button--danger"
+            href="main.html?auth=default&notice=안전하게+로그아웃했습니다.&tone=success"
+          >
+            로그아웃
+          </a>
+        </footer>
+      </section>
+    </div>
+
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

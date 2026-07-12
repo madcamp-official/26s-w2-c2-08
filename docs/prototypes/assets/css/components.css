@@ -1617,3 +1617,163 @@
     align-items: stretch;
   }
 }
+
+/* Account details */
+.account-heading {
+  display: flex;
+  gap: var(--space-6);
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: var(--space-7);
+}
+
+.account-heading .state-switcher {
+  flex: 0 0 auto;
+}
+
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.profile-card__identity {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+}
+
+.profile-card__avatar {
+  width: 72px;
+  height: 72px;
+  font-size: 22px;
+}
+
+.profile-card__identity h2 {
+  margin: 12px 0 0;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+}
+
+.profile-card__identity p {
+  margin: 5px 0 0;
+  color: var(--color-muted);
+}
+
+.account-details {
+  display: grid;
+  gap: 0;
+  margin: var(--space-7) 0;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.account-details > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.4fr) 1fr;
+  gap: var(--space-4);
+  padding: 15px 0;
+}
+
+.account-details > div + div {
+  border-top: 1px solid var(--color-line);
+}
+
+.account-details dt {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.account-details dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-side {
+  --stack-gap: var(--space-3);
+}
+
+.course-summary-card {
+  display: flex;
+  gap: var(--space-4);
+  align-items: end;
+  justify-content: space-between;
+}
+
+.course-summary-card strong,
+.course-summary-card p {
+  display: block;
+}
+
+.course-summary-card strong {
+  margin-top: var(--space-4);
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.course-summary-card p {
+  margin: 7px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.course-summary-card .button {
+  flex: 0 0 auto;
+}
+
+.account-security {
+  display: grid;
+  gap: var(--space-5);
+  background: #f8f7f2;
+}
+
+.account-security h2,
+.account-security p {
+  margin: 0;
+}
+
+.account-security h2 {
+  font-size: 17px;
+}
+
+.account-security p {
+  margin-top: 7px;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.account-error {
+  min-height: 420px;
+}
+
+@media (max-width: 850px) {
+  .account-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .profile-card__identity {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .account-details > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .course-summary-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
