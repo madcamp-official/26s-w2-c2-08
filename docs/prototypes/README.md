@@ -34,7 +34,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 | 서비스 진입 | 내 정보                 | `MY_INFO_PAGE`           | `my-info.html`               | 확인 가능 |
 | Course      | Course 생성             | `COURSE_CREATE_PAGE`     | `course-create.html`         | 확인 가능 |
 | Course      | Course 참여             | `COURSE_JOIN_PAGE`       | `course-join.html`           | 확인 가능 |
-| Course      | 교수자 Course           | `COURSE_PAGE_PROF`       | `course-professor.html`      | 예정      |
+| Course      | 교수자 Course           | `COURSE_PAGE_PROF`       | `course-professor.html`      | 확인 가능 |
 | Course      | 학생 Course             | `COURSE_PAGE_STUD`       | `course-student.html`        | 예정      |
 | 수업 준비   | class 생성·PDF          | `CLASS_CREATE_PAGE`      | `class-create.html`          | 예정      |
 | 실시간 수업 | 교수자 실시간 class     | `LIVE_CLASS_PAGE_PROF`   | `class-live-professor.html`  | 예정      |
