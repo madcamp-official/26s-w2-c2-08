@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GOAL · class 기록 정리 중</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <script type="module" src="assets/js/class-processing.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 실제 Job이나 연결을 사용하지 않습니다
+    </div>
+    <main class="container page-main" id="mainContent">
+      <header class="subpage-heading">
+        <div>
+          <p class="eyebrow">CLASS_PROCESSING_STATE</p>
+          <h1>수업 기록을 정리하고 있습니다.</h1>
+          <p>
+            <span data-role-label>교수자</span> 화면 · 저장된 핵심 기록은 지금
+            바로 열람할 수 있습니다.
+          </p>
+        </div>
+        <a class="button button--secondary" href="dashboard.html">대시보드</a>
+      </header>
+      <p class="notice notice--info">
+        Audio 전송은 종료됐습니다. Session event WS 알림과 REST가 canonical이며
+        새 질문·반응은 등록할 수 없습니다.
+      </p>
+      <section
+        class="realtime-status-card"
+        id="processingConnection"
+        data-demo-state="connected"
+        data-query-state="connection"
+        data-query-default="connected"
+        aria-live="polite"
+      >
+        <small>선택적 Session event WS · REST canonical</small>
+        <strong data-show-state="connected">연결됨 · 변경 알림 수신</strong>
+        <strong data-show-state="reconnecting" hidden
+          >재연결 중 · 저장 기록은 REST로 열람</strong
+        >
+        <strong data-show-state="resync" hidden
+          >resync.required · GET /record 재조회</strong
+        >
+        <strong data-show-state="offline" hidden
+          >오프라인 · 마지막 저장 기록만 표시</strong
+        >
+      </section>
+      <section
+        id="sessionState"
+        data-demo-state="processing"
+        data-query-state="session"
+        data-query-default="processing"
+        aria-live="polite"
+      >
+        <div data-show-state="processing">
+          <div class="processing-layout">
+            <section class="panel">
+              <div class="section-heading">
+                <div>
+                  <h2>독립 후처리 작업</h2>
+                  <p>하나의 성공이 다른 작업의 성공을 의미하지 않습니다.</p>
+                </div>
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  data-server-complete
+                >
+                  server COMPLETED 목 전환
+                </button>
+              </div>
+              <ul class="job-list">
+                <li
+                  class="job-card"
+                  id="transcriptJob"
+                  data-demo-state="finalizing"
+                  data-query-state="transcript"
+                  data-query-default="finalizing"
+                >
+                  <div data-show-state="finalizing">
+                    <h3>Transcript 마감 · FINALIZING</h3>
+                    <p>
+                      partial 없이 audio drain의 추가 final commit을 기다립니다.
+                    </p>
+                  </div>
+                  <div data-show-state="finalized" hidden>
+                    <h3>Transcript · FINALIZED</h3>
+                    <p>last sequence 130</p>
+                  </div>
+                  <div data-show-state="failed" hidden>
+                    <h3>Transcript 확인 실패</h3>
+                    <p>저장 final은 계속 열람합니다.</p>
+                  </div>
+                  <div data-show-state="empty" hidden>
+                    <h3>저장된 final 없음</h3>
+                  </div>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-finalize-transcript
+                  >
+                    추가 final→FINALIZED
+                  </button>
+                </li>
+                <li
+                  class="job-card"
+                  id="postJob"
+                  data-demo-state="running"
+                  data-query-state="postprocess"
+                  data-query-default="running"
+                >
+                  <div data-show-state="pending">
+                    <h3>SESSION_POSTPROCESSING · PENDING</h3>
+                    <p data-attempt>attempt 1 · worker 대기</p>
+                  </div>
+                  <div data-show-state="running">
+                    <h3>SESSION_POSTPROCESSING · RUNNING</h3>
+                    <p data-attempt>attempt 1 · transcript status 확인</p>
+                  </div>
+                  <div data-show-state="succeeded" hidden>
+                    <h3>SESSION_POSTPROCESSING · SUCCEEDED</h3>
+                  </div>
+                  <div data-show-state="failed" hidden role="alert">
+                    <h3>SESSION_POSTPROCESSING · FAILED</h3>
+                    <p data-attempt>attempt 1</p>
+                  </div>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-professor-only
+                    data-show-state="failed"
+                    hidden
+                    data-job-retry="Session 후처리"
+                    data-state-target="#postJob"
+                  >
+                    작업 재시도
+                  </button>
+                </li>
+                <li
+                  class="job-card"
+                  id="summaryJob"
+                  data-demo-state="pending"
+                  data-query-state="summary"
+                  data-query-default="pending"
+                >
+                  <div data-show-state="pending">
+                    <h3>FINAL_SUMMARY · PENDING</h3>
+                    <p data-attempt>attempt 1 · final 확정 또는 worker 대기</p>
+                  </div>
+                  <div data-show-state="running" hidden>
+                    <h3>FINAL_SUMMARY · RUNNING</h3>
+                  </div>
+                  <div data-show-state="succeeded" hidden>
+                    <h3>FINAL_SUMMARY · SUCCEEDED</h3>
+                  </div>
+                  <div data-show-state="failed" hidden role="alert">
+                    <h3>FINAL_SUMMARY · FAILED</h3>
+                    <p data-attempt>attempt 1 · 다른 기록은 유지</p>
+                  </div>
+                  <div data-show-state="retrying" hidden>
+                    <h3>FINAL_SUMMARY · RETRYING</h3>
+                  </div>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-professor-only
+                    data-show-state="failed"
+                    hidden
+                    data-job-retry="최종 요약"
+                    data-state-target="#summaryJob"
+                  >
+                    최종 요약 재시도
+                  </button>
+                </li>
+                <li
+                  class="job-card"
+                  id="clusterJob"
+                  data-demo-state="failed"
+                  data-query-state="clustering"
+                  data-query-default="failed"
+                >
+                  <div data-show-state="pending">
+                    <h3>마지막 QUESTION_CLUSTERING · PENDING</h3>
+                    <p data-attempt>attempt 1</p>
+                  </div>
+                  <div data-show-state="running" hidden>
+                    <h3>마지막 QUESTION_CLUSTERING · RUNNING</h3>
+                  </div>
+                  <div data-show-state="succeeded" hidden>
+                    <h3>최종 질문 묶음 · SUCCEEDED</h3>
+                  </div>
+                  <div data-show-state="failed" role="alert">
+                    <h3>마지막 QUESTION_CLUSTERING · FAILED</h3>
+                    <p data-attempt>attempt 1 · 원본 질문·Answer 유지</p>
+                  </div>
+                  <div data-show-state="retrying" hidden>
+                    <h3>QUESTION_CLUSTERING · RETRYING</h3>
+                  </div>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-professor-only
+                    data-show-state="failed"
+                    hidden
+                    data-job-retry="질문 정리"
+                    data-state-target="#clusterJob"
+                  >
+                    질문 정리 재시도
+                  </button>
+                </li>
+              </ul>
+              <p class="notice notice--warning">
+                학생에게는 재시도 버튼 대신 “교수자가 재시도할 수 있습니다”를
+                안내합니다. 별도 ANSWER_LINKING Job은 만들지 않습니다.
+              </p>
+            </section>
+            <aside class="panel">
+              <h2>이미 저장된 기록</h2>
+              <p>
+                GET /sessions/{id}/record는 PROCESSING부터 핵심 기록을
+                반환합니다.
+              </p>
+              <div class="record-preview">
+                <details open>
+                  <summary>강의자료 PDF 2개</summary>
+                  <p>그래프-탐색.pdf · 보충-예제.pdf</p>
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    data-record-open
+                  >
+                    PDF 열람 목 상태
+                  </button>
+                </details>
+                <details open>
+                  <summary>final Transcript</summary>
+                  <ol>
+                    <li>sequence 129 · 저장된 final 문장</li>
+                    <li id="lateFinal" hidden>
+                      sequence 130 · drain 중 추가 저장된 final
+                    </li>
+                  </ol>
+                </details>
+                <details>
+                  <summary>원본 질문·반응·완료 Answer</summary>
+                  <p>
+                    클러스터 실패와 무관하게 원본 질문과 reaction_count,
+                    LIVE에서 확정한 Answer Transcript range를 표시합니다.
+                  </p>
+                </details>
+                <details>
+                  <summary>현재 최종 Cluster</summary>
+                  <p>
+                    확정본만 표시하며 과거 membership 이력은 만들지 않습니다.
+                  </p>
+                </details>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <section
+          class="state-panel completion-card"
+          data-show-state="completed"
+          hidden
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon">✓</span>
+            <h2 data-complete-label>완료 기록 준비됨</h2>
+            <p>
+              모든 blocking Job이 SUCCEEDED 또는 FAILED terminal이어서 서버가
+              COMPLETED로 확정했습니다. 일부 실패가 있을 수 있습니다.
+            </p>
+            <button
+              class="button button--primary"
+              type="button"
+              data-toast="역할별 완료 화면은 PR 7에서 연결됩니다."
+            >
+              완료 기록으로 이동
+            </button>
+          </div>
+        </section>
+      </section>
+      <section class="live-support-grid">
+        <article class="panel">
+          <h2>완료 판정</h2>
+          <p>
+            클라이언트가 Job 개수를 세지 않습니다. `session.updated=COMPLETED`
+            또는 REST Session이 진실이며 자동 이동하지 않고 CTA를 제공합니다.
+          </p>
+        </article>
+        <article class="panel">
+          <h2>미정·API gap</h2>
+          <p>
+            `blocks_session_completion`, Cluster `is_final/finalized_at`,
+            Session `completed_at`, progress stage, SLO, 자동 전환, 공유 Job
+            retry 범위와 Transcript gap API 공개 여부는 동기화가 필요합니다.
+          </p>
+        </article>
+      </section>
+    </main>
+    <div class="toast-region" data-toast-region aria-live="polite"></div>
+  </body>
+</html>
