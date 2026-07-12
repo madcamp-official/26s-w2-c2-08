@@ -92,6 +92,12 @@ function initProfileDisclosure() {
   });
 }
 
+function getOwnedStateItems(target) {
+  return [...target.querySelectorAll("[data-show-state]")].filter(
+    (item) => item.closest("[data-demo-state]") === target,
+  );
+}
+
 function initStateSwitchers() {
   document.querySelectorAll("[data-state-switcher]").forEach((switcher) => {
     const targetSelector = switcher.dataset.stateTarget;
@@ -108,7 +114,7 @@ function initStateSwitchers() {
       switcher.querySelectorAll("[data-state]").forEach((item) => {
         item.setAttribute("aria-pressed", String(item === button));
       });
-      target.querySelectorAll("[data-show-state]").forEach((item) => {
+      getOwnedStateItems(target).forEach((item) => {
         const states = item.dataset.showState.split(" ");
         item.hidden = !states.includes(state);
       });
@@ -116,10 +122,10 @@ function initStateSwitchers() {
   });
 }
 
-function setDemoState(target, state) {
+export function setDemoState(target, state) {
   if (!target || !state) return;
   target.dataset.demoState = state;
-  target.querySelectorAll("[data-show-state]").forEach((item) => {
+  getOwnedStateItems(target).forEach((item) => {
     const states = item.dataset.showState.split(" ");
     item.hidden = !states.includes(state);
   });
