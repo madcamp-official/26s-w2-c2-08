@@ -1,0 +1,3446 @@
+openapi: 3.1.0
+info:
+  title: GOAL API
+  version: 0.1.0
+  description: |
+    GOAL(God Of All Lectures) MVP의 HTTP API 설계 초안이다.
+
+    - 비즈니스 API는 `/api/v1`을 권장 경로로 사용한다.
+    - ID는 형식이 확정되지 않았으므로 불투명 문자열로 정의한다.
+    - Google OAuth/OIDC 완료 후 서버 세션을 만들고 HttpOnly Cookie로 인증한다.
+    - Course 역할은 전역 권한이 아니라 Course 멤버십으로 판정한다.
+    - WebSocket과 오디오 스트리밍 계약은 OpenAPI 표준 범위 밖이므로
+      최상위 `x-websocket-channels`에 참고용 초안으로 기록한다.
+    - 구현 후에는 FastAPI가 생성하는 `/openapi.json`과 이 문서를 함께 검증한다.
+  contact:
+    name: GOAL Team
+servers:
+  - url: /
+    description: 현재 호스트
+tags:
+  - name: Health
+    description: 인증이 필요 없는 상태 점검
+  - name: Auth
+    description: Google 로그인과 서버 세션 종료
+  - name: Users
+    description: 현재 사용자 정보
+  - name: Courses
+    description: 한 학기 단위 Course와 Course별 역할
+  - name: Sessions
+    description: Course 안의 날짜별 강의 세션
+  - name: Materials
+    description: 강의자료 PDF와 전처리 상태
+  - name: Transcript
+    description: 영구 저장된 final Transcript
+  - name: Questions
+    description: 익명 질문, 질문 작성 도움과 반응
+  - name: Answers
+    description: 교수자 답변 구간 연결
+  - name: Summaries
+    description: 수업 중·수업 후 AI 요약
+  - name: Chats
+    description: 세션 문맥 기반 개인 AI 대화
+  - name: Jobs
+    description: 비동기 AI 작업 상태와 재시도
+  - name: Realtime
+    description: WebSocket 연결용 단기·1회용 티켓
+  - name: Records
+    description: 정리 중·완료 수업 기록
+security:
+  - sessionCookieAuth: []
+
+paths:
+  /api/health:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Health]
+      operationId: getApiHealth
+      summary: API 프로세스 상태 확인
+      description: 외부 서비스에 의존하지 않는 liveness probe이다.
+      security: []
+      responses:
+        "200":
+          description: API 프로세스가 요청을 처리할 수 있음
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+
+  /api/health/db:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Health]
+      operationId: getDatabaseHealth
+      summary: 데이터베이스 연결 상태 확인
+      description: PostgreSQL 연결과 간단한 쿼리를 확인하는 readiness probe이다.
+      security: []
+      responses:
+        "200":
+          description: 데이터베이스에 연결할 수 있음
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseHealthResponse"
+              example:
+                status: ok
+                database: reachable
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/google/start:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Auth]
+      operationId: startGoogleLogin
+      summary: Google 로그인 시작
+      description: |
+        state, nonce와 PKCE 값을 서버 세션에 저장한 뒤 Google authorization endpoint로
+        redirect한다. `return_to`는 같은 서비스의 허용된 상대 경로만 받는다.
+      security: []
+      parameters:
+        - name: return_to
+          in: query
+          required: false
+          description: 로그인 완료 후 이동할 허용된 프런트엔드 상대 경로
+          schema:
+            type: string
+            default: /
+      responses:
+        "302":
+          description: Google 로그인 화면으로 redirect
+          headers:
+            Location:
+              description: Google authorization URL
+              schema:
+                type: string
+                format: uri
+            Cache-Control:
+              description: 인증 redirect 캐시 금지
+              schema:
+                type: string
+                const: no-store
+            Set-Cookie:
+              description: state·PKCE 검증용 10분 만료 HttpOnly 임시 Cookie
+              schema:
+                type: string
+                example: goal_oauth=opaque; Path=/api/v1/auth/google; HttpOnly; Secure; SameSite=Lax; Max-Age=600
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/google/callback:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Auth]
+      operationId: completeGoogleLogin
+      summary: Google 로그인 callback
+      description: |
+        state·nonce·PKCE를 검증하고 authorization code를 교환한 뒤 User와 서버 세션을
+        생성하거나 갱신한다. 성공 시 `goal_session` Cookie를 설정하고 저장된 return_to로
+        redirect한다. Provider 오류 원문은 브라우저나 로그에 남기지 않는다.
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: 사용자가 동의하지 않았을 때 Provider가 전달할 수 있는 오류 코드
+          schema:
+            type: string
+      responses:
+        "302":
+          description: 로그인 완료 또는 안전한 로그인 실패 화면으로 redirect
+          headers:
+            Location:
+              description: 검증된 프런트엔드 상대 경로
+              schema:
+                type: string
+            Set-Cookie:
+              description: 성공 시 HttpOnly 서버 세션 Cookie를 설정하고 임시 goal_oauth Cookie를 만료
+              schema:
+                type: string
+                example: goal_session=opaque; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800
+            Cache-Control:
+              description: 인증 callback 캐시 금지
+              schema:
+                type: string
+                const: no-store
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/logout:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: 로그아웃
+      description: |
+        서버 세션을 폐기하고 Cookie를 만료시킨다. 반복 호출은 성공하며 상태 변경 요청은
+        허용된 Origin인지 검사한다.
+      security: []
+      responses:
+        "204":
+          description: 서버 세션 폐기 또는 이미 로그아웃 상태
+          headers:
+            Set-Cookie:
+              description: goal_session Cookie 만료
+              schema:
+                type: string
+                example: goal_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/me:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Users]
+      operationId: getCurrentUser
+      summary: 내 정보 조회
+      description: 인증된 사용자의 기본 프로필을 반환한다.
+      responses:
+        "200":
+          description: 현재 사용자 정보
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/realtime-tickets:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Realtime]
+      operationId: createRealtimeTicket
+      summary: WebSocket 연결 티켓 발급
+      description: |
+        정상 HTTP 인증으로 Session scope의 60초 만료·1회용 티켓을 발급한다.
+        `SESSION_EVENTS_READ`는 Course 멤버, `SESSION_AUDIO_WRITE`는 해당 Course의
+        PROFESSOR이면서 LIVE Session일 때만 발급한다. 응답과 티켓을 로그에 남기지 않는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RealtimeTicketCreateRequest"
+            examples:
+              events:
+                value:
+                  session_id: session_01HXYZ
+                  scope: SESSION_EVENTS_READ
+                  resume_cursor: null
+              audio:
+                value:
+                  session_id: session_01HXYZ
+                  scope: SESSION_AUDIO_WRITE
+      responses:
+        "201":
+          description: 발급된 단기·1회용 WebSocket 티켓
+          headers:
+            Cache-Control:
+              description: 티켓 응답 캐시 금지
+              schema:
+                type: string
+                const: no-store
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RealtimeTicket"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/courses:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Courses]
+      operationId: listMyCourses
+      summary: 내 Course 목록 조회
+      description: 현재 사용자가 멤버인 Course만 반환한다.
+      parameters:
+        - name: role
+          in: query
+          required: false
+          description: 현재 사용자의 Course별 역할 필터
+          schema:
+            $ref: "#/components/schemas/CourseRoleFilter"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Course 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Courses]
+      operationId: createCourse
+      summary: Course 생성
+      description: Course를 생성하고 요청 사용자를 해당 Course의 PROFESSOR로 등록한다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourseCreateRequest"
+            example:
+              title: 알고리즘
+              semester: 2026 여름학기
+      responses:
+        "201":
+          description: 생성된 Course
+          headers:
+            Location:
+              description: 생성된 Course의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/courses/join:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Courses]
+      operationId: joinCourse
+      summary: 참여 코드로 Course 참여
+      description: |
+        참여 코드를 검증하고 요청 사용자를 STUDENT로 등록한다.
+        이미 같은 Course의 학생이면 기존 멤버십을 반환할 수 있으며,
+        PROFESSOR 멤버십을 STUDENT로 덮어쓰지 않는다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CourseJoinRequest"
+            example:
+              join_code: A7K9Q2
+      responses:
+        "200":
+          description: 이미 존재하는 학생 멤버십의 Course
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "201":
+          description: 새 학생 멤버십이 생성된 Course
+          headers:
+            Location:
+              description: 참여한 Course의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/courses/{course_id}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Courses]
+      operationId: getCourse
+      summary: Course 상세 조회
+      description: |
+        Course 멤버만 조회할 수 있다. `join_code`는 현재 사용자가 이 Course의
+        PROFESSOR일 때만 포함하고 다른 사용자 응답에서는 필드를 생략한다.
+      responses:
+        "200":
+          description: Course 상세
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/courses/{course_id}/sessions:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Sessions]
+      operationId: listCourseSessions
+      summary: Course의 class 목록 조회
+      description: Course 멤버만 조회할 수 있다.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Session 상태 필터
+          schema:
+            $ref: "#/components/schemas/LectureSessionStatus"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: LectureSession 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureSessionListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Sessions]
+      operationId: createCourseSession
+      summary: class 생성
+      description: 해당 Course의 PROFESSOR만 생성할 수 있으며 초기 상태는 READY이다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LectureSessionCreateRequest"
+            example:
+              title: 그래프 탐색과 최단 경로
+              lecture_date: "2026-07-11"
+      responses:
+        "201":
+          description: 생성된 LectureSession
+          headers:
+            Location:
+              description: 생성된 Session의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/sessions/{session_id}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Sessions]
+      operationId: getSession
+      summary: class 상세 조회
+      description: Session이 속한 Course의 멤버만 조회할 수 있다.
+      responses:
+        "200":
+          description: LectureSession 상세
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/start:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Sessions]
+      operationId: startSession
+      summary: class 시작
+      description: |
+        해당 Course의 PROFESSOR만 실행할 수 있다. READY에서 LIVE로 전이한다.
+        PDF 준비 완료를 필수 선행 조건으로 둘지는 아직 미정이다.
+      responses:
+        "200":
+          description: LIVE로 전환된 LectureSession
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{session_id}/end:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Sessions]
+      operationId: endSession
+      summary: class 종료와 후처리 시작
+      description: |
+        해당 Course의 PROFESSOR만 실행할 수 있다. LIVE에서 PROCESSING으로 전이하고
+        Transcript 확정과 종료 후처리 작업을 생성한다. 같은 요청의 반복 호출은 새 작업을
+        중복 생성하지 않고 기존 Session과 작업을 반환해야 한다. 정상 흐름은 audio.stop과
+        audio.stopped 이후 호출하며, 먼저 호출되면 새 audio frame을 차단하고 수신분만 drain한다.
+        CAPTURING Answer가 있으면 409로 거부한다. 종료 시 생성한 공용 Job이 모두 SUCCEEDED
+        또는 FAILED에 도달하면 일부 실패가 있어도 COMPLETED로 전환한다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: 종료 요청이 수락되어 후처리가 시작됨
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEndAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{session_id}/materials:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Materials]
+      operationId: listSessionMaterials
+      summary: 강의자료 목록 조회
+      description: Session이 속한 Course의 멤버만 조회할 수 있다.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 강의자료 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureMaterialListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Materials]
+      operationId: uploadSessionMaterial
+      summary: 강의자료 PDF 업로드
+      description: |
+        해당 Course의 PROFESSOR만 업로드할 수 있다. 원본 PDF 저장 후 텍스트 추출과
+        임베딩 작업을 비동기로 수행한다. 파일 제한은 서버 `MAX_UPLOAD_BYTES` 설정을
+        따르며 현재 예시는 50 MiB이다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: MIME과 실제 내용이 유효한 PDF 파일
+            encoding:
+              file:
+                contentType: application/pdf
+      responses:
+        "202":
+          description: 파일이 저장되고 전처리 작업이 수락됨
+          headers:
+            Location:
+              description: 업로드된 Material의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialUploadAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/materials/{material_id}:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Materials]
+      operationId: getMaterial
+      summary: 강의자료 메타데이터 조회
+      description: 내부 파일 경로나 스토리지 키는 반환하지 않는다.
+      responses:
+        "200":
+          description: 강의자료 메타데이터
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureMaterial"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/materials/{material_id}/content:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Materials]
+      operationId: downloadMaterialContent
+      summary: 강의자료 PDF 열람
+      description: Course 멤버십을 확인한 뒤 PDF 본문을 반환한다.
+      responses:
+        "200":
+          description: PDF 바이너리
+          headers:
+            Content-Disposition:
+              description: 안전하게 인코딩된 원본 파일명
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/transcript:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Transcript]
+      operationId: listFinalTranscriptSegments
+      summary: final Transcript 조회
+      description: |
+        DB에 영구 저장된 final 구간만 sequence 오름차순으로 반환한다.
+        partial 결과는 포함하지 않으며 WebSocket 재연결 후 누락 데이터 복구에 사용한다.
+      parameters:
+        - name: after_sequence
+          in: query
+          required: false
+          description: 이 값보다 큰 Transcript sequence만 반환
+          schema:
+            type: integer
+            minimum: 0
+        - name: limit
+          in: query
+          required: false
+          description: 반환할 최대 구간 수
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+      responses:
+        "200":
+          description: final Transcript 구간 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptSegmentListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/questions:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Questions]
+      operationId: listSessionQuestions
+      summary: 익명 질문 목록 조회
+      description: |
+        Course 멤버만 조회할 수 있다. 응답과 실시간 이벤트에는 질문 작성자의
+        계정 ID, 이름 또는 이메일을 포함하지 않는다.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/QuestionStatus"
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/QuestionSort"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 익명 질문 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Questions]
+      operationId: createAnonymousQuestion
+      summary: 익명 질문 생성
+      description: |
+        해당 Course의 STUDENT가 LIVE Session에서만 요청할 수 있다. 질문은 즉시 저장하고
+        클러스터링은 비동기로 실행하므로 클러스터링 실패가 질문 생성을 롤백하지 않는다.
+        응답에는 저장된 Question과 공용 QUESTION_CLUSTERING Job을 함께 반환한다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionCreateRequest"
+            example:
+              content: 다익스트라에서 음수 가중치를 쓸 수 없는 이유가 궁금합니다.
+      responses:
+        "201":
+          description: 생성된 익명 질문
+          headers:
+            Location:
+              description: 생성된 Question의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionCreateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/sessions/{session_id}/question-drafts:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Questions]
+      operationId: suggestQuestionDrafts
+      summary: AI 질문 문장 후보 생성
+      description: |
+        해당 Course의 STUDENT가 LIVE Session에서 사용한다. 현재 Session 문맥을 이용해
+        짧은 후보를 반환하지만 실제 질문을 저장하거나 공개하지 않는다. 초안과 제안은
+        기본적으로 영구 저장하지 않는 방향이며 보관 정책은 구현 전 확정해야 한다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionDraftRequest"
+            example:
+              draft: 음수 가중치 왜 안돼요?
+      responses:
+        "200":
+          description: 질문 문장 후보
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionDraftResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/questions/{question_id}:
+    parameters:
+      - $ref: "#/components/parameters/QuestionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Questions]
+      operationId: getQuestion
+      summary: 익명 질문 단건 조회
+      description: |
+        Session의 Course 멤버만 조회한다. 목록·이벤트와 동일하게 작성자 식별 정보는
+        반환하지 않으며 현재 사용자의 반응 여부만 개인화한다.
+      responses:
+        "200":
+          description: 익명 Question
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/questions/{question_id}/reaction:
+    parameters:
+      - $ref: "#/components/parameters/QuestionId"
+      - $ref: "#/components/parameters/RequestId"
+    put:
+      tags: [Questions]
+      operationId: addQuestionReaction
+      summary: ‘나도 궁금해요’ 반응 추가
+      description: |
+        해당 Course의 STUDENT가 LIVE Session에서만 실행할 수 있다. 같은 사용자의
+        반복 호출은 반응 한 개 상태를 유지하며 최신 집계를 반환한다. 자신이 작성한
+        질문에는 반응할 수 없고 작성자 식별은 서버 내부에서만 사용한다.
+      responses:
+        "200":
+          description: 최신 반응 상태
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionReactionState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Questions]
+      operationId: removeQuestionReaction
+      summary: ‘나도 궁금해요’ 반응 취소
+      description: 기존 반응이 없어도 성공하는 멱등 요청이다.
+      responses:
+        "204":
+          description: 반응 없음 상태
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{session_id}/answers:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Answers]
+      operationId: listSessionAnswers
+      summary: 교수자 답변 목록 조회
+      description: |
+        Course 멤버가 저장된 Answer를 조회한다. LIVE 재연결 시 질문 상태와 답변 구간을
+        REST로 복구하는 기준이며 `started_at ASC, id ASC`로 안정적으로 정렬한다.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Answer 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Answers]
+      operationId: startAnswerCapture
+      summary: 교수자 답변 캡처 시작
+      description: |
+        해당 Course의 PROFESSOR가 LIVE Session에서 질문 또는 질문 클러스터를 선택한다.
+        클러스터 선택 시 선택 시점의 미답변 질문 목록을 스냅샷으로 고정하고 질문을
+        SELECTED로 변경한다. Answer 상태 설계는 구현 전 검토가 필요한 초안이다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerCreateRequest"
+            examples:
+              questions:
+                summary: 질문 직접 선택
+                value:
+                  target:
+                    type: QUESTIONS
+                    question_ids: [question_01HXYZ]
+              cluster:
+                summary: 클러스터 선택
+                value:
+                  target:
+                    type: CLUSTER
+                    cluster_id: cluster_01HXYZ
+      responses:
+        "201":
+          description: CAPTURING 상태의 Answer
+          headers:
+            Location:
+              description: 생성된 Answer의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/answers/{answer_id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/AnswerId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Answers]
+      operationId: completeAnswerCapture
+      summary: 교수자 답변 완료
+      description: |
+        해당 Course의 PROFESSOR만 실행할 수 있다. 답변 시작 이후의 final Transcript
+        범위를 확정하고 Answer를 COMPLETED, 연결 질문을 ANSWERED로 변경한다.
+        본문을 생략하면 서버의 자동 후보를 사용하고, 본문을 보내면 같은 Session의
+        sequence 범위인지 검증한다. 반복 호출은 기존 완료 결과를 반환한다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        description: 자동 후보 범위를 조정할 때만 전달
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerCompleteRequest"
+            example:
+              start_sequence: 110
+              end_sequence: 128
+      responses:
+        "200":
+          description: 완료된 Answer
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/answers/{answer_id}:
+    parameters:
+      - $ref: "#/components/parameters/AnswerId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Answers]
+      operationId: getAnswer
+      summary: 교수자 답변 단건 조회
+      description: Answer가 속한 Session의 Course 멤버만 조회한다.
+      responses:
+        "200":
+          description: Answer
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/answers/{answer_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/AnswerId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Answers]
+      operationId: cancelAnswerCapture
+      summary: 교수자 답변 취소
+      description: |
+        CAPTURING Answer를 CANCELLED로 변경하고 연결 질문을 OPEN으로 복귀시키는
+        복구용 초안이다. 반복 호출은 기존 취소 결과를 반환한다.
+      responses:
+        "200":
+          description: 취소된 Answer
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{session_id}/summaries:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Summaries]
+      operationId: listSessionSummaries
+      summary: 저장된 요약 목록 조회
+      description: |
+        Course 멤버만 조회할 수 있다. 저장된 LIVE 요약은 요청자에게만, FINAL 요약은
+        Course 멤버에게 공개한다. 성공한 LIVE 요약도 반드시 저장한 뒤 Job을 SUCCEEDED로
+        변경하므로 연결이 끊겨도 Job result URL로 복구할 수 있다.
+      parameters:
+        - name: summary_type
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/SummaryType"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 요약 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Summaries]
+      operationId: requestSessionSummary
+      summary: AI 요약 요청
+      description: |
+        LIVE Session에서 요청 시점까지 또는 선택한 final Transcript 범위와 같은 Session의
+        PDF만 사용한다. UI는 학생 중심이지만 교수자의 LIVE 요약 권한은 아직 미정이다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummaryCreateRequest"
+            example:
+              summary_type: LIVE
+              range:
+                start_sequence: null
+                end_sequence: 128
+      responses:
+        "202":
+          description: 요약 작업 수락
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIJobAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/summaries/{summary_id}:
+    parameters:
+      - $ref: "#/components/parameters/SummaryId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Summaries]
+      operationId: getSummary
+      summary: 저장된 요약 단건 조회
+      description: |
+        FINAL 요약은 Course 멤버가 조회할 수 있다. 저장된 LIVE 요약은 요청자만 조회한다.
+        권한이 없는 사용자에게는 리소스 존재를 공개하지 않는다.
+      responses:
+        "200":
+          description: LectureSummary
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LectureSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/chats:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Chats]
+      operationId: listMySessionChats
+      summary: 내 AI 대화 목록 조회
+      description: 현재 사용자가 이 Session에서 생성한 개인 대화만 반환한다.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 개인 대화 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Chats]
+      operationId: createSessionChat
+      summary: AI 대화 생성
+      description: |
+        LIVE는 진행 중 class, REVIEW는 정리 중·완료 class에서 사용한다. 대화는 생성한
+        사용자에게만 노출하는 초안이며 교수자의 LIVE 사용 범위는 미정이다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCreateRequest"
+            example:
+              mode: LIVE
+      responses:
+        "201":
+          description: 생성된 개인 대화
+          headers:
+            Location:
+              description: 생성된 Chat의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Chat"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/chats/{chat_id}:
+    parameters:
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Chats]
+      operationId: getChat
+      summary: 내 AI 대화 단건 조회
+      description: Chat 소유자이면서 현재도 Session의 Course 멤버인 사용자만 조회한다.
+      responses:
+        "200":
+          description: Chat
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Chat"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/chats/{chat_id}/messages:
+    parameters:
+      - $ref: "#/components/parameters/ChatId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Chats]
+      operationId: listChatMessages
+      summary: AI 대화 메시지 목록 조회
+      description: 대화 소유자만 sequence 오름차순으로 조회할 수 있다.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: 메시지 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessageListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Chats]
+      operationId: createChatMessage
+      summary: 사용자 메시지 전송과 AI 답변 요청
+      description: |
+        대화 소유자만 요청할 수 있다. 서버가 URL로 확정된 Session의 PDF, final Transcript와
+        Q&A만 검색한다. 사용자 메시지를 먼저 저장하고 AI 답변 작업을 비동기로 생성한다.
+        같은 Chat에 RUNNING/PENDING 답변 Job이 있으면 409 CHAT_RESPONSE_IN_PROGRESS를 반환한다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageCreateRequest"
+            example:
+              content: 음수 가중치가 있을 때는 어떤 알고리즘을 써야 해?
+      responses:
+        "202":
+          description: 사용자 메시지가 저장되고 AI 답변 작업이 수락됨
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatTurnAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/jobs/{job_id}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Jobs]
+      operationId: getAIJob
+      summary: AI 작업 상태 조회
+      description: |
+        개인 작업은 요청자, 공유 작업은 권한 있는 Course 멤버만 조회한다. 내부 스택,
+        프롬프트 원문 또는 외부 모델 응답 원문은 오류에 포함하지 않는다.
+      responses:
+        "200":
+          description: AI 작업 상태
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/jobs/{job_id}/retry:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Jobs]
+      operationId: retryAIJob
+      summary: 실패한 AI 작업 재시도
+      description: |
+        FAILED 작업만 재시도할 수 있다. 개인 작업은 요청자, 공유 후처리 작업은 해당
+        Course의 PROFESSOR가 실행한다. 새 Job을 생성할지 기존 attempt를 올릴지는 미정이다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: 재시도 작업 수락
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIJobAcceptedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/sessions/{session_id}/jobs:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Jobs]
+      operationId: listSessionSharedJobs
+      summary: Session 공용 AI 작업 목록 조회
+      description: |
+        Course 멤버가 자료 처리, 질문 클러스터링과 Session 후처리처럼 참여자가 알아야 할
+        공용 Job만 조회한다. 개인 LIVE 요약, 질문 초안과 Chat Job은 절대 포함하지 않는다.
+        재시도는 별도 Job API의 권한 규칙을 따른다.
+      parameters:
+        - name: job_type
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/SharedAIJobType"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AIJobStatus"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Session 공용 AIJob 목록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIJobListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/sessions/{session_id}/record:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Records]
+      operationId: getSessionRecord
+      summary: 수업 기록 통합 조회
+      description: |
+        PROCESSING 또는 COMPLETED Session에서 저장된 강의자료, final Transcript,
+        최종 요약, 익명 질문·답변과 Job 상태를 반환한다. 일부 AI 작업이 실패해도
+        이미 저장된 핵심 데이터는 조회 가능해야 한다. 응답이 커지면 세부 목록 API로
+        분리하고 이 응답은 가용성 요약으로 축소할 수 있다.
+      responses:
+        "200":
+          description: 통합 수업 기록
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  securitySchemes:
+    sessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: goal_session
+      description: |
+        Google OAuth/OIDC authorization code 흐름 완료 후 서버가 발급하는 세션 Cookie다.
+        HttpOnly, Secure, SameSite=Lax를 사용하고 기본 만료는 7일이다. 클라이언트
+        JavaScript는 Cookie 값을 읽거나 저장하지 않는다.
+
+  headers:
+    RequestId:
+      description: 요청 추적용 식별자. 요청의 `X-Request-ID`를 수용하거나 서버가 생성한다.
+      schema:
+        type: string
+        example: req_01HXYZ
+    RetryAfter:
+      description: 다시 요청하기 전 대기 시간(초)
+      schema:
+        type: integer
+        minimum: 0
+
+  parameters:
+    CourseId:
+      name: course_id
+      in: path
+      required: true
+      description: 불투명 Course ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      description: 불투명 LectureSession ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    MaterialId:
+      name: material_id
+      in: path
+      required: true
+      description: 불투명 LectureMaterial ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    QuestionId:
+      name: question_id
+      in: path
+      required: true
+      description: 불투명 Question ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    AnswerId:
+      name: answer_id
+      in: path
+      required: true
+      description: 불투명 Answer ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    SummaryId:
+      name: summary_id
+      in: path
+      required: true
+      description: 불투명 LectureSummary ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    ChatId:
+      name: chat_id
+      in: path
+      required: true
+      description: 불투명 Chat ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      description: 불투명 AIJob ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: 직전 응답에서 받은 불투명 페이지 커서
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 반환할 최대 항목 수
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        중복 제출을 방지하는 클라이언트 생성 키. 같은 사용자·경로·키와 같은 본문은
+        기존 결과를 반환하고, 같은 키에 다른 본문을 사용하면 409를 반환한다.
+      schema:
+        type: string
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: 클라이언트가 선택적으로 지정하는 요청 추적 ID
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: 요청 형식 또는 커서가 유효하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            invalidCursor:
+              value:
+                error:
+                  code: INVALID_CURSOR
+                  message: 유효하지 않은 페이지 커서입니다.
+                  request_id: req_01HXYZ
+                  details: null
+    Unauthorized:
+      description: 인증 정보가 없거나 유효하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: AUTHENTICATION_REQUIRED
+              message: 로그인이 필요합니다.
+              request_id: req_01HXYZ
+              details: null
+    Forbidden:
+      description: Course 멤버십 또는 Course별 역할 권한이 없음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: COURSE_ACCESS_DENIED
+              message: 이 Course에 접근할 권한이 없습니다.
+              request_id: req_01HXYZ
+              details: null
+    NotFound:
+      description: 리소스가 없거나 존재를 공개하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RESOURCE_NOT_FOUND
+              message: 요청한 리소스를 찾을 수 없습니다.
+              request_id: req_01HXYZ
+              details: null
+    Conflict:
+      description: 상태 전이, 멤버십 또는 멱등성 충돌
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            sessionState:
+              value:
+                error:
+                  code: SESSION_STATE_CONFLICT
+                  message: 현재 class 상태에서는 요청을 수행할 수 없습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    current_status: READY
+                    required_status: LIVE
+            idempotencyKey:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_REUSED
+                  message: 같은 멱등 키가 다른 요청에 사용되었습니다.
+                  request_id: req_01HXYZ
+                  details: null
+    PayloadTooLarge:
+      description: 업로드 파일이 서버 설정의 크기 제한을 초과함
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: FILE_TOO_LARGE
+              message: 업로드 가능한 파일 크기를 초과했습니다.
+              request_id: req_01HXYZ
+              details:
+                max_bytes: 52428800
+    UnsupportedMediaType:
+      description: 지원하지 않는 파일 또는 Content-Type
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: PDF_REQUIRED
+              message: PDF 파일만 업로드할 수 있습니다.
+              request_id: req_01HXYZ
+              details: null
+    ValidationFailed:
+      description: 요청 필드의 의미 또는 값이 유효하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: 요청 값을 확인해 주세요.
+              request_id: req_01HXYZ
+              details:
+                field_violations:
+                  - field: content
+                    reason: 빈 문자열일 수 없습니다.
+    RateLimited:
+      description: 요청 한도를 초과함
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RATE_LIMITED
+              message: 잠시 후 다시 시도해 주세요.
+              request_id: req_01HXYZ
+              details: null
+    InternalServerError:
+      description: 예상하지 못한 서버 오류
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: 요청을 처리하지 못했습니다.
+              request_id: req_01HXYZ
+              details: null
+    ServiceUnavailable:
+      description: 데이터베이스 또는 AI 의존 서비스를 사용할 수 없음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: DEPENDENCY_UNAVAILABLE
+              message: 일시적으로 서비스를 사용할 수 없습니다.
+              request_id: req_01HXYZ
+              details: null
+
+  schemas:
+    ResourceId:
+      type: string
+      minLength: 1
+      description: 형식을 클라이언트가 해석하지 않는 불투명 리소스 ID
+      examples: [resource_01HXYZ]
+
+    CourseRole:
+      type: string
+      enum: [PROFESSOR, STUDENT]
+      description: 전역 역할이 아닌 특정 Course 안에서의 사용자 역할
+
+    CourseRoleFilter:
+      type: string
+      enum: [ALL, PROFESSOR, STUDENT]
+      default: ALL
+
+    LectureSessionStatus:
+      type: string
+      enum: [READY, LIVE, PROCESSING, COMPLETED]
+      description: |
+        PROCESSING은 종료 시 공용 Job 중 하나 이상이 PENDING/RUNNING인 상태다.
+        모두 SUCCEEDED/FAILED에 도달하면 실패 유무와 관계없이 COMPLETED가 된다.
+
+    MaterialProcessingStatus:
+      type: string
+      enum: [UPLOADED, PROCESSING, READY, FAILED]
+      description: 구현 전 확정이 필요한 강의자료 전처리 상태 초안
+
+    QuestionStatus:
+      type: string
+      enum: [OPEN, SELECTED, ANSWERED]
+
+    QuestionSort:
+      type: string
+      enum: [POPULAR, RECENT]
+      default: POPULAR
+
+    AnswerStatus:
+      type: string
+      enum: [CAPTURING, COMPLETED, CANCELLED]
+      description: 답변 구간 캡처 흐름을 위한 초안 상태
+
+    SummaryType:
+      type: string
+      enum: [LIVE, FINAL]
+
+    SummaryVisibility:
+      type: string
+      enum: [REQUESTER_ONLY, COURSE_MEMBERS]
+      description: LIVE는 REQUESTER_ONLY, FINAL은 COURSE_MEMBERS
+
+    ChatMode:
+      type: string
+      enum: [LIVE, REVIEW]
+
+    ChatMessageRole:
+      type: string
+      enum: [USER, ASSISTANT]
+
+    AIJobStatus:
+      type: string
+      enum: [PENDING, RUNNING, SUCCEEDED, FAILED]
+
+    AIJobType:
+      type: string
+      enum:
+        - MATERIAL_PROCESSING
+        - QUESTION_CLUSTERING
+        - LIVE_SUMMARY
+        - FINAL_SUMMARY
+        - QUESTION_DRAFT_HELP
+        - CHAT_RESPONSE
+        - SESSION_POSTPROCESSING
+      description: 작업 분해에 따라 구현 전 보완할 수 있는 초안
+
+    SharedAIJobType:
+      type: string
+      enum:
+        - MATERIAL_PROCESSING
+        - QUESTION_CLUSTERING
+        - FINAL_SUMMARY
+        - SESSION_POSTPROCESSING
+      description: Session 공용 Job 목록에서 조회할 수 있는 유형
+
+    RealtimeTicketScope:
+      type: string
+      enum: [SESSION_EVENTS_READ, SESSION_AUDIO_WRITE]
+
+    RealtimeTicketCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id, scope]
+      properties:
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        scope:
+          $ref: "#/components/schemas/RealtimeTicketScope"
+        resume_cursor:
+          type: [string, "null"]
+          description: SESSION_EVENTS_READ 재연결 시 마지막 event cursor. 신규 연결·audio scope면 생략
+
+    RealtimeTicket:
+      type: object
+      additionalProperties: false
+      required: [ticket, session_id, scope, expires_at]
+      properties:
+        ticket:
+          type: string
+          minLength: 1
+          description: 60초 안에 한 번만 WebSocket upgrade에 사용할 수 있는 비밀 값
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        scope:
+          $ref: "#/components/schemas/RealtimeTicketScope"
+        expires_at:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+
+    DatabaseHealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          const: ok
+        database:
+          type: string
+          const: reachable
+
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id, details]
+      properties:
+        code:
+          type: string
+          description: 클라이언트가 분기 처리할 안정적인 오류 코드
+        message:
+          type: string
+          description: 사용자에게 표시할 수 있는 안전한 한국어 메시지
+        request_id:
+          type: string
+          description: 서버 로그와 연결하는 요청 ID
+        details:
+          description: 민감정보를 제외한 선택적 진단 정보
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, display_name, email, avatar_url]
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        display_name:
+          type: string
+        email:
+          type: [string, "null"]
+          format: email
+          description: 인증 제공자와 공개 정책에 따라 null일 수 있음
+        avatar_url:
+          type: [string, "null"]
+          format: uri
+
+    CourseCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [title, semester]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: 길이 제한은 제품 검토 후 확정
+        semester:
+          type: string
+          minLength: 1
+          description: 표시용 학기 문자열. 구조화 여부는 TBD
+
+    CourseJoinRequest:
+      type: object
+      additionalProperties: false
+      required: [join_code]
+      properties:
+        join_code:
+          type: string
+          minLength: 1
+          description: 길이, 대소문자 정규화, 만료와 회전 정책은 TBD
+
+    LectureSessionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, lecture_date, status]
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        title:
+          type: string
+        lecture_date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/LectureSessionStatus"
+
+    Course:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - semester
+        - role
+        - current_session
+        - created_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        title:
+          type: string
+        semester:
+          type: string
+        role:
+          $ref: "#/components/schemas/CourseRole"
+          description: 현재 인증 사용자의 이 Course 안 역할
+        join_code:
+          type: string
+          description: 현재 사용자가 이 Course의 PROFESSOR일 때만 필드 제공
+        current_session:
+          oneOf:
+            - $ref: "#/components/schemas/LectureSessionSummary"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+
+    CourseListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Course"
+        next_cursor:
+          type: [string, "null"]
+
+    LectureSessionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [title, lecture_date]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        lecture_date:
+          type: string
+          format: date
+
+    LectureSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - course_id
+        - title
+        - lecture_date
+        - status
+        - version
+        - started_at
+        - ended_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        course_id:
+          $ref: "#/components/schemas/ResourceId"
+        title:
+          type: string
+        lecture_date:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/LectureSessionStatus"
+        version:
+          type: integer
+          minimum: 1
+          description: 실시간 이벤트의 오래된 갱신을 거르기 위한 리소스 버전 초안
+        started_at:
+          type: [string, "null"]
+          format: date-time
+        ended_at:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LectureSessionListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LectureSession"
+        next_cursor:
+          type: [string, "null"]
+
+    SessionEndAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [session, jobs]
+      properties:
+        session:
+          $ref: "#/components/schemas/LectureSession"
+        jobs:
+          type: array
+          description: SESSION_POSTPROCESSING, FINAL_SUMMARY와 필요한 마지막 QUESTION_CLUSTERING Job
+          items:
+            $ref: "#/components/schemas/AIJob"
+
+    LectureMaterial:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - original_filename
+        - mime_type
+        - byte_size
+        - page_count
+        - processing_status
+        - created_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        original_filename:
+          type: string
+        mime_type:
+          type: string
+          const: application/pdf
+        byte_size:
+          type: integer
+          minimum: 1
+        page_count:
+          type: [integer, "null"]
+          minimum: 1
+          description: 전처리 전 또는 실패 시 null일 수 있음
+        processing_status:
+          $ref: "#/components/schemas/MaterialProcessingStatus"
+        created_at:
+          type: string
+          format: date-time
+
+    LectureMaterialListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LectureMaterial"
+        next_cursor:
+          type: [string, "null"]
+
+    MaterialUploadAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [material, job]
+      properties:
+        material:
+          $ref: "#/components/schemas/LectureMaterial"
+        job:
+          $ref: "#/components/schemas/AIJob"
+
+    TranscriptSegment:
+      type: object
+      additionalProperties: false
+      description: 영구 저장된 final Transcript 구간. partial 구간은 이 스키마로 저장하지 않는다.
+      required:
+        - id
+        - session_id
+        - sequence
+        - start_ms
+        - end_ms
+        - text
+        - created_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        sequence:
+          type: integer
+          minimum: 1
+        start_ms:
+          type: integer
+          minimum: 0
+        end_ms:
+          type: integer
+          minimum: 0
+          description: start_ms 이상이어야 함
+        text:
+          type: string
+          minLength: 1
+        created_at:
+          type: string
+          format: date-time
+
+    TranscriptSegmentListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_sequence]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranscriptSegment"
+        next_sequence:
+          type: [integer, "null"]
+          minimum: 1
+          description: 다음 증분 조회에 사용할 마지막 sequence. 더 없으면 null
+
+    QuestionClusterSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title]
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        title:
+          type: string
+        summary:
+          type: [string, "null"]
+
+    Question:
+      type: object
+      additionalProperties: false
+      description: 작성자 식별 필드를 의도적으로 포함하지 않는 공개 익명 질문 표현
+      required:
+        - id
+        - session_id
+        - content
+        - status
+        - version
+        - reaction_count
+        - reacted_by_me
+        - cluster
+        - created_at
+        - updated_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        content:
+          type: string
+        status:
+          $ref: "#/components/schemas/QuestionStatus"
+        version:
+          type: integer
+          minimum: 1
+        reaction_count:
+          type: integer
+          minimum: 0
+        reacted_by_me:
+          type: boolean
+          description: 현재 인증 사용자의 반응 여부
+        cluster:
+          oneOf:
+            - $ref: "#/components/schemas/QuestionClusterSummary"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    QuestionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          description: 최대 길이와 정규화 규칙은 TBD
+
+    QuestionCreateResponse:
+      type: object
+      additionalProperties: false
+      required: [question, clustering_job]
+      properties:
+        question:
+          $ref: "#/components/schemas/Question"
+        clustering_job:
+          $ref: "#/components/schemas/AIJob"
+          description: 질문 저장과 독립적으로 실행되는 공용 클러스터링 Job
+
+    QuestionListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Question"
+        next_cursor:
+          type: [string, "null"]
+
+    QuestionDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [draft]
+      properties:
+        draft:
+          type: string
+          minLength: 1
+          description: 공개 질문이 아니며 기본적으로 영구 저장하지 않는 사용자 초안
+
+    QuestionDraftResponse:
+      type: object
+      additionalProperties: false
+      required: [suggestions]
+      properties:
+        suggestions:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+
+    QuestionReactionState:
+      type: object
+      additionalProperties: false
+      required: [question_id, reaction_count, reacted_by_me]
+      properties:
+        question_id:
+          $ref: "#/components/schemas/ResourceId"
+        reaction_count:
+          type: integer
+          minimum: 0
+        reacted_by_me:
+          type: boolean
+
+    AnswerTargetQuestions:
+      type: object
+      additionalProperties: false
+      required: [type, question_ids]
+      properties:
+        type:
+          type: string
+          const: QUESTIONS
+        question_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ResourceId"
+
+    AnswerTargetCluster:
+      type: object
+      additionalProperties: false
+      required: [type, cluster_id]
+      properties:
+        type:
+          type: string
+          const: CLUSTER
+        cluster_id:
+          $ref: "#/components/schemas/ResourceId"
+
+    AnswerTarget:
+      oneOf:
+        - $ref: "#/components/schemas/AnswerTargetQuestions"
+        - $ref: "#/components/schemas/AnswerTargetCluster"
+      discriminator:
+        propertyName: type
+        mapping:
+          QUESTIONS: "#/components/schemas/AnswerTargetQuestions"
+          CLUSTER: "#/components/schemas/AnswerTargetCluster"
+
+    AnswerCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [target]
+      properties:
+        target:
+          $ref: "#/components/schemas/AnswerTarget"
+
+    AnswerCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [start_sequence, end_sequence]
+      properties:
+        start_sequence:
+          type: integer
+          minimum: 1
+        end_sequence:
+          type: integer
+          minimum: 1
+          description: start_sequence 이상이며 같은 Session에 속해야 함
+
+    Answer:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - status
+        - version
+        - question_ids
+        - source_cluster_id
+        - capture_started_after_sequence
+        - start_sequence
+        - end_sequence
+        - started_at
+        - completed_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        status:
+          $ref: "#/components/schemas/AnswerStatus"
+        version:
+          type: integer
+          minimum: 1
+        question_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: 클러스터 선택 시에도 선택 시점 질문 ID를 스냅샷으로 저장
+          items:
+            $ref: "#/components/schemas/ResourceId"
+        source_cluster_id:
+          type: [string, "null"]
+        capture_started_after_sequence:
+          type: integer
+          minimum: 0
+          description: 답변 대상 선택 시점에 이미 존재하던 마지막 final sequence. 없으면 0
+        start_sequence:
+          type: [integer, "null"]
+          minimum: 1
+          description: 자동 후보 또는 확정 답변에 포함되는 첫 final sequence. 아직 없으면 null
+        end_sequence:
+          type: [integer, "null"]
+          minimum: 1
+          description: 답변 완료 시 확정된 마지막 final Transcript sequence
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: [string, "null"]
+          format: date-time
+
+    AnswerListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Answer"
+        next_cursor:
+          type: [string, "null"]
+
+    SummaryRange:
+      type: object
+      additionalProperties: false
+      required: [start_sequence, end_sequence]
+      properties:
+        start_sequence:
+          type: [integer, "null"]
+          minimum: 1
+          description: null이면 서버가 현재까지 요약할 시작점을 결정
+        end_sequence:
+          type: [integer, "null"]
+          minimum: 1
+          description: null이면 요청 수락 시점의 마지막 final sequence를 고정
+
+    SummaryCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [summary_type, range]
+      properties:
+        summary_type:
+          type: string
+          const: LIVE
+          description: FINAL 요약은 Session 종료 후처리에서 서버가 생성
+        range:
+          oneOf:
+            - $ref: "#/components/schemas/SummaryRange"
+            - type: "null"
+          description: LIVE 요약 범위. FINAL 요약은 서버 후처리 흐름에서 생성
+
+    LectureSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - job_id
+        - summary_type
+        - visibility
+        - content
+        - source_start_sequence
+        - source_end_sequence
+        - model_name
+        - prompt_version
+        - created_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        job_id:
+          $ref: "#/components/schemas/ResourceId"
+          description: 이 요약을 생성한 AIJob
+        summary_type:
+          $ref: "#/components/schemas/SummaryType"
+        visibility:
+          $ref: "#/components/schemas/SummaryVisibility"
+        content:
+          type: string
+        source_start_sequence:
+          type: [integer, "null"]
+          minimum: 1
+        source_end_sequence:
+          type: [integer, "null"]
+          minimum: 1
+        model_name:
+          type: [string, "null"]
+          description: 모델 공개 정책에 따라 null일 수 있음
+        prompt_version:
+          type: [string, "null"]
+          description: 내부 프롬프트 원문이 아닌 버전 식별자
+        created_at:
+          type: string
+          format: date-time
+
+    SummaryListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LectureSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    ChatCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/ChatMode"
+
+    Chat:
+      type: object
+      additionalProperties: false
+      required: [id, session_id, mode, created_at, updated_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        mode:
+          $ref: "#/components/schemas/ChatMode"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ChatListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Chat"
+        next_cursor:
+          type: [string, "null"]
+
+    ChatMessageCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          description: 최대 길이는 모델·제품 정책 확정 후 결정
+
+    ChatEvidence:
+      type: object
+      additionalProperties: false
+      required: [source_type, source_id, label]
+      properties:
+        source_type:
+          type: string
+          enum: [MATERIAL_CHUNK, TRANSCRIPT_SEGMENT, QUESTION, ANSWER]
+        source_id:
+          $ref: "#/components/schemas/ResourceId"
+        label:
+          type: [string, "null"]
+          description: 페이지 또는 Transcript 시각처럼 사용자에게 표시할 안전한 라벨
+
+    ChatMessage:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - chat_id
+        - job_id
+        - sequence
+        - role
+        - content
+        - evidence
+        - model_name
+        - prompt_version
+        - created_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        chat_id:
+          $ref: "#/components/schemas/ResourceId"
+        job_id:
+          type: [string, "null"]
+          description: USER 메시지는 null, 생성된 ASSISTANT 메시지는 원인 AIJob ID
+        sequence:
+          type: integer
+          minimum: 1
+        role:
+          $ref: "#/components/schemas/ChatMessageRole"
+        content:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatEvidence"
+        model_name:
+          type: [string, "null"]
+        prompt_version:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+
+    ChatMessageListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        next_cursor:
+          type: [string, "null"]
+
+    ChatTurnAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [user_message, job]
+      properties:
+        user_message:
+          $ref: "#/components/schemas/ChatMessage"
+        job:
+          $ref: "#/components/schemas/AIJob"
+
+    AIJobResourceType:
+      type: string
+      enum:
+        - MATERIAL
+        - QUESTION
+        - QUESTION_CLUSTER
+        - SUMMARY
+        - CHAT_MESSAGE
+        - SESSION
+
+    AIJobResourceLink:
+      type: object
+      additionalProperties: false
+      required: [resource_type, resource_id, resource_url]
+      properties:
+        resource_type:
+          $ref: "#/components/schemas/AIJobResourceType"
+        resource_id:
+          type: [string, "null"]
+          description: 결과 리소스 생성 전에는 null일 수 있음
+        resource_url:
+          type: [string, "null"]
+          description: 권한 검사를 거쳐 결과를 조회할 상대 URL. 준비 전에는 null
+
+    AIJobError:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          description: AI_TIMEOUT, AI_SERVICE_UNAVAILABLE 등 안전한 오류 코드
+        message:
+          type: string
+        retryable:
+          type: boolean
+
+    AIJobProgress:
+      type: object
+      additionalProperties: false
+      required: [stage, percent]
+      properties:
+        stage:
+          type: string
+          description: QUEUED, EXTRACTING, GENERATING, FINALIZING 등 작업별 단계 코드
+        percent:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 100
+          description: 계산할 수 없는 작업이면 null
+
+    AIJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - job_type
+        - status
+        - attempt
+        - version
+        - progress
+        - retryable
+        - error
+        - target
+        - result
+        - created_at
+        - started_at
+        - finished_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        job_type:
+          $ref: "#/components/schemas/AIJobType"
+        status:
+          $ref: "#/components/schemas/AIJobStatus"
+        attempt:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          minimum: 1
+        progress:
+          oneOf:
+            - $ref: "#/components/schemas/AIJobProgress"
+            - type: "null"
+        retryable:
+          type: boolean
+        error:
+          oneOf:
+            - $ref: "#/components/schemas/AIJobError"
+            - type: "null"
+        target:
+          $ref: "#/components/schemas/AIJobResourceLink"
+          description: 작업이 처리하는 입력·논리 대상
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/AIJobResourceLink"
+            - type: "null"
+          description: SUCCEEDED이면 결과 리소스 링크, 완료 전 또는 실패하면 null
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: [string, "null"]
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+
+    AIJobAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [job]
+      properties:
+        job:
+          $ref: "#/components/schemas/AIJob"
+
+    AIJobListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AIJob"
+        next_cursor:
+          type: [string, "null"]
+
+    SessionRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - session
+        - materials
+        - transcript
+        - summary
+        - questions
+        - answers
+        - jobs
+      properties:
+        session:
+          $ref: "#/components/schemas/LectureSession"
+        materials:
+          type: array
+          items:
+            $ref: "#/components/schemas/LectureMaterial"
+        transcript:
+          type: array
+          description: 영구 저장된 final 구간만 포함
+          items:
+            $ref: "#/components/schemas/TranscriptSegment"
+        summary:
+          oneOf:
+            - $ref: "#/components/schemas/LectureSummary"
+            - type: "null"
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Question"
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Answer"
+        jobs:
+          type: array
+          description: 자료 처리·Session 후처리 등 공용 Job만 포함. 개인 AI Job은 제외
+          items:
+            $ref: "#/components/schemas/AIJob"
+
+    RealtimeEventType:
+      type: string
+      enum:
+        - connection.ready
+        - resync.required
+        - transcript.partial
+        - transcript.final
+        - transcript.status
+        - question.created
+        - question.updated
+        - reaction.updated
+        - answer.updated
+        - session.updated
+        - job.updated
+
+    ConnectionReadyPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - connection_id
+        - role
+        - server_time
+        - heartbeat_interval_ms
+        - resume_status
+      properties:
+        connection_id:
+          $ref: "#/components/schemas/ResourceId"
+        role:
+          $ref: "#/components/schemas/CourseRole"
+        server_time:
+          type: string
+          format: date-time
+        heartbeat_interval_ms:
+          type: integer
+          const: 20000
+        resume_status:
+          type: string
+          enum: [FRESH, REPLAYED, RESYNC_REQUIRED]
+
+    ResyncRequiredPayload:
+      type: object
+      additionalProperties: false
+      required: [reason, resources]
+      properties:
+        reason:
+          type: string
+          enum: [CURSOR_EXPIRED, SERVER_RESTARTED, CURSOR_UNKNOWN]
+        resources:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [SESSION, TRANSCRIPT, QUESTIONS, ANSWERS, JOBS]
+
+    TranscriptStatusPayload:
+      type: object
+      additionalProperties: false
+      required: [status, last_final_sequence, lag_ms]
+      properties:
+        status:
+          type: string
+          enum: [LISTENING, DEGRADED, FINALIZING, FINALIZED, STOPPED]
+        last_final_sequence:
+          type: [integer, "null"]
+          minimum: 1
+        lag_ms:
+          type: [integer, "null"]
+          minimum: 0
+
+    ReactionUpdatedPayload:
+      type: object
+      additionalProperties: false
+      required: [question_id, reaction_count]
+      properties:
+        question_id:
+          $ref: "#/components/schemas/ResourceId"
+        reaction_count:
+          type: integer
+          minimum: 0
+
+    RealtimeEvent:
+      type: object
+      additionalProperties: false
+      description: |
+        WebSocket 서버 이벤트의 공통 envelope 초안. 이벤트는 중복 전달될 수 있으며
+        클라이언트는 event_id로 중복을 제거하고 낮은 resource_version을 무시한다.
+      required:
+        - schema_version
+        - event_id
+        - type
+        - session_id
+        - cursor
+        - resource_version
+        - correlation_id
+        - occurred_at
+        - data
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        event_id:
+          $ref: "#/components/schemas/ResourceId"
+        type:
+          $ref: "#/components/schemas/RealtimeEventType"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        cursor:
+          type: [string, "null"]
+          description: best-effort 재생을 위한 불투명 커서. 지원하지 않으면 null
+        resource_version:
+          type: [integer, "null"]
+          minimum: 1
+        correlation_id:
+          type: [string, "null"]
+          description: 원인이 된 HTTP request ID 또는 AIJob ID
+        occurred_at:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+
+    TranscriptPartialPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - utterance_id
+        - revision
+        - audio_sequence_start
+        - audio_sequence_end
+        - start_ms
+        - end_ms
+        - text
+      properties:
+        utterance_id:
+          $ref: "#/components/schemas/ResourceId"
+        revision:
+          type: integer
+          minimum: 1
+        audio_sequence_start:
+          type: integer
+          minimum: 0
+        audio_sequence_end:
+          type: integer
+          minimum: 0
+        start_ms:
+          type: integer
+          minimum: 0
+        end_ms:
+          type: integer
+          minimum: 0
+        text:
+          type: string
+      description: 저장·재생하지 않는 임시 STT. 같은 utterance_id의 큰 revision으로 교체한다.
+
+    TranscriptFinalPayload:
+      type: object
+      additionalProperties: false
+      required: [utterance_id, segment]
+      properties:
+        utterance_id:
+          $ref: "#/components/schemas/ResourceId"
+        segment:
+          $ref: "#/components/schemas/TranscriptSegment"
+      description: DB commit 후 전파하며 같은 utterance의 partial 표시를 제거한다.
+
+    AudioStartControl:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, data]
+      properties:
+        type:
+          type: string
+          const: audio.start
+        request_id:
+          type: string
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            [client_stream_id, format, chunk_duration_ms, resume_from_sequence]
+          properties:
+            client_stream_id:
+              type: string
+              description: 재연결 중 동일하게 유지하는 클라이언트 stream ID
+            format:
+              $ref: "#/components/schemas/AudioFormat"
+            chunk_duration_ms:
+              type: integer
+              const: 500
+              description: MVP v1 고정 chunk 길이
+            resume_from_sequence:
+              type: [integer, "null"]
+              minimum: 0
+              description: 재연결 시 마지막 audio.ack.received_through. 신규 stream이면 null
+
+    AudioFormat:
+      type: object
+      additionalProperties: false
+      required: [encoding, sample_rate_hz, channels]
+      properties:
+        encoding:
+          type: string
+          const: PCM_S16LE
+          description: MVP v1 little-endian signed 16-bit PCM
+        sample_rate_hz:
+          type: integer
+          const: 16000
+        channels:
+          type: integer
+          const: 1
+
+    AudioReadyControl:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - stream_id
+        - accepted_format
+        - max_chunk_bytes
+        - max_in_flight
+        - last_received_sequence
+        - last_processed_sequence
+      properties:
+        type:
+          type: string
+          const: audio.ready
+        stream_id:
+          $ref: "#/components/schemas/ResourceId"
+        accepted_format:
+          $ref: "#/components/schemas/AudioFormat"
+        max_chunk_bytes:
+          type: integer
+          minimum: 1
+          description: 14-byte header를 포함한 binary frame 전체 최대 크기
+        max_in_flight:
+          type: integer
+          minimum: 1
+        last_received_sequence:
+          type: [integer, "null"]
+          minimum: 0
+        last_processed_sequence:
+          type: [integer, "null"]
+          minimum: 0
+
+    AudioAckControl:
+      type: object
+      additionalProperties: false
+      required: [type, received_through, processed_through, queue_depth_ms]
+      properties:
+        type:
+          type: string
+          const: audio.ack
+        received_through:
+          type: integer
+          minimum: 0
+        processed_through:
+          type: [integer, "null"]
+          minimum: 0
+        queue_depth_ms:
+          type: integer
+          minimum: 0
+
+    AudioFlowControl:
+      type: object
+      additionalProperties: false
+      required: [type, state, queue_depth_ms, suggested_pause_ms]
+      properties:
+        type:
+          type: string
+          const: audio.flow_control
+        state:
+          type: string
+          enum: [SLOW_DOWN, RESUME]
+        queue_depth_ms:
+          type: integer
+          minimum: 0
+        suggested_pause_ms:
+          type: integer
+          minimum: 0
+
+    AudioStoppedControl:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - last_received_sequence
+        - last_processed_sequence
+        - last_final_transcript_sequence
+      properties:
+        type:
+          type: string
+          const: audio.stopped
+        last_received_sequence:
+          type: [integer, "null"]
+          minimum: 0
+        last_processed_sequence:
+          type: [integer, "null"]
+          minimum: 0
+        last_final_transcript_sequence:
+          type: [integer, "null"]
+          minimum: 1
+
+    AudioResumeRejectedControl:
+      type: object
+      additionalProperties: false
+      required: [type, reason]
+      properties:
+        type:
+          type: string
+          const: audio.resume_rejected
+        reason:
+          type: string
+          enum: [SERVER_STATE_LOST, SEQUENCE_EXPIRED, SESSION_CLOSING]
+
+    AudioStopControl:
+      type: object
+      additionalProperties: false
+      required: [type, request_id]
+      properties:
+        type:
+          type: string
+          const: audio.stop
+        request_id:
+          type: string
+
+    RealtimeError:
+      type: object
+      additionalProperties: false
+      required: [type, code, message, retryable, request_id]
+      properties:
+        type:
+          type: string
+          const: error
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+        request_id:
+          type: [string, "null"]
+
+x-websocket-channels:
+  status: draft
+  standard: non-standard-extension
+  source_of_truth: ./API_명세서.md#16-websocket과-음성-스트리밍
+  note: |
+    OpenAPI 3.1은 WebSocket 양방향 메시지를 표준적으로 표현하지 않는다. 이 확장은
+    구현 참고용이며 계약이 안정되면 AsyncAPI 분리를 검토한다. WebSocket은 알림·전송
+    수단이고 DB와 REST 조회 결과가 최종 진실이다.
+  channels:
+    /api/v1/ws/sessions/{session_id}:
+      summary: Course 멤버용 Session 변경 알림
+      authorization: Course membership required
+      authentication: POST /api/v1/realtime-tickets의 60초 만료·1회용 SESSION_EVENTS_READ ticket
+      handshakeQuery: ticket
+      direction: server-to-client-events
+      eventEnvelope:
+        $ref: "#/components/schemas/RealtimeEvent"
+      serverControlMessages:
+        - $ref: "#/components/schemas/RealtimeError"
+      eventPayloads:
+        connection.ready:
+          $ref: "#/components/schemas/ConnectionReadyPayload"
+        resync.required:
+          $ref: "#/components/schemas/ResyncRequiredPayload"
+        transcript.partial:
+          $ref: "#/components/schemas/TranscriptPartialPayload"
+        transcript.final:
+          $ref: "#/components/schemas/TranscriptFinalPayload"
+        transcript.status:
+          $ref: "#/components/schemas/TranscriptStatusPayload"
+        question.created:
+          $ref: "#/components/schemas/Question"
+        question.updated:
+          $ref: "#/components/schemas/Question"
+        reaction.updated:
+          $ref: "#/components/schemas/ReactionUpdatedPayload"
+        answer.updated:
+          $ref: "#/components/schemas/Answer"
+        session.updated:
+          $ref: "#/components/schemas/LectureSession"
+        job.updated:
+          description: Session 공용 작업에만 사용. 개인 AI 작업은 요청자에게만 전달
+          $ref: "#/components/schemas/AIJob"
+      delivery:
+        semantics: at-least-once-possible
+        reconnect: bounded replay if available; otherwise resync.required and REST recovery
+        partial_replay: false
+    /api/v1/ws/sessions/{session_id}/audio:
+      summary: 교수자 한 명의 저지연 음성 업로드
+      authorization: Course PROFESSOR and LIVE Session required
+      authentication: POST /api/v1/realtime-tickets의 60초 만료·1회용 SESSION_AUDIO_WRITE ticket
+      handshakeQuery: ticket
+      concurrency: 한 Session당 active publisher 한 명 권장
+      clientTextMessages:
+        - $ref: "#/components/schemas/AudioStartControl"
+        - $ref: "#/components/schemas/AudioStopControl"
+      serverTextMessages:
+        - $ref: "#/components/schemas/AudioReadyControl"
+        - $ref: "#/components/schemas/AudioAckControl"
+        - $ref: "#/components/schemas/AudioFlowControl"
+        - $ref: "#/components/schemas/AudioStoppedControl"
+        - $ref: "#/components/schemas/AudioResumeRejectedControl"
+        - $ref: "#/components/schemas/RealtimeError"
+      clientBinaryFrames:
+        status: mvp-v1
+        description: |
+          각 frame은 14-byte big-endian header와 PCM payload로 구성한다. byte 0은 protocol
+          version(1), byte 1은 flags(MVP v1은 0), byte 2..5는 uint32 chunk_sequence, byte 6..13은 uint64
+          captured_offset_ms, 나머지는 PCM_S16LE 16000 Hz mono payload다. sequence는
+          client_stream_id별 0부터 1씩 증가하고 offset은 stream 시작 기준이다. 기본 chunk는
+          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. 원본 오디오는
+          영구 저장하지 않는다.
+  personal-ai-stream:
+    status: TBD
+    visibility: requester-only
+    transport: SSE 또는 streaming HTTP 권장; Session 공용 WebSocket broadcast 금지
+    completionFallback: GET /api/v1/jobs/{job_id}와 Summary/Chat REST 조회
+    candidateEvents:
+      - job.updated
+      - summary.delta
+      - summary.completed
+      - chat.message.started
+      - chat.message.delta
+      - chat.message.completed
