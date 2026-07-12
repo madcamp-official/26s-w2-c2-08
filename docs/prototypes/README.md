@@ -30,7 +30,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 | 사용자 흐름 | 화면                    | IA 노드                  | 파일                         | 상태      |
 | ----------- | ----------------------- | ------------------------ | ---------------------------- | --------- |
 | 서비스 진입 | 비로그인 메인           | `MAIN_PAGE`              | `main.html`                  | 확인 가능 |
-| 서비스 진입 | 로그인 후 대시보드      | `MAIN_PAGE_AUTH`         | `dashboard.html`             | 준비 중   |
+| 서비스 진입 | 로그인 후 대시보드      | `MAIN_PAGE_AUTH`         | `dashboard.html`             | 확인 가능 |
 | 서비스 진입 | 내 정보                 | `MY_INFO_PAGE`           | `my-info.html`               | 준비 중   |
 | Course      | Course 생성             | `COURSE_CREATE_PAGE`     | `course-create.html`         | 예정      |
 | Course      | Course 참여             | `COURSE_JOIN_PAGE`       | `course-join.html`           | 예정      |
