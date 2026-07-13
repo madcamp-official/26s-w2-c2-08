@@ -119,7 +119,7 @@ POST /api/v1/auth/logout
 
 ### 2.5 커서 페이지네이션
 
-일반 목록 API는 기본적으로 다음 쿼리를 지원한다. Transcript와 Chat Message처럼 사용 패턴이 다른 목록은 해당 API 절에 별도 기본값을 명시한다.
+일반 목록 API는 기본적으로 다음 쿼리를 지원한다.
 
 | 필드     | 타입    | 기본값 | 설명                      |
 | -------- | ------- | -----: | ------------------------- |
@@ -135,6 +135,8 @@ POST /api/v1/auth/logout
 
 - 커서는 서버가 생성한 불투명 문자열이다.
 - 클라이언트는 커서 내부 구조를 해석하지 않는다.
+- 커서는 Session과 필터·정렬 조건, 마지막 항목의 정렬 키와 `id`를 고정하는 keyset cursor다. 다른 Session·필터·정렬과 함께 재사용하면 `400 INVALID_CURSOR`를 반환한다.
+- 목록은 다른 설명이 없으면 기본 `limit=20`, 최대 `100`을 사용하고 동일 정렬 값의 마지막 tie-breaker로 `id`를 사용한다.
 
 ### 2.6 멱등성과 중복 제출
 
@@ -262,7 +264,7 @@ READY → LIVE → PROCESSING → COMPLETED
 - Session 완료 조건은 coordinator terminal transaction이 child blocking Job을 등록한 뒤에만 재평가한다. 따라서 coordinator를 먼저 terminal로 관찰한 순간 새 child가 늦게 생기는 조기 `COMPLETED` race를 허용하지 않는다.
 - `RUNNING` Job worker는 15초마다 내부 heartbeat로 lease를 갱신한다. 60초 동안 갱신되지 않은 lease는 watchdog이 해당 Job을 `FAILED`로 전환한다. 이는 16절의 20초 WebSocket ping과 별개인 worker 종료 관찰 계약이다.
 - HQ를 포함한 각 후처리 Job의 실행 상한은 5분이다. Session `ended_at + 10분`에 watchdog은 Session과 coordinator를 잠근 뒤, coordinator를 terminal로 바꾸기 전에 아직 생성하지 않은 적용 가능한 downstream blocking Job을 `status=FAILED`, `retryable=true`, `started_at=null`, `finished_at=now`, `error.code=SESSION_PROCESSING_TIMEOUT`으로 생성하고 outbox를 남긴다.
-- 같은 watchdog transaction에서 RECORDING `FINALIZED` source는 미생성 `FINAL_SUMMARY`를 위 timeout 실패 Job으로 생성하고 `summary_state.status=FAILED`, `reason=null`로 기록한다. RECORDING `EMPTY`면 `NO_FINAL_TRANSCRIPT`, HQ 결과·Recording source가 없거나 `FAILED`면 `SUMMARY_SOURCE_UNAVAILABLE`을 기록한 뒤 coordinator·남은 Recording·upload gate·blocking Job을 `FAILED` terminal로 바꾼다. 그 후에만 실패를 포함해 모든 gate가 terminal인지 재평가해 Session을 `COMPLETED`로 전환한다.
+- 같은 watchdog transaction에서 RECORDING `FINALIZED` source는 미생성 `FINAL_SUMMARY`를 위 timeout 실패 Job으로 생성하고 Final Summary 상태를 `status=FAILED`, `reason=null`로 기록한다. RECORDING `EMPTY`면 `NO_FINAL_TRANSCRIPT`, HQ 결과·Recording source가 없거나 `FAILED`면 `SUMMARY_SOURCE_UNAVAILABLE`을 기록한 뒤 coordinator·남은 Recording·upload gate·blocking Job을 `FAILED` terminal로 바꾼다. 그 후에만 실패를 포함해 모든 gate가 terminal인지 재평가해 Session을 `COMPLETED`로 전환한다.
 - `SESSION_POSTPROCESSING`의 성공은 Answer mapping·Knowledge 재연결과 downstream Job 예약이 끝났다는 뜻이며 `FINAL_SUMMARY`·`QUESTION_CLUSTERING`의 성공까지 의미하지 않는다.
 - `ANSWER_ORGANIZATION`도 다른 blocking Job과 마찬가지로 `SUCCEEDED|FAILED` terminal이면 완료 판정을 막지 않는다. 실패 결과는 Answer별로 표시하고 같은 Job 행의 `attempt + 1`로 나중에 재시도하며 Session을 `PROCESSING`으로 되돌리지 않는다. 10분 watchdog은 적용 대상 Answer에 Job이 아직 없으면 `SESSION_PROCESSING_TIMEOUT` 실패 Job을 먼저 합성한다.
 - Session 종료 transaction은 active 또는 `retry_job_id`에 예약된 LIVE `QUESTION_CLUSTERING` Job을 `FAILED`, `retryable=false`, `error.code=SESSION_ENDED`로 종료하고 retry 예약·run token을 폐기해 느린 결과 commit을 막는다. coordinator는 종료 시점 `requested_through_sequence`와 `ended_at`을 각각 학생 질문·완료 Answer 대표질문의 최초 attempt input 상한으로 저장한 `FINAL` clustering Job을 `SHARED`, `blocks_session_completion=true`로 생성한다. 학생 질문 상한은 모든 attempt에서 유지하고, 실패한 FINAL을 교수가 명시적으로 재시도할 때만 `base_revision`과 Answer 시각 상한을 현재 값으로 다시 캡처한다. 대표질문은 현재 중앙인지 과거 child인지와 무관하게 해당 attempt 상한까지 `COMPLETED` Answer가 있으면 포함한다.
@@ -278,7 +280,7 @@ OPEN → SELECTED → ANSWERED
 - 상태는 학생이 등록한 Question과 AI가 생성한 RepresentativeQuestion에 동일하게 적용한다.
 - Answer는 한 번에 위 두 target 중 정확히 하나만 선택한다. 대표질문에 답변해도 클러스터 child 질문은 `ANSWERED`로 바뀌지 않는다.
 - 클러스터링 실패는 질문·대표질문 상태와 현재 클러스터를 되돌리지 않는다.
-- 답변 취소는 `CAPTURING` Answer 행을 삭제하고 target만 `SELECTED → OPEN`으로 복귀한다. `CANCELLED` Answer 리소스나 이력은 남기지 않는다.
+- 답변 취소는 `CAPTURING` Answer 행을 삭제하고 학생 질문과 현재 `ACTIVE` 대표질문 target만 `SELECTED → OPEN`으로 복귀한다. 이미 `PRESERVED`인 과거 대표질문은 공개 membership에서 즉시 제거하고 11.6절의 폐기 규칙을 따른다. `CANCELLED` Answer 리소스나 이력은 남기지 않는다.
 
 ### 4.4 AIJob
 
@@ -531,13 +533,14 @@ Content-Type: multipart/form-data
 ### 8.2 자료 목록과 메타데이터
 
 ```http
-GET /api/v1/sessions/{session_id}/materials
+GET /api/v1/sessions/{session_id}/materials?cursor=<cursor>&limit=20
 GET /api/v1/materials/{material_id}
 ```
 
 - 권한: Course 멤버
 - 외부에서 연결된 자료만 반환한다. 응답은 업로드 시 확정한 `display_name`, MIME, 크기, 페이지 수와 처리 상태를 포함한다.
-- 분리된 자료의 단건 조회는 존재를 공개하지 않고 `404 MATERIAL_NOT_FOUND`를 반환한다.
+- 목록은 `created_at ASC, id ASC`로 안정적으로 정렬하고 `items`, `next_cursor`를 반환한다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 분리되거나 존재하지 않는 자료는 모두 `404 MATERIAL_NOT_FOUND`로 응답해 존재를 숨긴다.
 - 내부 파일 경로, 스토리지 키와 `detached_at`은 응답하지 않는다.
 
 ### 8.3 PDF 열람
@@ -548,8 +551,9 @@ GET /api/v1/materials/{material_id}/content
 
 - 권한: Course 멤버
 - 성공: `200 OK`, `application/pdf`
+- 연결되고 `processing_status`가 `UPLOADED`, `PROCESSING`, `READY`인 Material만 본문을 반환한다. `FAILED`는 사용할 수 없는 자료이므로 원본을 반환하지 않는다.
 - `Content-Disposition` 파일명에는 저장된 `display_name`을 안전하게 인코딩해 사용한다.
-- 분리된 자료는 `404 MATERIAL_NOT_FOUND`를 반환한다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, `FAILED`, 분리되거나 존재하지 않는 자료는 모두 `404 MATERIAL_NOT_FOUND`로 응답해 존재를 숨긴다.
 - 추후 객체 스토리지를 사용하면 짧은 만료 시간의 서명 URL 응답으로 변경할 수 있다.
 
 ### 8.4 자료 분리
@@ -566,7 +570,7 @@ Idempotency-Key: <key>
 - 성공: `204 No Content`. 응답 전에 외부 연결을 즉시 끊어 목록·단건·본문·수업 기록에서 제외하고 새 AI 검색과 근거 생성에도 사용하지 않는다.
 - 동일한 멱등성 키와 요청의 재시도는 최초 `204`를 반환한다. 분리 완료 후 새 요청으로 접근하면 `404 MATERIAL_NOT_FOUND`를 반환한다.
 - 파일 객체와 파생 chunk는 background cleanup으로 정리한다. 스토리지 키와 `detached_at`은 외부 API에 노출하지 않는다.
-- 이미 저장된 Assistant 근거를 보존하는 경우 안전한 `label` snapshot은 남길 수 있지만 자료 `resource_url`은 `null`로 반환한다. 근거의 정확한 보관 기간·FK 정책과 `410 Gone` 도입 여부는 미정이다.
+- 이미 저장된 Assistant 근거를 보존하는 경우 안전한 `label` snapshot은 남길 수 있지만 자료 `link`는 `null`로 반환한다. 근거의 정확한 보관 기간·FK 정책과 `410 Gone` 도입 여부는 미정이다.
 
 ## 9. Transcript API
 
@@ -607,29 +611,42 @@ GET /api/v1/sessions/{session_id}/transcript/versions?cursor=<cursor>&limit=20
 ### 9.3 canonical 또는 지정 version 타임라인 조회
 
 ```http
-GET /api/v1/sessions/{session_id}/transcript?transcript_version_id=<id>&cursor=<cursor>&limit=100
+GET /api/v1/sessions/{session_id}/transcript?transcript_version_id=<id>&cursor=<cursor>&limit=20
 ```
 
 - 권한: Course 멤버
 - `transcript_version_id`를 생략하면 canonical version을, canonical 포인터가 `null`이면 current version을 선택한다. 지정하면 같은 Session에 속한 과거 version도 조회할 수 있다. HQ `FAILED`에서 기본 조회가 LIVE version을 반환해도 aggregate `status=FAILED`를 함께 공개하며, 이를 Summary final source 사용 확정으로 해석하지 않는다.
-- 응답은 최신 상태를 담은 `transcript`, 실제 타임라인 source인 `selected_version`, `items`, `next_cursor`를 포함한다. `items`에는 선택 version에 귀속된 final `SEGMENT`와 `GAP`이 함께 들어가며 partial은 포함하지 않는다.
-- `FAILED` HQ version은 상태·provenance만 조회하고 완성되지 않은 Segment·Gap은 `items`로 공개하지 않는다.
-- `EMPTY` version은 `last_sequence=0`이지만 재처리 후에도 남은 `is_final=true` Gap이 있을 수 있어 `items`에 Gap을 반환할 수 있다.
-- 타임라인은 `start_ms ASC`, 같은 시각이면 `SEGMENT` 우선, 그 뒤 `id ASC`의 안정적인 순서를 사용한다. cursor는 version과 이 위치를 함께 고정하는 불투명 값이다.
+- 응답은 최신 상태를 담은 `transcript`, 실제 타임라인 source인 `selected_version`, `segments`, `gaps`, `next_cursor`를 포함한다. partial은 포함하지 않는다.
+- 페이지 경계는 Segment·Gap을 합친 논리 타임라인에서 한 번만 계산하고, 해당 페이지를 응답에서 `segments[]`와 `gaps[]`로 나눠 준다. 따라서 `segments.length + gaps.length <= limit`이며 두 배열에 따로 독립 cursor를 두지 않는다.
+- 클라이언트가 한 페이지를 하나의 타임라인으로 표시할 때는 두 배열을 다시 `start_ms ASC`, 같은 시각의 `SEGMENT` 우선, `id ASC`로 merge한다. `next_cursor`는 이 merge 순서의 마지막 항목을 기준으로 한다.
+- `FAILED` HQ version은 상태·provenance만 조회하고 완성되지 않은 Segment·Gap은 반환하지 않아 두 배열이 모두 비어 있다.
+- `EMPTY` version은 `last_sequence=0`이지만 재처리 후에도 남은 `is_final=true` Gap이 있을 수 있어 `gaps`를 반환할 수 있다.
+- 합친 타임라인은 `start_ms ASC`, 같은 시각이면 `SEGMENT` 우선, 그 뒤 `id ASC`의 안정적인 순서를 사용한다. cursor는 version과 이 위치를 함께 고정하는 불투명 값이다.
 - 첫 페이지 뒤 canonical 포인터가 바뀌어도 cursor가 가리키는 version의 다음 페이지를 반환한다. 명시한 `transcript_version_id`와 cursor의 version이 다르면 `400 INVALID_CURSOR`이다.
 - Segment는 nullable `recording_start_ms`, `recording_end_ms`를 공개하고 녹음 위치가 확정된 문장은 이 offset으로 playback seek한다. Gap은 class 시간축의 `start_ms`, nullable `end_ms`와 canonical 후보에 남은 최종 gap인지 나타내는 `is_final`을 공개하며 recording offset을 임의 환산하지 않는다. `is_final=true`이면 `end_ms`는 반드시 non-null이다.
 - WebSocket 재연결과 `transcript.version.updated` 뒤 REST canonical 복구에 사용한다.
+
+### 9.4 Transcript Segment 단건 조회
+
+```http
+GET /api/v1/transcript-segments/{segment_id}
+```
+
+- 권한: 해당 Segment가 속한 Course 멤버
+- Evidence `link`가 cursor나 배열 위치에 의존하지 않고 정확한 final Segment를 가리키는 안정적인 조회 경로다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 비가시·삭제되거나 존재하지 않는 Segment는 모두 `404 RESOURCE_NOT_FOUND`로 응답해 존재를 숨긴다.
 
 ## 10. 질문·클러스터·반응 API
 
 ### 10.1 질문 목록
 
 ```http
-GET /api/v1/sessions/{session_id}/questions?status=OPEN&sort=POPULAR&cursor=<cursor>&limit=50
+GET /api/v1/sessions/{session_id}/questions?status=OPEN&sort=POPULAR&cursor=<cursor>&limit=20
 ```
 
 - 권한: Course 멤버
-- `sort`: `POPULAR`, `RECENT`. 응답은 익명 질문, 반응 수, 답변 상태와 nullable 현재 `cluster_id`를 포함한다.
+- `sort=POPULAR`은 `reaction_count DESC, created_at DESC, id DESC`, `sort=RECENT`는 `created_at DESC, id DESC`로 정렬한다. 응답은 익명 질문, 반응 수, 답변 상태와 nullable 현재 `cluster_id`를 포함한다.
+- LIVE에서 `reaction_count`가 바뀌면 `POPULAR` 순위는 페이지 사이에 재배치될 수 있으므로 이 정렬은 전체 목록 snapshot이 아니다. `reaction.updated`를 받으면 첫 페이지를 새로 조회한다. `/record`의 질문 경로는 수업 종료 후 불변 키만 쓰는 `sort=RECENT`를 사용한다.
 - 현재 사용자의 반응 여부는 `reacted_by_me`로 표현하고 `author_id`, 이름, 이메일은 절대 반환하지 않는다.
 - 동일한 문장의 질문을 서로 다른 학생이 등록할 수 있으며 중복 content를 제거하지 않는다.
 
@@ -641,6 +658,7 @@ GET /api/v1/questions/{question_id}
 
 - 권한: Course 멤버
 - 목록과 같은 익명 Question 표현을 반환하며 작성자 식별 정보를 포함하지 않는다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 비가시·삭제되거나 존재하지 않는 Question은 모두 `404 RESOURCE_NOT_FOUND`로 응답해 존재를 숨긴다.
 
 ### 10.3 익명 질문 생성과 자동 clustering 요청
 
@@ -714,7 +732,8 @@ GET /api/v1/sessions/{session_id}/question-clusters?scope=CURRENT&cursor=<cursor
 - 공개 Cluster `id`는 LIVE generation 사이 같은 semantic Cluster가 계승하는 logical ID다. 새 LIVE Cluster와 모든 입력을 다시 배치하는 FINAL Cluster는 새 logical ID를 사용하고, 내부 generation row ID는 노출하지 않는다.
 - LIVE Job은 captured watermark까지의 **새 학생 질문만** 기존 Cluster에 배치하고 기존 질문을 다른 Cluster로 옮기지 않는다. 새 member가 추가된 Cluster의 대표질문만 새 immutable 행으로 생성한다.
 - Job 실행 중 등록된 질문은 다음 Job에 한꺼번에 처리한다. 대표질문 생성까지 성공해야 watermark를 적용하고 Job을 `SUCCEEDED`로 끝낸다.
-- 답변 없는 교체 대표질문은 폐기한다. `CAPTURING` 대표질문은 Answer가 종료될 때까지 child로 보존하고, `COMPLETED` Answer가 있는 과거 대표질문은 일반 child 질문처럼 보존한다.
+- 답변 없는 교체 대표질문은 폐기한다. 새 generation 공개 transaction부터 Cluster 중앙·child, 대표질문 단건 조회와 새 RAG 검색에서 즉시 제외한다. Evidence 참조가 없으면 hard delete하고, 있으면 내부 `DISCARDED` tombstone과 해당 KnowledgeChunk만 provenance로 보존하되 `ChatEvidence.source_kind`·`label`은 유지하고 `link=null`로 반환한다. 마지막 Evidence를 삭제하는 transaction은 tombstone과 Chunk도 원자적으로 hard delete해 `DISCARDED`는 항상 Evidence가 1개 이상일 때만 남는다. `DISCARDED`는 내부 정리 상태이며 공개 `lifecycle_status`는 `ACTIVE|PRESERVED`만 유지한다.
+- `CAPTURING` 대표질문은 Answer가 종료될 때까지 child로 보존하고, `COMPLETED` Answer가 있는 과거 대표질문은 일반 child 질문처럼 보존한다.
 - FINAL 대상 학생 질문과 답변된 AI 대표질문이 모두 0건일 때 Job 생략 여부, 빈 성공 결과 원장과 `generation` 표현은 TBD이다.
 
 ### 10.7 클러스터 child 목록
@@ -727,6 +746,16 @@ GET /api/v1/sessions/{session_id}/question-clusters/{cluster_id}/members?cursor=
 - generation 안에서 유일한 `ordinal ASC`로 안정적으로 정렬한다. 공개 `ordinal`은 DB membership `position` projection이다. member는 `STUDENT_QUESTION` 또는 답변이 있어 보존된 `AI_REPRESENTATIVE_QUESTION`이다.
 - 경로의 `{cluster_id}`는 해당 `{session_id}` 안에서 공개하는 logical ID이며, 서버는 Session·logical ID로 요청 scope의 현재 물리 generation row를 해석한다. 다른 Session의 logical ID는 일치하지 않는 리소스로 처리한다. generation 교체 중 기존 cursor 만료·재시작 정책은 TBD이다.
 - 대표질문과 각 child의 Answer 상태는 독립적이다. 공통 `limit`은 기본 20·최대 100이다. generation 교체 중 기존 cursor의 만료·재시작 정책과 큰 마인드맵의 preload page 수·점진 loading·자동 축소 layout은 TBD이다.
+
+### 10.8 AI 대표질문 단건 조회
+
+```http
+GET /api/v1/representative-questions/{representative_question_id}
+```
+
+- 권한: 해당 대표질문이 속한 Course 멤버
+- 현재 Cluster 중앙 대표질문과 Answer target으로 보존된 과거 대표질문을 ID로 조회한다. generation 배열 위치나 pagination cursor에 의존하지 않는다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 비가시·존재하지 않는 대표질문, 교체 후 폐기되었거나 `PRESERVED` Answer 취소로 공개에서 제거된 대표질문은 모두 `404 RESOURCE_NOT_FOUND`로 응답해 존재를 숨긴다. Evidence provenance용 내부 tombstone이 남아도 같다.
 
 ## 11. 교수자 답변 API
 
@@ -744,6 +773,7 @@ GET /api/v1/answers/{answer_id}
 - `text_content`는 교수자가 직접 작성한 설명이고 AI 정리 결과와 다른 원장이다. 둘 다 있으면 화면은 교수자 text를 우선 표시하되 AI 정리본과 원본 음성 범위를 별도 표기로 유지한다.
 - 클러스터 대표질문을 선택한 순간의 문구를 snapshot하며 이후 대표질문 교체와 무관하게 변경하지 않는다.
 - Answer는 target당 최대 하나다. 대표질문 Answer는 child Question의 답변 여부에 영향을 주지 않는다.
+- Answer 단건 조회에서 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 비가시·취소·삭제되거나 존재하지 않는 Answer는 모두 `404 RESOURCE_NOT_FOUND`로 응답해 존재를 숨긴다.
 
 ### 11.2 LIVE 음성 답변 캡처 시작
 
@@ -841,9 +871,9 @@ POST /api/v1/answers/{answer_id}/cancel
 Idempotency-Key: <key>
 ```
 
-- 권한: Course `PROFESSOR`. `CAPTURING` Answer를 hard delete한다. 학생 질문과 현재 `ACTIVE` 대표질문 target은 `OPEN`으로 복귀하고, 이미 `PRESERVED`인 과거 대표질문은 membership과 함께 삭제한 후 `204 No Content`를 반환한다.
+- 권한: Course `PROFESSOR`. `CAPTURING` Answer를 hard delete한다. 학생 질문과 현재 `ACTIVE` 대표질문 target은 `OPEN`으로 복귀하고, 이미 `PRESERVED`인 과거 대표질문은 membership·Cluster·단건 조회·RAG에서 즉시 제거한 후 `204 No Content`를 반환한다.
 - 취소된 Answer는 목록·단건 API나 완료 기록에 노출하지 않는다. 멱등 재요청은 24시간 멱등 응답으로 `204`를 재사용하고, 키 없이 삭제된 ID를 조회하면 `404`다.
-- 취소 시점에 이미 중앙 대표가 아닌 미답변 AI 대표질문은 함께 삭제한다. 서버는 본문 없는 `answer.deleted` tombstone 이벤트로 열린 화면을 무효화한다.
+- 취소 시점에 이미 중앙 대표가 아닌 미답변 AI 대표질문은 함께 폐기한다. Evidence 참조가 없으면 hard delete하고, 있으면 내부 `DISCARDED` tombstone·KnowledgeChunk를 남기되 해당 Evidence는 `source_kind`·`label`을 유지하고 `link=null`로 반환한다. 마지막 Evidence를 삭제하는 transaction은 tombstone과 Chunk도 원자적으로 hard delete해 `DISCARDED`는 항상 Evidence가 1개 이상일 때만 남는다. 서버는 본문 없는 `answer.deleted` tombstone 이벤트로 열린 화면을 무효화한다.
 - `PRESERVED` 대표질문 membership을 삭제하는 transaction은 clustering state의 `current_revision + 1`과 `clustering.updated` outbox를 함께 기록한다. 기존 active 또는 retry-reserved LIVE Job은 `CLUSTER_REVISION_CHANGED`, `retryable=false`로 fence하고 pending 질문이 있으면 현재 revision의 fresh Job을 자동 생성한다.
 
 ## 12. AI 요약 API
@@ -881,16 +911,18 @@ GET /api/v1/sessions/{session_id}/summaries?summary_type=LIVE&cursor=<cursor>&li
 
 - 권한: Course 멤버
 - `summary_type`: `LIVE`, `FINAL`
+- 목록은 `created_at DESC, id DESC`로 안정적으로 정렬한다.
 - 성공한 `LIVE` 요약은 요청자 전용으로 반드시 저장하고, `FINAL` 요약은 Course 멤버에게 공개한다.
 - Summary 저장이 완료돼 `result.resource_url`로 조회할 수 있을 때만 AIJob을 `SUCCEEDED`로 변경한다.
 - 보관 기간이 끝나거나 사용자가 삭제하기 전까지 저장하며 구체 보관 기간·삭제 API는 개인정보 정책과 함께 확정한다.
 - `FINAL`은 class 종료 후 생성된 강의 요약을 의미한다.
 - `FINAL_SUMMARY` Job은 최신 HQ TranscriptVersion이 `source=RECORDING`, `status=FINALIZED`, final Segment 1건 이상일 때만 자동 생성한다. canonical LIVE version이 `FINALIZED`여도 자동 생성 근거로 사용하지 않는다.
-- 유효한 RECORDING `FINALIZED` source가 있지만 10분 watchdog이 미생성 `FINAL_SUMMARY`를 timeout 실패 Job으로 만든 경우 `summary=null`, `summary_state.status=FAILED`, `summary_state.reason=null`이며 Job `error.code=SESSION_PROCESSING_TIMEOUT`으로 원인을 확인한다.
-- 최신 RECORDING TranscriptVersion이 정상 `EMPTY`이면 `FINAL_SUMMARY` Job을 만들지 않는다. 통합 기록 응답은 `summary=null`, `summary_state.status=NOT_APPLICABLE`, `summary_state.reason.code=NO_FINAL_TRANSCRIPT`, message `요약할 강의 내용이 없습니다.`를 반환한다.
-- Recording source가 처음부터 없으면 LIVE drain terminal 직후, Recording은 있지만 최신 RECORDING TranscriptVersion이 `FAILED`이거나 `ended_at + 10분`까지 HQ 결과가 없으면 해당 시점에 `FINAL_SUMMARY` Job 없이 상태를 확정한다. `summary=null`, `summary_state.status=FAILED`, reason code `SUMMARY_SOURCE_UNAVAILABLE`, message `Transcript 처리 문제로 요약을 만들지 못했습니다.`를 반환한다.
+- 유효한 RECORDING `FINALIZED` source가 있지만 10분 watchdog이 미생성 `FINAL_SUMMARY`를 timeout 실패 Job으로 만든 경우 `/record.summary.state.status=FAILED`, `reason=null`, `summary_url=null`이며 Job `error.code=SESSION_PROCESSING_TIMEOUT`으로 원인을 확인한다.
+- 최신 RECORDING TranscriptVersion이 정상 `EMPTY`이면 `FINAL_SUMMARY` Job을 만들지 않는다. 통합 기록 응답은 `/record.summary.state.status=NOT_APPLICABLE`, `reason.code=NO_FINAL_TRANSCRIPT`, `summary_url=null`, message `요약할 강의 내용이 없습니다.`를 반환한다.
+- Recording source가 처음부터 없으면 LIVE drain terminal 직후, Recording은 있지만 최신 RECORDING TranscriptVersion이 `FAILED`이거나 `ended_at + 10분`까지 HQ 결과가 없으면 해당 시점에 `FINAL_SUMMARY` Job 없이 상태를 확정한다. `/record.summary.state.status=FAILED`, reason code `SUMMARY_SOURCE_UNAVAILABLE`, `summary_url=null`, message `Transcript 처리 문제로 요약을 만들지 못했습니다.`를 반환한다.
 - HQ 무결과·미생성에서 보존된 LIVE canonical을 완료 기록·Summary final source로 사용할지는 TBD이며, 현재 자동 `FINAL_SUMMARY`는 LIVE를 source로 사용하지 않는다.
 - 저장된 Summary는 생성에 사용한 `source_transcript_version_id`를 보존한다.
+- `/record.summary.state`의 허용 조합은 `PENDING|AVAILABLE + reason=null`, `NOT_APPLICABLE + NO_FINAL_TRANSCRIPT`, `FAILED + SUMMARY_SOURCE_UNAVAILABLE|null`로 고정한다. 다른 status·reason 조합은 반환하지 않는다.
 
 ### 12.3 요약 단건 조회
 
@@ -960,13 +992,27 @@ Idempotency-Key: <key>
 ### 13.5 메시지 목록
 
 ```http
-GET /api/v1/chats/{chat_id}/messages?cursor=<cursor>&limit=50
+GET /api/v1/chats/{chat_id}/messages?cursor=<cursor>&limit=20
 ```
 
 - 권한: 대화 소유자
 - 정렬: `sequence ASC`
-- Assistant Message는 사용자에게 안전한 근거 유형, 표시용 `label` snapshot, 권한 검사를 거치는 상대 링크 `resource_url`과 모델 정보를 포함할 수 있다.
-- 분리된 Material 근거를 보존하면 `label` snapshot은 유지하고 `resource_url`은 `null`로 반환한다. 내부 chunk ID와 스토리지 키는 노출하지 않는다.
+- `USER` Message는 `job_id`, `model_name`, `prompt_version`이 모두 `null`이고 `evidence=[]`다. `ASSISTANT` Message는 생성 원인 `job_id`가 반드시 non-null이며 Evidence는 0개 이상일 수 있고 모델·프롬프트 공개 정책에 따라 `model_name`, `prompt_version`은 null일 수 있다.
+- Assistant Message의 Evidence는 `source_kind`, 안전한 `label` snapshot, 권한 검사를 거치는 nullable 상대 경로 `link`만 공개한다. DB 식별자인 `knowledge_chunk_id`, 내부 storage key·path와 pagination cursor는 포함하지 않는다.
+- `source_kind`는 KnowledgeChunk의 typed source FK에서 `MATERIAL`, `TRANSCRIPT_SEGMENT`, `STUDENT_QUESTION`, `AI_REPRESENTATIVE_QUESTION`, `ANSWER` 중 하나로 파생한다. generic source ID를 따로 노출하지 않는다.
+- `label`은 Evidence 생성 시점에 저장한 non-empty 표시용 snapshot이다. 자료명·페이지, Transcript 시간 구간, “학생 질문”·“AI 대표질문”·“교수자 답변”처럼 사용자가 이해할 정보만 포함하고 학생 식별정보나 내부 ID·경로를 포함하지 않는다. 정확한 문자열 format은 UI locale에 맡긴다.
+- `link`는 API root 기준 `uri-reference`이며 생성 시점의 우선 형태는 다음과 같다. Material 페이지의 `#page=` fragment와 Transcript의 불투명 Segment ID는 배열 순번·cursor가 아니라 안정적인 source anchor다.
+- `source_kind`와 non-null `link`는 아래 5개 조합 중 정확히 하나여야 한다. 외부 URL이나 다른 종류의 단건 경로를 섞은 조합은 계약 위반이며, 공개 이동 대상이 없을 때만 같은 종류에서 `link=null`을 사용한다.
+
+| `source_kind`                | `link` 형태                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `MATERIAL`                   | `/api/v1/materials/{material_id}/content` + 페이지가 있으면 `#page={page_number}` |
+| `TRANSCRIPT_SEGMENT`         | `/api/v1/transcript-segments/{start_segment_id}`                                  |
+| `STUDENT_QUESTION`           | `/api/v1/questions/{question_id}`                                                 |
+| `AI_REPRESENTATIVE_QUESTION` | `/api/v1/representative-questions/{representative_question_id}`                   |
+| `ANSWER`                     | `/api/v1/answers/{answer_id}`                                                     |
+
+- source가 분리·삭제되었거나 현재 사용자에게 안전한 이동 경로를 제공할 수 없으면 `label`은 유지하고 `link=null`로 반환한다. 분리된 Material과 폐기된 AI 대표질문은 새 AI 검색에 사용하지 않는다. Evidence가 참조하는 폐기 대표질문의 내부 tombstone·Chunk는 provenance로만 보존하며 `GET /api/v1/representative-questions/{id}`는 항상 `404`를 반환한다. 마지막 Evidence 삭제와 tombstone·Chunk hard delete는 같은 transaction에서 원자 처리한다.
 
 ## 14. AI 작업 API
 
@@ -1006,6 +1052,7 @@ GET /api/v1/sessions/{session_id}/jobs?job_type=<type>&status=<status>&cursor=<c
 
 - 권한: Course 멤버
 - 자료 처리, 질문 클러스터링, `ANSWER_ORGANIZATION`, `RECORDING_TRANSCRIPTION`과 Session 후처리처럼 참여자가 상태를 알아야 하는 공용 Job만 반환한다.
+- 목록은 `created_at DESC, id DESC`로 안정적으로 정렬하며 `job_type`, `status`를 cursor에 고정한다.
 - 개인 LIVE 요약과 Chat Job은 포함하지 않는다. 질문 초안은 동기 `200` 응답이며 Job이 아니다.
 - `QUESTION_CLUSTERING`은 `clustering_mode`, input watermark, base revision을 공개한다. LIVE 실패 재시도는 시스템이 같은 Job 행의 `attempt + 1`로 수행하며 Session 종료로 중단된 `SESSION_ENDED` Job은 재시도할 수 없다. 최종 clustering 실패는 `COMPLETED` 기록에서 교수자가 같은 Job 행을 재시도할 수 있고 Session을 `PROCESSING`으로 되돌리지 않는다.
 - 현재 generation을 만든 성공 `QUESTION_CLUSTERING`의 result는 단일 Cluster가 아니라 `resource_type=QUESTION_CLUSTER_GENERATION`, 문자열 generation 번호인 `resource_id`, 해당 scope Cluster 목록 `resource_url`을 반환한다. 새 generation으로 교체되면 과거 Job은 `SUPERSEDED` 규칙을 따른다.
@@ -1024,10 +1071,25 @@ GET /api/v1/sessions/{session_id}/record
 
 - 권한: Course 멤버
 - 허용 Session 상태: `PROCESSING`, `COMPLETED`
-- 응답: Session, 권한에 따라 노출하는 안전한 Recording 메타데이터, Transcript aggregate/current version과 선택된 canonical 타임라인, 외부에서 연결된 자료 메타데이터, 최신 최종 요약 상태, 질문·반응·클러스터·답변, 후처리 Job 상태
-- `jobs`에는 자료 처리·Session 후처리 같은 공용 Job만 포함하고 개인 요약·Chat Job은 포함하지 않는다. 질문 초안은 동기 `200` 응답이므로 `jobs`의 대상이 아니다.
-- 일부 AI 작업이 실패해도 연결된 PDF, Transcript와 Q&A는 반환한다. 분리된 자료는 즉시 제외한다.
-- `/record`의 전체 pagination과 큰 응답 축소는 PR6에서 확정한다. 이번 PR은 전용 Transcript 조회에만 cursor pagination을 적용한다.
+- `/record`는 큰 배열을 담는 aggregate가 아니라 수업 기록의 유한한 manifest·index다. Session과 권한이 허용한 nullable Recording 메타데이터는 직접 반환하지만 Summary 본문과 Material·Transcript Segment·Gap·질문·Cluster·Answer·Job 배열은 포함하지 않는다.
+- 대신 각 영역의 `total_count`와 cursor 목록 `list_url`을 반환한다. Transcript는 선택 version의 `selected_version_id`, `segment_count`, `gap_count`, `timeline_url`, `versions_url`을, Cluster는 `clustering_state`와 `CURRENT`·`FINAL` 각각의 count·URL을 반환한다. 모든 URL은 `session_id`와 필요한 stable filter를 포함하고 cursor나 배열 순번을 포함하지 않는다.
+- `transcript.selected_version_id`가 non-null이면 `timeline_url`은 정확히 `/api/v1/sessions/{session_id}/transcript?transcript_version_id={selected_version_id}` 형태로 같은 ID를 고정한다. `selected_version_id=null`이면 query 없는 `/api/v1/sessions/{session_id}/transcript`만 반환한다.
+- 기록의 질문 `list_url`은 종료 후 불변인 `created_at DESC, id DESC`를 쓰는 `sort=RECENT`를 포함한다. 개별 목록은 기본 20·최대 100의 불투명 keyset cursor로 독립 조회한다.
+- `total_count`와 상태는 `/record` 응답 transaction 시점의 정보이며 목록 전체를 snapshot token으로 잠그지 않는다. `PROCESSING`의 상태·개수가 바뀌면 `/record`를 다시 조회한다.
+- 공용 Job `total_count`와 `list_url`에는 자료 처리·Session 후처리 등 SHARED Job만 포함하고 개인 요약·Chat Job은 포함하지 않는다. 질문 초안은 동기 `200` 응답이므로 Job이 아니다.
+- 일부 AI 작업이 실패해도 연결된 PDF, Transcript와 Q&A의 count·상태·조회 경로는 반환한다. 분리된 Material은 즉시 count와 목록에서 제외한다.
+
+| `/record` 필드      | 의미                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| `session`           | 현재 Session 상태·시각·제목                                                                 |
+| `recording`         | 권한이 허용한 nullable Recording 메타데이터와 안정적인 `recording_url`                      |
+| `materials`         | 현재 연결된 Material `total_count`, `list_url`                                              |
+| `transcript`        | nullable aggregate·`selected_version_id`, Segment·Gap count, `timeline_url`, `versions_url` |
+| `summary`           | 최종 Summary 상태, nullable `summary_url`, `summaries_url`; Summary 본문은 해당 URL로 조회  |
+| `questions`         | 학생 질문 `total_count`, `sort=RECENT`인 `list_url`                                         |
+| `question_clusters` | clustering state, `CURRENT`·`FINAL` 각각의 `total_count`, `list_url`                        |
+| `answers`           | Answer `total_count`, `list_url`                                                            |
+| `jobs`              | 공용 AIJob `total_count`, `list_url`                                                        |
 
 ### 15.2 녹음 메타데이터 조회
 
@@ -1473,6 +1535,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - 모든 Material, Recording, RecordingUpload, Transcript, Question, Answer, Summary, Chat과 Job 접근은 현재 인증과 Course 접근 권한을 검증한다.
 - 개인 요약·Chat Job 상태는 Session 전체에 broadcast하지 않는다. 질문 초안은 동기 REST 응답에서만 반환한다.
 - PDF·녹음의 스토리지 키, 서버 파일 경로, fragment key·manifest와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
+- Chat Evidence는 현재 사용자의 Course 권한과 source 상태를 다시 검증한 `link`만 제공한다. `knowledge_chunk_id`, pagination cursor, 배열 위치와 학생 식별정보는 노출하지 않는다.
 
 ## 19. 미정 사항
 
@@ -1482,7 +1545,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | class 자동 제목                    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD                                                                                                                                               | Session 생성·제목 수정 응답  |
 | active Course 삭제                 | active Session 보유 시 삭제·보관 방식 TBD                                                                                                                                                       | Course 삭제 응답·트랜잭션    |
 | Material 표시명                    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD                                                                                                       | 업로드·목록·다운로드 파일명  |
-| Material 분리 근거                 | 안전한 label snapshot과 `resource_url=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD                                                                                           | Chat 근거·DB 삭제 정책       |
+| Material 분리 근거                 | 안전한 label snapshot과 `link=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD                                                                                                   | Chat 근거·DB 삭제 정책       |
 | 종료 후 텍스트 Answer              | `COMPLETED`에서 생성·보강은 확정; 최대 길이, 빈 문자열·삭제, KnowledgeChunk 재생성 세부 정책 TBD                                                                                                | Answer 요청·응답             |
 | 음성 Answer AI 정리                | Answer별 자동 SHARED blocking Job·HQ 우선/LIVE fallback·실패 재시도·교수자 text 분리는 확정; 정리문 형식·최대 길이·model·prompt·품질 기준과 KnowledgeChunk 재색인 여부·producer·transaction TBD | Answer 응답·AI worker·검색   |
 | LIVE clustering 실패 재시도        | pending watermark·같은 Job 행 `attempt + 1` 재사용은 확정; backoff·최대 attempt 횟수 TBD                                                                                                        | Job scheduler·운영 UI        |
