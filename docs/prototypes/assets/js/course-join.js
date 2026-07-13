@@ -14,6 +14,15 @@ function setValidity(valid) {
 }
 
 if (form && input && error) {
+  input.addEventListener("paste", (event) => {
+    const pasted = normalizeJoinCode(
+      event.clipboardData?.getData("text") || "",
+    );
+    event.preventDefault();
+    input.value = pasted;
+    setValidity(true);
+  });
+
   input.addEventListener("input", () => {
     const selectionStart = input.selectionStart ?? input.value.length;
     const previousLength = input.value.length;
@@ -45,6 +54,13 @@ if (form && input && error) {
     setValidity(true);
     const target = document.querySelector(form.dataset.stateTarget);
     setDemoState(target, form.dataset.successState || "success");
+    const successHeading = target.querySelector(
+      '[data-show-state="success"] h1, [data-show-state="success"] h2',
+    );
+    if (successHeading) {
+      successHeading.tabIndex = -1;
+      successHeading.focus();
+    }
     showToast(
       form.dataset.successToast || "Course 참여 결과를 표시했습니다.",
       "success",
