@@ -168,7 +168,16 @@ function initDemoForms() {
       }
 
       const target = document.querySelector(form.dataset.stateTarget);
-      setDemoState(target, form.dataset.successState || "success");
+      const successState = form.dataset.successState || "success";
+      setDemoState(target, successState);
+      const successPanel = getOwnedStateItems(target).find((item) =>
+        item.dataset.showState.split(" ").includes(successState),
+      );
+      const successHeading = successPanel?.querySelector("h1, h2");
+      if (successHeading) {
+        successHeading.tabIndex = -1;
+        successHeading.focus();
+      }
       showToast(
         form.dataset.successToast || "목 결과를 표시했습니다.",
         "success",
