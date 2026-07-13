@@ -200,6 +200,16 @@ erDiagram
         timestamptz failed_at
     }
 
+    answers["answers"] {
+        uuid id PK
+        uuid session_id FK
+        text status
+        uuid source_transcript_version_id FK
+        uuid start_segment_id FK
+        uuid end_segment_id FK
+        text text_content
+    }
+
     transcriptSegments["transcript_segments"] {
         uuid id PK
         uuid session_id FK
@@ -281,7 +291,7 @@ class 시작 transaction은 LIVE version을 실시간 기본 조회·검색용 c
 
 ## 4. 질문·클러스터·Answer
 
-Question은 현재 Cluster FK만 가진다. 일반 클러스터 membership 변경 이력 테이블은 없으며, 수업 종료 후 확정된 Cluster 행만 `is_final = true`로 보관한다. Cluster `title`은 AI 대표 질문의 정확한 text다. 교수자가 답변을 시작하면 당시 Cluster ID·title과 질문 membership, 원본 LIVE TranscriptVersion을 snapshot한다. HQ 결과는 원본 Answer 범위를 덮어쓰지 않고 `answer_transcript_mappings`에 version별로 저장한다.
+학생 Question은 현재 Cluster FK 대신 Session별 `clustering_sequence`를 가진다. `question_clustering_states`가 요청·적용 sequence, 현재 revision, current/final generation과 마지막 Job 상태를 관리하고, `question_cluster_members`가 학생 질문 또는 보존된 과거 AI 대표 질문 중 정확히 한 child 종류를 Cluster에 연결한다. AI 대표 질문은 독립 리소스이며 Answer는 학생 질문 또는 대표 질문 중 정확히 하나를 target으로 가진다. 완료 voice Answer의 AI 정리 결과는 교수 수동 `text_content`와 분리된 `answer_organizations`에 최대 하나만 저장한다.
 
 ```mermaid
 erDiagram
@@ -298,8 +308,16 @@ erDiagram
     aiJobs["ai_jobs"] {
         uuid id PK
         uuid session_id FK
+        uuid target_answer_id FK
+        uuid input_transcript_version_id FK
+        uuid input_start_segment_id FK
+        uuid input_end_segment_id FK
         integer attempt
         text status
+        text clustering_mode
+        bigint input_through_sequence
+        bigint base_revision
+        timestamptz final_answered_through_at
     }
 
     transcriptVersions["transcript_versions"] {
@@ -317,23 +335,58 @@ erDiagram
         bigint sequence
     }
 
-    questionClusters["question_clusters"] {
+    questionClusteringStates["question_clustering_states"] {
+        uuid session_id PK,FK
+        bigint requested_sequence
+        bigint applied_sequence
+        bigint current_revision
+        bigint current_generation
+        bigint final_generation
+        uuid last_job_id FK
+        integer last_job_attempt
+        text last_job_status
+        uuid retry_job_id FK
+    }
+
+    aiRepresentativeQuestions["ai_representative_questions"] {
         uuid id PK
         uuid session_id FK
+        text text
+        text status
+        text lifecycle_status
+        bigint version
+        uuid created_by_job_id FK
+        integer created_by_job_attempt
+        timestamptz preserved_at
+    }
+
+    questionClusters["question_clusters"] {
+        uuid id PK
+        uuid logical_cluster_id
+        uuid session_id FK
+        uuid representative_question_id FK
         uuid created_by_job_id FK
         integer created_by_job_attempt
         bigint generation
         integer ordinal
-        text title
         boolean is_final
         timestamptz finalized_at
+    }
+
+    questionClusterMembers["question_cluster_members"] {
+        uuid cluster_id PK,FK
+        integer position PK
+        uuid session_id FK
+        bigint generation
+        uuid question_id FK
+        uuid representative_question_id FK
     }
 
     questions["questions"] {
         uuid id PK
         uuid session_id FK
         uuid author_user_id FK
-        uuid cluster_id FK
+        bigint clustering_sequence
         text content
         text status
         integer reaction_count
@@ -350,22 +403,16 @@ erDiagram
         uuid id PK
         uuid session_id FK
         uuid professor_user_id FK
+        uuid target_question_id FK
+        uuid target_representative_question_id FK
+        text target_text_snapshot
         uuid source_transcript_version_id FK
-        uuid source_cluster_id_snapshot
-        text source_cluster_title_snapshot
         text status
         bigint capture_started_after_sequence
         uuid start_segment_id FK
         uuid end_segment_id FK
+        text text_content
         bigint version
-    }
-
-    answerQuestions["answer_questions"] {
-        uuid answer_id PK,FK
-        uuid question_id PK,FK
-        uuid session_id FK
-        integer position
-        timestamptz released_at
     }
 
     answerTranscriptMappings["answer_transcript_mappings"] {
@@ -381,19 +428,41 @@ erDiagram
         timestamptz failed_at
     }
 
+    answerOrganizations["answer_organizations"] {
+        uuid id PK
+        uuid answer_id FK,UK
+        uuid session_id FK
+        text content
+        uuid source_transcript_version_id FK
+        uuid source_start_segment_id FK
+        uuid source_end_segment_id FK
+        uuid created_by_job_id FK,UK
+        integer created_by_job_attempt
+        text model_name
+        text prompt_version
+    }
+
+    lectureSessions ||--|| questionClusteringStates : owns_state
+    aiJobs o|--o| questionClusteringStates : last_job
+    aiJobs o|--o| questionClusteringStates : retry_reserved
+    lectureSessions ||--o{ aiRepresentativeQuestions : owns
+    aiJobs ||--o{ aiRepresentativeQuestions : creates
     lectureSessions ||--o{ questionClusters : contains
     aiJobs ||--o{ questionClusters : creates
+    aiRepresentativeQuestions ||--o{ questionClusters : centers
+    questionClusters ||--o{ questionClusterMembers : contains
+    questions o|--o{ questionClusterMembers : student_child
+    aiRepresentativeQuestions o|--o{ questionClusterMembers : preserved_child
     lectureSessions ||--o{ transcriptVersions : owns
     lectureSessions ||--o{ questions : receives
     users ||--o{ questions : authors
-    questionClusters o|--o{ questions : currently_groups
     questions ||--o{ questionReactions : receives
     users ||--o{ questionReactions : reacts
     lectureSessions ||--o{ answers : contains
     users o|--o{ answers : gives
-    transcriptVersions ||--o{ answers : capture_source
-    answers ||--o{ answerQuestions : snapshots
-    questions ||--o{ answerQuestions : included_in
+    questions o|--o| answers : student_target
+    aiRepresentativeQuestions o|--o| answers : representative_target
+    transcriptVersions o|--o{ answers : capture_source
     transcriptSegments o|--o{ answers : starts_at
     transcriptSegments o|--o{ answers : ends_at
     answers ||--o{ answerTranscriptMappings : remaps
@@ -402,13 +471,38 @@ erDiagram
     transcriptSegments o|--o{ answerTranscriptMappings : mapped_starts
     transcriptSegments o|--o{ answerTranscriptMappings : mapped_ends
     aiJobs o|--o{ answerTranscriptMappings : processes
+    answers ||--o| answerOrganizations : organized_as
+    transcriptVersions ||--o{ answerOrganizations : organization_source
+    transcriptSegments ||--o{ answerOrganizations : organization_bounds
+    answers o|--o| aiJobs : organization_target
+    aiJobs ||--o| answerOrganizations : creates
 ```
 
-같은 Job attempt의 Cluster는 하나의 `generation`을 공유하고 서로 다른 `ordinal`을 사용한다. generation은 Session 안에서 새 결과 세트마다 증가하고 재사용하지 않지만, 정확한 원자 할당과 최신 generation watermark·late-result fence는 후속 클러스터링 계약에서 확정한다. `generation`, `ordinal`, `is_final`, `finalized_at`, `created_by_job_id`, `created_by_job_attempt`는 Cluster 공개 lifecycle/provenance다.
+질문 insert는 state 행을 잠가 `requested_sequence + 1`을 Question과 state에 함께 기록한다. active `QUESTION_CLUSTERING` Job과 `retry_job_id`가 모두 없을 때만 fresh `LIVE_INCREMENTAL` Job을 자동 생성한다. active Job이나 retry 예약된 `FAILED`, `retryable=true` LIVE Job이 있으면 watermark만 갱신하고 기존 Job의 captured input은 바꾸지 않는다. `(session_id) WHERE job_type = 'QUESTION_CLUSTERING' AND status IN ('PENDING', 'RUNNING')` partial UNIQUE가 Session당 active Job을 하나로 제한하고, `(session_id) WHERE job_type='QUESTION_CLUSTERING' AND clustering_mode='FINAL'` UNIQUE가 terminal을 포함한 논리 FINAL Job을 하나로 제한한다. 자동 clustering Job의 `requester_user_id`는 항상 NULL이다. Job은 `clustering_mode`, `input_through_sequence`, `base_revision`을 모두 가지고 FINAL이면 `final_answered_through_at`도 필수이며, 결과 commit은 current revision, attempt, run token과 Session 상태가 모두 일치할 때만 가능하다.
 
-실제 질문–Answer lifetime 관계는 취소 snapshot 때문에 1:N일 수 있다. `CANCELLED` 시도는 Answer 개수에서 제외하며, `answer_questions(question_id) WHERE released_at IS NULL` partial UNIQUE가 취소되지 않은 활성·완료 Answer를 질문당 최대 하나로 제한한다. `source_cluster_title_snapshot`은 선택 당시 Cluster `title`, 즉 AI 대표 질문 exact text이며 현재 Cluster를 다시 join하지 않는다. Answer의 `source_transcript_version_id`는 생성 시점의 LIVE version이고 두 원본 Segment 경계는 version·Session을 포함한 복합 FK로 검증한다.
+LIVE 결과는 기존 학생·PRESERVED membership을 각각 정확히 한 번 유지하고 기존 학생의 `logical_cluster_id`를 바꾸지 않은 채 `(applied_sequence, input_through_sequence]`의 새 학생 질문을 각각 정확히 한 번만 배치한다. FINAL은 `input_through_sequence` 이하의 모든 학생 질문과 cutoff까지 `COMPLETED` Answer가 있는 AI 대표 질문을 각각 정확히 한 번, 미답변 대표 질문을 0번 포함하고 모든 logical ID를 새로 만든다. Job 성공 deferred trigger가 이 set equality를 검증하기 전에는 `applied_sequence`를 전진할 수 없다. 실패 FINAL을 교수가 명시적으로 retry하면 학생 질문 상한은 유지하고 `base_revision=current_revision`, `final_answered_through_at=now()`로 재캡처해 그 사이 답변된 대표 질문을 포함한 뒤 같은 Job의 `attempt + 1`을 사용한다. 성공 FINAL은 자동 재생성하지 않는다. FINAL 입력 0건의 Job 생략·성공 빈 원장과 `final_generation` 표현은 미정이다.
 
-`answer_transcript_mappings`의 PK는 `(answer_id, target_transcript_version_id)`다. `PENDING`에는 결과 Segment와 처리 Job이 없고, `SUCCEEDED`에는 같은 target version의 시작·끝 Segment, 처리 Job·attempt와 `mapped_at`이 모두 있으며, `FAILED`에는 처리 Job·attempt와 `failed_at`만 있다. 성공 mapping의 target이 RECORDING version이고 시작 sequence가 끝 sequence 이하인지 deferred trigger가 검증한다. `SESSION_POSTPROCESSING`이 mapping을 담당하며 일부 mapping 실패는 HQ Transcript를 되돌리거나 원본 LIVE Answer 범위를 덮어쓰지 않는다. 시간 범위 matching tolerance·겹침률·동률 해소 알고리즘은 미정이다.
+질문 commit, retry 예약, scheduler requeue·예약 해제, 성공·다음 Job, PRESERVED 취소와 Session 종료처럼 state의 공개 값이 바뀌는 모든 transaction은 `clustering.updated` outbox를 함께 기록한다. 새 generation·revision을 원자 공개한 뒤 이전 generation을 삭제하므로 일반 membership 이력은 남기지 않는다.
+
+API `QuestionCluster.revision`은 선택된 current/final generation을 가리키는 `question_clustering_states.current_revision`에서 계산하며 Cluster 행에는 revision을 중복 저장하지 않는다.
+
+`question_clusters.id`는 generation staging과 membership FK용 물리 row ID다. LIVE에서 기존 semantic Cluster는 새 generation에도 `logical_cluster_id`를 계승하고 새 Cluster만 새 logical ID를 받는다. FINAL full rebuild는 모든 logical ID를 새로 만든다. API `QuestionCluster.id`, Question의 현재 `cluster_id`, members URL은 현재 generation 부모의 `logical_cluster_id`를 사용하며 물리 ID는 노출하지 않는다.
+
+`ai_representative_questions.text`와 생성 Job provenance는 immutable이다. `status`는 학생 질문과 같은 `OPEN`, `SELECTED`, `ANSWERED` Answer 상태이며 `lifecycle_status`의 `ACTIVE`, `PRESERVED`와 분리한다. old 대표 질문에 Answer가 없으면 교체 transaction에서 삭제한다. `CAPTURING` 또는 `COMPLETED` Answer target이면 lifecycle만 `ACTIVE → PRESERVED`로 전이하고 Answer status는 유지한 채 새 대표 질문 Cluster의 typed child membership으로 남긴다. 이 Answer는 해당 대표 질문 하나의 status만 바꾸며 같은 Cluster의 다른 질문 상태에는 영향을 주지 않는다. 두 상태 중 하나를 바꾸는 transaction은 공개 `version + 1`도 같이 적용한다.
+
+Answer의 `num_nonnulls(target_question_id, target_representative_question_id) = 1` CHECK와 target별 partial UNIQUE가 학생 질문·대표 질문 각각에 Answer를 최대 하나로 제한한다. `target_text_snapshot`은 선택 당시 target exact text를 immutable하게 보관한다. Answer 시작·완료·취소는 선택한 target 하나의 status를 `OPEN → SELECTED → ANSWERED` 또는 `SELECTED → OPEN`으로 함께 전이한다. `CAPTURING` 취소는 Answer를 hard delete하고 `CANCELLED`·감사 snapshot을 남기지 않는다. 아직 `ACTIVE`인 대표 질문은 다음 교체 때 미답변 old 대표 질문으로 삭제한다.
+
+`PRESERVED` 대표 질문 취소는 membership과 대표 질문을 지워 current 결과를 바꾸므로 `Session → state → active/retry Job → Answer/target` 순서로 잠근다. 같은 transaction에서 `current_revision + 1`, 기존 active·retry-reserved Job의 nonretryable `FAILED/CLUSTER_REVISION_CHANGED` fence와 예약 해제, backlog가 있으면 새 revision을 캡처한 fresh LIVE Job, `clustering.updated`·`answer.deleted` outbox를 기록한다. 늦은 결과는 stale revision·run token으로 폐기한다.
+
+voice-backed `COMPLETED`는 LIVE source와 Segment 범위를 가지며, 수업 후 text-only `COMPLETED`는 Transcript FK 없이 `text_content`를 가진다. 기존 완료 Answer의 text 보충은 target과 음성 범위를 바꾸지 않는다. API `answer_type`은 source Transcript FK가 있으면 `VOICE`, 없으면 `TEXT`로 계산하며 CHECK 때문에 두 형태를 모호하게 판별할 수 없다.
+
+`answer_transcript_mappings`는 voice-backed 완료 Answer에만 만들며 PK는 `(answer_id, target_transcript_version_id)`다. `PENDING`에는 결과 Segment와 처리 Job이 없고, `SUCCEEDED`에는 같은 target version의 시작·끝 Segment, 처리 Job·attempt와 `mapped_at`이 모두 있으며, `FAILED`에는 처리 Job·attempt와 `failed_at`만 있다. 성공 mapping의 target이 RECORDING version이고 시작 sequence가 끝 sequence 이하인지 deferred trigger가 검증한다. `SESSION_POSTPROCESSING`이 mapping을 담당하며 일부 mapping 실패는 HQ Transcript를 되돌리거나 원본 LIVE Answer 범위를 덮어쓰지 않는다. 시간 범위 matching tolerance·겹침률·동률 해소 알고리즘은 미정이다.
+
+`ANSWER_ORGANIZATION`은 완료 voice Answer당 논리 Job 하나인 `SHARED` blocking 작업이다. coordinator는 Job 생성 때 성공한 HQ mapping 범위를 우선하고 없으면 Answer의 원본 LIVE 범위를 선택해 typed 입력에 복사하며, 이 source는 retry에서도 바꾸지 않는다. 모델 입력은 immutable `target_text_snapshot`과 그 고정 Transcript 범위의 텍스트만 사용하고 교수 수동 `answers.text_content`는 읽거나 포함하거나 덮어쓰지 않는다. 성공 결과 `answer_organizations`는 Answer당·Job당 최대 하나이고 결과 삽입·Job 성공을 원자 commit한다. 실패만 같은 Job 행의 `attempt + 1`로 retry하고 성공 결과는 재생성하지 않는다. 성공 결과의 KnowledgeChunk 재색인은 미정이다.
+
+API `organization_state`는 TEXT=`NOT_APPLICABLE`, Session `LIVE`의 voice `CAPTURING/COMPLETED`=정상적으로 Job 없는 `NOT_STARTED`로 계산한다. `WAITING_SOURCE`는 PROCESSING의 완료 voice에 Job이 없고 coordinator가 source terminal을 기다리는 `PENDING` 또는 source 선택 중인 `RUNNING`일 때만 사용한다. PROCESSING의 Job은 `PENDING/RUNNING/FAILED/SUCCEEDED`, COMPLETED의 Job은 `FAILED/SUCCEEDED`와 명시적 retry인 `attempt > 1`의 `PENDING/RUNNING`이 정상이다. non-SUCCEEDED에는 결과가 없어야 하고 SUCCEEDED에는 현재 attempt 결과가 정확히 하나 있어야 한다. `DATA_INTEGRITY_ERROR`는 coordinator terminal·Session COMPLETED 뒤 Job 누락, LIVE의 organization Job, COMPLETED에서 `attempt=1` active Job, Job 상태와 결과의 모순, READY voice Answer나 PROCESSING CAPTURING Answer 같은 원장 오류에만 사용한다.
+
+이번 질문·클러스터링 결정에서 별도로 남은 미정은 similarity 기준과 모델·prompt, LIVE retry backoff·최대 횟수, 수업 후 text Answer 최대 길이·삭제·성공 FINAL map rebuild, Answer organization 형식·모델·prompt·content 최대 길이·품질·재색인 기준, generation 교체 시 이전 cursor의 만료 오류·재시작, preload page 수와 대규모 마인드맵 UI loading·layout, FINAL 입력 0건의 Job·빈 generation 표현이다. Cluster 목록은 고정 generation 안에서 `ordinal ASC, logical_cluster_id ASC`, child는 `position ASC`이고 공개 child `ordinal=position`이다. 두 endpoint의 기본 limit는 20, 최대는 100이다.
 
 ## 5. AIJob·요약·Chat
 
@@ -437,11 +531,6 @@ erDiagram
         text status
     }
 
-    questions["questions"] {
-        uuid id PK
-        uuid session_id FK
-    }
-
     transcriptSegments["transcript_segments"] {
         uuid id PK
         uuid session_id FK
@@ -460,14 +549,31 @@ erDiagram
         text status
     }
 
+    answers["answers"] {
+        uuid id PK
+        uuid session_id FK
+        text status
+        uuid source_transcript_version_id FK
+        uuid start_segment_id FK
+        uuid end_segment_id FK
+        text text_content
+    }
+
     aiJobs["ai_jobs"] {
         uuid id PK
         uuid session_id FK
         uuid requester_user_id FK
         uuid target_material_id FK
         uuid target_recording_id FK
-        uuid target_question_id FK
         uuid target_chat_id FK
+        uuid target_answer_id FK
+        uuid input_transcript_version_id FK
+        uuid input_start_segment_id FK
+        uuid input_end_segment_id FK
+        text clustering_mode
+        bigint input_through_sequence
+        bigint base_revision
+        timestamptz final_answered_through_at
         text job_type
         text visibility
         text status
@@ -497,6 +603,18 @@ erDiagram
         uuid source_end_segment_id FK
     }
 
+    answerOrganizations["answer_organizations"] {
+        uuid id PK
+        uuid answer_id FK,UK
+        uuid session_id FK
+        text content
+        uuid source_transcript_version_id FK
+        uuid source_start_segment_id FK
+        uuid source_end_segment_id FK
+        uuid created_by_job_id FK,UK
+        integer created_by_job_attempt
+    }
+
     chatSessions["chat_sessions"] {
         uuid id PK
         uuid session_id FK
@@ -521,7 +639,9 @@ erDiagram
     users o|--o{ aiJobs : requests
     lectureMaterials o|--o{ aiJobs : material_target
     sessionRecordings o|--o{ aiJobs : recording_target
-    questions o|--o{ aiJobs : question_target
+    answers o|--o| aiJobs : organization_target
+    transcriptVersions o|--o{ aiJobs : organization_input_version
+    transcriptSegments o|--o{ aiJobs : organization_input_bounds
     aiJobs o|--o{ transcriptVersions : creates_attempts
     sessionRecordings o|--o{ transcriptVersions : source_for
     lectureSessions ||--o{ lectureSummaries : has
@@ -530,6 +650,10 @@ erDiagram
     transcriptVersions ||--o{ lectureSummaries : source_version
     transcriptSegments o|--o{ lectureSummaries : source_starts
     transcriptSegments o|--o{ lectureSummaries : source_ends
+    answers ||--o| answerOrganizations : organized_as
+    aiJobs ||--o| answerOrganizations : creates
+    transcriptVersions ||--o{ answerOrganizations : source_version
+    transcriptSegments ||--o{ answerOrganizations : source_bounds
     lectureSessions ||--o{ chatSessions : has
     users ||--o{ chatSessions : owns
     chatSessions o|--o{ aiJobs : chat_target
@@ -539,13 +663,19 @@ erDiagram
 
 `created_by_job_attempt`는 변경되는 Job 행에 FK로 걸지 않고 생성 당시 attempt snapshot으로 보관한다. 재시도는 같은 Job 행을 `attempt + 1`, `version + 1`, `PENDING`으로 바꾸고 현재 progress·error·실행 시각·run token을 초기화한다. 결과 삽입과 Job `SUCCEEDED` 전환은 같은 transaction이며, `(job_id, attempt, run_token, RUNNING)`이 현재 실행과 일치할 때만 commit해 이전 attempt의 늦은 결과를 차단한다. Material 처리 결과는 여기에 Material 현재 `version`과 `detached_at IS NULL` 조건을 더해 연결 해제 뒤의 늦은 결과도 폐기한다. API는 `visibility`, `attempt`, `version`, progress, `retryable`, `blocks_session_completion`, `updated_at`을 안전한 lifecycle로 공개한다.
 
+`QUESTION_CLUSTERING` 성공 result는 단일 Cluster가 아니라 같은 Job attempt의 generation/list aggregate다. 현재 generation이면 `resource_type=QUESTION_CLUSTER_GENERATION`, `resource_id=generation::text`, `resource_url=/sessions/{session_id}/question-clusters`로 projection한다. 새 generation 공개와 함께 삭제된 과거 성공 결과만 `result=null`, `result_unavailable_reason=SUPERSEDED`를 허용한다. 현재 generation producer 또는 다른 종류의 `SUCCEEDED` Job 결과 누락은 데이터 무결성 오류다.
+
+`QUESTION_CLUSTERING`은 requester 없는 자동 공유 Job이며 Question typed target 대신 Session 범위의 `clustering_mode`, `input_through_sequence`, `base_revision`을 조건부 필수로 가지고 FINAL에는 `final_answered_through_at`도 필수다. Session당 active clustering Job은 하나, terminal을 포함한 논리 FINAL Job은 하나고 retryable FAILED LIVE Job은 state에 하나만 예약한다. 수업 종료 transaction은 active `LIVE_INCREMENTAL` Job과 retry 예약 Job을 모두 `FAILED`, `retryable=false`, `error_code=SESSION_ENDED`로 끝내고 token·lease·예약을 지운다. PROCESSING coordinator가 만드는 `FINAL` Job은 `SHARED`, `blocks_session_completion=true`이며 성공 또는 실패 terminal 전까지 완료 판정에 포함된다. LIVE retry의 captured watermark·revision은 고정하지만, 실패 FINAL을 교수가 명시적으로 retry할 때는 학생 질문 상한만 유지하고 `base_revision=current_revision`, `final_answered_through_at=now()`로 재캡처한 뒤 같은 행의 `attempt + 1`을 사용한다. 종료된 LIVE Job과 stale revision·attempt의 늦은 결과는 commit할 수 없다.
+
 `RECORDING_TRANSCRIPTION`은 실제 `target_recording_id` FK를 갖는 `SHARED` blocking Job이다. `(target_recording_id) WHERE job_type = 'RECORDING_TRANSCRIPTION'` UNIQUE로 Recording당 논리 HQ Job을 하나만 두고 같은 행에서 retry한다. 각 attempt는 새 TranscriptVersion을 만들며 Job의 성공 `result`는 현재 attempt와 같은 `(created_by_job_id, created_by_job_attempt)` version이다. `SESSION_POSTPROCESSING`도 Session당 하나인 `SHARED` blocking coordinator이며 source terminal 전에는 claim하지 않는다. Recording source 자체가 없으면 즉시 claim해 `SUMMARY_SOURCE_UNAVAILABLE`를 확정한다. coordinator가 terminal이 되는 transaction은 먼저 FINAL Summary·final clustering 등 필수 downstream blocking Job을 생성해 완료 판정의 빈 구간을 막는다. LIVE·FINAL Summary는 모두 `source_transcript_version_id`와 같은 version의 시작·끝 Segment를 보관한다. FINAL Summary는 최신 `RECORDING FINALIZED` version의 Segment가 1개 이상일 때만 만들며, `EMPTY`는 `NO_FINAL_TRANSCRIPT`, HQ 실패·무결과 deadline은 `SUMMARY_SOURCE_UNAVAILABLE`다. 보존된 LIVE 포인터는 정책 확정 전 자동 FINAL Summary에 쓰지 않는다.
+
+`ANSWER_ORGANIZATION`은 실제 `target_answer_id`와 immutable Transcript version·시작·종료 Segment 입력을 갖는 `SHARED` blocking Job이다. Answer당 전체 상태를 합쳐 Job 하나만 허용하고 실패 retry는 같은 행의 `attempt + 1`을 사용한다. coordinator는 성공 HQ mapping을 우선하고 없으면 원본 LIVE 범위를 고정한다. watchdog은 Session deadline 전에 Job이 빠진 모든 적용 가능한 voice Answer에 동일 source 선택 규칙으로 `FAILED`, retryable Job을 합성한다. 개별 실패는 다른 결과와 Session 완료를 막지 않으며 완료 뒤 retry도 Session을 `PROCESSING`으로 되돌리지 않는다.
 
 RUNNING Worker는 15초마다 lease를 `now() + 60 seconds`로 갱신한다. 60초 heartbeat 누락이나 `started_at + 5 minutes`를 넘긴 Job은 watchdog이 `FAILED`로 종료하며 HQ STT에도 같은 5분 상한을 적용한다. Session `ended_at + 10 minutes`에는 Session·coordinator를 먼저 잠그고 아직 없는 적용 가능한 downstream blocking Job을 `FAILED`, retryable terminal로 만든 뒤 coordinator, 남은 blocking Job과 비terminal Recording·Upload를 `FAILED`로 바꾸고 완료 predicate를 다시 계산한다. 따라서 실행 전 timeout된 `PENDING` Job의 `FAILED` 상태는 `started_at=NULL`을 허용한다. 모든 blocking Job과 Recording gate가 성공 또는 실패 terminal이면 Session은 `COMPLETED`가 되고, 이후 retry도 Session을 `PROCESSING`으로 되돌리지 않는다. 정상 coordinator와 watchdog 모두 child Job 원장을 먼저 생성하므로 조기 완료 race가 없다.
 
 ## 6. 공통 KnowledgeChunk·Chat 근거
 
-PDF, final Transcript, Question, Answer를 `knowledge_chunks`로 통합한다. source별 nullable 컬럼은 모두 실제 FK이고, generic `source_type + source_id` 관계는 없다. Transcript Chunk는 source version을 명시하며 Chat 근거는 오직 KnowledgeChunk를 참조한다.
+PDF, final Transcript, 학생 Question, AI 대표 질문과 교수 수동 Answer text를 `knowledge_chunks`로 통합한다. source별 nullable 컬럼은 모두 실제 FK이고, generic `source_type + source_id` 관계는 없다. Transcript Chunk는 source version을 명시하며 Chat 근거는 오직 KnowledgeChunk를 참조한다. Answer organization 재색인은 미정이며 현재 source에 포함하지 않는다.
 
 ```mermaid
 erDiagram
@@ -581,6 +711,11 @@ erDiagram
         uuid session_id FK
     }
 
+    aiRepresentativeQuestions["ai_representative_questions"] {
+        uuid id PK
+        uuid session_id FK
+    }
+
     answers["answers"] {
         uuid id PK
         uuid session_id FK
@@ -601,6 +736,7 @@ erDiagram
         uuid transcript_start_segment_id FK
         uuid transcript_end_segment_id FK
         uuid question_id FK
+        uuid representative_question_id FK
         uuid answer_id FK
         integer chunk_index
         text content
@@ -632,6 +768,7 @@ erDiagram
     transcriptSegments o|--o{ knowledgeChunks : transcript_start
     transcriptSegments o|--o{ knowledgeChunks : transcript_end
     questions o|--o{ knowledgeChunks : question_source
+    aiRepresentativeQuestions o|--o{ knowledgeChunks : representative_source
     answers o|--o{ knowledgeChunks : answer_source
     aiJobs ||--o{ knowledgeChunks : creates
     chatMessages ||--o{ chatMessageEvidence : cites
@@ -640,72 +777,100 @@ erDiagram
 
 `knowledge_chunks`에는 다음 무결성 규칙을 둔다.
 
-- `material_id`, `source_transcript_version_id`, `question_id`, `answer_id` 중 정확히 하나만 값이 있다.
+- `material_id`, `source_transcript_version_id`, `question_id`, `representative_question_id`, `answer_id` 중 정확히 하나만 값이 있다.
 - Transcript source는 version과 시작·끝 Segment가 모두 있거나 모두 없다.
 - 모든 typed source, Chunk, Chat Message, Evidence는 복합 FK로 같은 Session을 검증하고 Transcript Segment는 같은 version까지 검증한다.
 - Transcript 시작 sequence는 끝 sequence보다 작거나 같아야 한다.
 - vector 검색은 SQL에서 `course_id`와 `session_id` 범위를 먼저 제한한다. Material source는 `processing_status = 'READY' AND detached_at IS NULL`, Transcript source는 `source_transcript_version_id = lecture_sessions.canonical_transcript_version_id`를 같은 SQL에서 강제한다.
 - 기존 Chat Evidence가 참조하는 과거 version Chunk는 provenance로 유지하되 새 검색에는 섞지 않는다.
+- `answer_id` source는 교수 수동 `answers.text_content`만 나타낸다. AI 정리 본문의 재색인 여부와 provenance 연결은 후속 정책이다.
 
 ## 7. ERD 밖의 핵심 제약
 
 Mermaid cardinality만으로 표현할 수 없는 규칙은 다음과 같다.
 
-| 규칙                                 | DB 보장 방식                                                                                   |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Course의 교수자 owner 정확히 1명     | 교수자 partial UNIQUE + owner 일치 deferrable constraint trigger                               |
-| Course당 active class 합계 최대 1개  | `UNIQUE (course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`                           |
-| 같은 날짜 class 순차 생성·조회       | 날짜 UNIQUE 없음 + `(lecture_date DESC, started_at DESC, id DESC)` index                       |
-| 제목 수정·날짜와 lifecycle 시각 불변 | 빈 제목은 Course 제목·날짜·시각 포함, 상태 전이 trigger와 제한된 update command                |
-| Session당 연결 Material 최대 10개    | Session 행 잠금 + `detached_at IS NULL` count trigger                                          |
-| 연결 Material 표시 이름 유일·안정    | `(session_id, display_name) WHERE detached_at IS NULL` partial UNIQUE + suffix allocation      |
-| PDF 파일 크기 최대 decimal 100 MB    | `CHECK (byte_size BETWEEN 1 AND 100000000)`                                                    |
-| class 시작 Material 조건             | Session→Material 잠금 + 연결된 `PROCESSING` 존재 조건부 거부                                   |
-| Material 업로드·연결 해제 상태       | Session 잠금 + `READY`·`LIVE`·`COMPLETED` 허용, `PROCESSING` 거부                              |
-| Session당 논리 Recording 최대 1개    | `session_recordings.session_id` UNIQUE                                                         |
-| Recording당 active Upload 최대 1개   | `UNIQUE (recording_id) WHERE status = 'ACTIVE'`                                                |
-| 첫 audio publisher claim             | Session 잠금 + `client_stream_id` HMAC; 같은 claim만 reconnect·resume                          |
-| resumable offset·finalize            | `offset_bytes <= total_bytes` + expected-offset 조건부 update·terminal state fence             |
-| Session canonical Transcript         | `(canonical_transcript_version_id, id)` 복합 FK; API `is_canonical` 계산                       |
-| Transcript version 증가·미재사용     | Session과 최대 version 잠금 + `(session_id, version)` UNIQUE                                   |
-| source별 조립 중 version 최대 1개    | `(session_id, source) WHERE status = 'FINALIZING'` partial UNIQUE                              |
-| version terminal 하위 행             | `FINALIZED` Segment `>= 1`, `EMPTY` Segment `= 0`, `FAILED` Segment·Gap `= 0` deferred trigger |
-| version별 Segment sequence           | `(transcript_version_id, sequence)` UNIQUE                                                     |
-| LIVE·HQ Segment source 조건          | LIVE `utterance_id`, RECORDING `recording_start_ms/end_ms` + producer trigger                  |
-| version별 live·final Gap             | LIVE `is_final=false`, RECORDING 최종 gap `is_final=true` constraint trigger                   |
-| HQ STT 시작 gate                     | Recording `UPLOADED` commit + `RECORDING_TRANSCRIPTION` Job·FINALIZING version·outbox          |
-| Recording당 HQ STT Job 하나          | `(target_recording_id) WHERE job_type = 'RECORDING_TRANSCRIPTION'` UNIQUE                      |
-| HQ Job attempt 결과 하나             | `(created_by_job_id, created_by_job_attempt)` partial UNIQUE                                   |
-| Recording·Upload 내부 key 비공개     | API·공유 event·로그에서 final·temp·fragment·manifest key 제외                                  |
-| 질문당 취소되지 않은 Answer 최대 1개 | `UNIQUE (question_id) WHERE released_at IS NULL`                                               |
-| Session당 캡처 중 Answer 최대 1개    | `UNIQUE (session_id) WHERE status = 'CAPTURING'`                                               |
-| 클러스터 generation·순서·provenance  | `(session_id, generation, ordinal)` UNIQUE + Job attempt constraint trigger                    |
-| 클러스터 변경 이력 미보관            | 현재 `questions.cluster_id`를 교체하고 대체된 Cluster 삭제                                     |
-| 종료 후 최종 클러스터 보관           | `question_clusters.is_final`, `finalized_at`                                                   |
-| Answer 대표 질문 snapshot            | 선택 당시 Cluster `title` exact text를 `source_cluster_title_snapshot` 저장                    |
-| Answer 원본 LIVE 범위 보존           | `source_transcript_version_id`와 version-bound 시작·끝 Segment 복합 FK                         |
-| Answer HQ 재매핑 상태                | `(answer_id, target_transcript_version_id)` PK + `PENDING/SUCCEEDED/FAILED` CHECK              |
-| Summary Transcript provenance        | `source_transcript_version_id`와 같은 version의 시작·끝 Segment 복합 FK                        |
-| AIJob 같은 행 재시도                 | `attempt + 1`, 새 `run_token`, lease·현재 attempt 검증                                         |
-| AI 결과 provenance                   | 결과의 `created_by_job_id`, `created_by_job_attempt`                                           |
-| Worker heartbeat·Job timeout         | 15초 heartbeat, 60초 lease, 모든 후처리 Job 5분 상한                                           |
-| Session PROCESSING 상한              | `ended_at + 10 minutes`; 남은 blocking Job·Recording·Upload FAILED 후 완료 재평가              |
-| 실패 포함 Session 완료               | 모든 blocking Job과 Recording gate가 terminal이면 `COMPLETED`; retry는 상태를 되돌리지 않음    |
-| 멱등 응답 정확히 24시간              | `expires_at = completed_at + interval '24 hours'` CHECK                                        |
-| Knowledge source 정확히 한 종류      | Transcript는 version+Segment 범위, 나머지는 typed nullable FK 조합 `CHECK`                     |
-| canonical Transcript만 새 RAG 검색   | Chunk source version과 Session canonical 포인터를 SQL에서 함께 제한                            |
-| Chat 근거 source 통합                | `chat_message_evidence.knowledge_chunk_id` FK                                                  |
-| 서로 다른 Session의 행 연결 금지     | `(resource_id, session_id)` 복합 FK                                                            |
+| 규칙                                  | DB 보장 방식                                                                                                       |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Course의 교수자 owner 정확히 1명      | 교수자 partial UNIQUE + owner 일치 deferrable constraint trigger                                                   |
+| Course당 active class 합계 최대 1개   | `UNIQUE (course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`                                               |
+| 같은 날짜 class 순차 생성·조회        | 날짜 UNIQUE 없음 + `(lecture_date DESC, started_at DESC, id DESC)` index                                           |
+| 제목 수정·날짜와 lifecycle 시각 불변  | 빈 제목은 Course 제목·날짜·시각 포함, 상태 전이 trigger와 제한된 update command                                    |
+| Session당 연결 Material 최대 10개     | Session 행 잠금 + `detached_at IS NULL` count trigger                                                              |
+| 연결 Material 표시 이름 유일·안정     | `(session_id, display_name) WHERE detached_at IS NULL` partial UNIQUE + suffix allocation                          |
+| PDF 파일 크기 최대 decimal 100 MB     | `CHECK (byte_size BETWEEN 1 AND 100000000)`                                                                        |
+| class 시작 Material 조건              | Session→Material 잠금 + 연결된 `PROCESSING` 존재 조건부 거부                                                       |
+| Material 업로드·연결 해제 상태        | Session 잠금 + `READY`·`LIVE`·`COMPLETED` 허용, `PROCESSING` 거부                                                  |
+| Session당 논리 Recording 최대 1개     | `session_recordings.session_id` UNIQUE                                                                             |
+| Recording당 active Upload 최대 1개    | `UNIQUE (recording_id) WHERE status = 'ACTIVE'`                                                                    |
+| 첫 audio publisher claim              | Session 잠금 + `client_stream_id` HMAC; 같은 claim만 reconnect·resume                                              |
+| resumable offset·finalize             | `offset_bytes <= total_bytes` + expected-offset 조건부 update·terminal state fence                                 |
+| Session canonical Transcript          | `(canonical_transcript_version_id, id)` 복합 FK; API `is_canonical` 계산                                           |
+| Transcript version 증가·미재사용      | Session과 최대 version 잠금 + `(session_id, version)` UNIQUE                                                       |
+| source별 조립 중 version 최대 1개     | `(session_id, source) WHERE status = 'FINALIZING'` partial UNIQUE                                                  |
+| version terminal 하위 행              | `FINALIZED` Segment `>= 1`, `EMPTY` Segment `= 0`, `FAILED` Segment·Gap `= 0` deferred trigger                     |
+| version별 Segment sequence            | `(transcript_version_id, sequence)` UNIQUE                                                                         |
+| LIVE·HQ Segment source 조건           | LIVE `utterance_id`, RECORDING `recording_start_ms/end_ms` + producer trigger                                      |
+| version별 live·final Gap              | LIVE `is_final=false`, RECORDING 최종 gap `is_final=true` constraint trigger                                       |
+| HQ STT 시작 gate                      | Recording `UPLOADED` commit + `RECORDING_TRANSCRIPTION` Job·FINALIZING version·outbox                              |
+| Recording당 HQ STT Job 하나           | `(target_recording_id) WHERE job_type = 'RECORDING_TRANSCRIPTION'` UNIQUE                                          |
+| HQ Job attempt 결과 하나              | `(created_by_job_id, created_by_job_attempt)` partial UNIQUE                                                       |
+| Recording·Upload 내부 key 비공개      | API·공유 event·로그에서 final·temp·fragment·manifest key 제외                                                      |
+| 학생 질문 길이                        | `char_length(btrim(content)) BETWEEN 1 AND 300`                                                                    |
+| 질문 작성 AI 초안 미저장              | 초안 200 응답은 Question·AIJob·별도 draft 행을 만들지 않음                                                         |
+| 학생 질문·대표 질문당 Answer 최대 1개 | target별 nullable FK partial UNIQUE + exactly-one target CHECK                                                     |
+| 질문 Answer 상태 정합성               | 학생·대표 질문 `OPEN/SELECTED/ANSWERED` ↔ 없음/`CAPTURING`/`COMPLETED` deferred trigger                           |
+| Session당 캡처 중 Answer 최대 1개     | `UNIQUE (session_id) WHERE status = 'CAPTURING'`                                                                   |
+| Answer 상태·형식                      | `CAPTURING/COMPLETED`; voice range 또는 text-only CHECK, 완료 뒤 text 보충 허용                                    |
+| Answer API type 계산                  | source Transcript FK non-NULL=`VOICE`, NULL+text-only=`TEXT`                                                       |
+| Session당 active clustering Job 하나  | `(session_id) WHERE QUESTION_CLUSTERING AND PENDING/RUNNING` partial UNIQUE                                        |
+| Session당 FINAL clustering Job 하나   | `(session_id) WHERE QUESTION_CLUSTERING AND clustering_mode=FINAL` UNIQUE                                          |
+| 자동 clustering requester 없음        | `job_type=QUESTION_CLUSTERING → requester_user_id IS NULL` CHECK                                                   |
+| 실패 LIVE retry 예약                  | state `retry_job_id`는 같은 Session의 retryable FAILED LIVE Job만 참조                                             |
+| 질문 clustering 순서·watermark        | `(session_id, clustering_sequence)` UNIQUE + state requested/applied sequence                                      |
+| 클러스터 logical·physical ID 분리     | generation row `id`는 내부 FK, `(session_id,generation,logical_cluster_id)` UNIQUE·API projection                  |
+| 클러스터 generation·순서·provenance   | state revision fence + `(session_id, generation, ordinal)` UNIQUE + Job attempt trigger                            |
+| clustering membership 완전성          | mode별 기대 입력과 실제 typed membership set equality 뒤에만 Job 성공·applied 전진                                 |
+| typed Cluster child                   | `num_nonnulls(question_id, representative_question_id) = 1`                                                        |
+| 클러스터 변경 이력 미보관             | state current generation 교체 뒤 이전 Cluster·membership 삭제                                                      |
+| 종료 후 최종 클러스터 보관            | state `final_generation` + `question_clusters.is_final`, `finalized_at`                                            |
+| 수업 종료 중 LIVE Job 차단            | active LIVE Job `FAILED/SESSION_ENDED/nonretryable` + token 제거 + Session/revision fence                          |
+| PRESERVED 취소 clustering fence       | revision+1 + active/retry Job `FAILED/CLUSTER_REVISION_CHANGED` + backlog fresh Job                                |
+| clustering state event 원자성         | requested/retry/success/next/cancel/end 공개 변경과 `clustering.updated` outbox 동시 commit                        |
+| FINAL clustering 완료 gate            | `FINAL`, `SHARED`, `blocks_session_completion=true`; terminal 뒤 Session 완료 평가                                 |
+| AI 대표 질문 상태 분리                | `status=OPEN/SELECTED/ANSWERED`, `lifecycle_status=ACTIVE/PRESERVED` + Answer trigger                              |
+| AI 대표 질문 생명주기                 | immutable text·Job provenance; 미답변 old row 삭제, Answer target old row `PRESERVED` child                        |
+| Answer target·text snapshot           | exactly-one target FK + 선택 당시 exact text를 `target_text_snapshot` 저장                                         |
+| Answer 취소 미보관                    | `CAPTURING` hard delete; `CANCELLED`, released row 없음                                                            |
+| Answer 원본 LIVE 범위 보존            | `source_transcript_version_id`와 version-bound 시작·끝 Segment 복합 FK                                             |
+| Answer HQ 재매핑 상태                 | `(answer_id, target_transcript_version_id)` PK + `PENDING/SUCCEEDED/FAILED` CHECK                                  |
+| voice Answer당 정리 Job 하나          | `(target_answer_id) WHERE job_type = 'ANSWER_ORGANIZATION'` UNIQUE                                                 |
+| Answer organization source 고정       | Job typed Transcript version·시작·종료 Segment immutable + 결과 일치 trigger                                       |
+| Answer organization 결과 하나         | `answer_id`·`created_by_job_id` UNIQUE + 결과 삽입·Job 성공 원자 transaction                                       |
+| Answer organization 상태 projection   | TEXT=NOT_APPLICABLE, LIVE voice=NOT_STARTED, PROCESSING source 대기만 WAITING_SOURCE, Job 상태 또는 원장 오류 계산 |
+| 수동·AI Answer 본문 분리              | `answers.text_content`와 `answer_organizations.content` 별도 원장, organization 재색인은 TBD                       |
+| Summary Transcript provenance         | `source_transcript_version_id`와 같은 version의 시작·끝 Segment 복합 FK                                            |
+| AIJob 같은 행 재시도                  | `attempt + 1`, 새 `run_token`, lease·현재 attempt 검증                                                             |
+| AI 결과 provenance                    | 결과의 `created_by_job_id`, `created_by_job_attempt`                                                               |
+| clustering Job 결과 aggregate         | current generation은 `QUESTION_CLUSTER_GENERATION`, 과거 삭제 generation만 `SUPERSEDED`                            |
+| Worker heartbeat·Job timeout          | 15초 heartbeat, 60초 lease, 모든 후처리 Job 5분 상한                                                               |
+| Session PROCESSING 상한               | `ended_at + 10 minutes`; 남은 blocking Job·Recording·Upload FAILED 후 완료 재평가                                  |
+| 실패 포함 Session 완료                | 모든 blocking Job과 Recording gate가 terminal이면 `COMPLETED`; retry는 상태를 되돌리지 않음                        |
+| 누락 Answer 정리 Job timeout 원장     | deadline 전에 적용 가능한 voice Answer별 immutable source의 retryable `FAILED` Job 합성                            |
+| 멱등 응답 정확히 24시간               | `expires_at = completed_at + interval '24 hours'` CHECK                                                            |
+| Knowledge source 정확히 한 종류       | Transcript는 version+Segment 범위, 학생·대표 질문 등은 typed nullable FK 조합 `CHECK`                              |
+| canonical Transcript만 새 RAG 검색    | Chunk source version과 Session canonical 포인터를 SQL에서 함께 제한                                                |
+| Chat 근거 source 통합                 | `chat_message_evidence.knowledge_chunk_id` FK                                                                      |
+| 서로 다른 Session의 행 연결 금지      | `(resource_id, session_id)` 복합 FK                                                                                |
 
 ## 8. 삭제 관계 요약
 
 - Course 삭제는 불변 owner만 요청할 수 있고 CourseMember와 LectureSession aggregate를 삭제한다. active class가 있을 때의 허용 여부와 삭제 후 복구 유예는 아직 미정이다.
-- LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Recording, Upload, TranscriptVersion, Segment, Gap, Answer mapping, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
+- LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Recording, Upload, TranscriptVersion, Segment, Gap, Answer mapping, Answer organization, clustering state, 대표 질문, Cluster membership, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
 - Material 연결 해제는 교수자가 Session `READY`, `LIVE`, `COMPLETED`에서 `detached_at`을 기록하는 tombstone 처리다. `PROCESSING`에서는 거부하고, 결과가 없는 `PENDING`·`RUNNING`·`FAILED` Material Job을 함께 제거한 뒤 commit 즉시 목록·상세·content·RAG에서 제외한다. 결과 provenance로 참조되는 `SUCCEEDED` Job은 보존한다.
 - User 탈퇴는 공유 학습 기록을 지우지 않고 User 행을 익명화한다. 인증 정보와 개인 Chat·LIVE Summary는 제거한다.
-- Cluster 삭제 시 Question의 현재 Cluster FK만 `NULL` 처리한다. Answer의 선택 Cluster ID·AI 대표 질문 exact text와 AnswerQuestion membership snapshot은 FK 없이 유지한다.
-- 결과→AIJob, Answer mapping→후처리 Job과 Evidence→KnowledgeChunk는 deferred `NO ACTION`으로 독립 삭제를 막되 aggregate 전체 삭제는 허용한다.
-- 삭제는 `Course → Session → Material → Recording → Upload → TranscriptVersion → AIJob` 잠금 순서를 사용하고, Session 단독 삭제도 `Session → Material → Recording → Upload → TranscriptVersion → AIJob`을 사용한다. Material lifecycle은 기존 `Session → Material → AIJob`, Recording·HQ lifecycle은 `Session → Recording → Upload → TranscriptVersion → AIJob` 순서를 사용한다. 삭제·연결 해제된 Material의 늦은 결과는 attempt·run token·상태와 Material version·tombstone fence에서 폐기하고, HQ 늦은 결과는 Job attempt·run token과 TranscriptVersion `FINALIZING` 상태를 모두 통과해야 한다.
+- Cluster generation 교체 시 membership을 함께 삭제한다. old AI 대표 질문은 Answer가 없으면 삭제하고, Answer target이면 `lifecycle_status=PRESERVED` child와 immutable `target_text_snapshot`으로 유지한다.
+- 결과→AIJob, Answer mapping→후처리 Job, Answer organization→정리 Job과 Evidence→KnowledgeChunk는 deferred `NO ACTION`으로 독립 삭제를 막되 aggregate 전체 삭제는 허용한다. Answer 삭제는 organization을 cascade하지만 target Answer→Job FK 때문에 관련 Job을 함께 처리하지 않으면 commit되지 않는다.
+- 삭제는 `Course → Session → Material → Recording → Upload → TranscriptVersion → ClusteringState → Answer → AIJob` 잠금 순서를 사용하고 Session 단독 삭제도 같은 하위 순서를 사용한다. Material lifecycle은 `Session → Material → AIJob`, Recording·HQ lifecycle은 `Session → Recording → Upload → TranscriptVersion → AIJob`, 질문 lifecycle은 `Session → ClusteringState → AIJob → Question/RepresentativeQuestion`, Answer organization lifecycle은 `Session → Answer → AnswerMapping → AIJob` 순서를 사용한다. Material·HQ·organization 늦은 결과는 기존 version·attempt·run token fence에서, 종료된 LIVE clustering 결과는 Job 상태·run token·state revision·Session 상태 fence에서 폐기한다.
 - PDF·Recording final object와 Upload temp object는 DB 행 삭제 전 key를 수집해 같은 transaction의 내부 outbox task로 background 정리한다. object 삭제는 멱등 재시도하고 정리 실패가 삭제된 aggregate를 다시 노출하지 않는다.
 - 연결 해제 Material의 원문 content link는 제공하지 않는다. Evidence가 참조하는 Material source Chunk의 보관, snapshot 또는 FK 변경, 과거 Evidence label·source 표시 방식과 Material·Chunk hard delete 시점은 미정이다. 결정 전에는 deferred `NO ACTION` FK와 Material tombstone을 유지하고 참조 행을 임의로 삭제하지 않는다.
 - Recording이 없어도 Session 종료는 허용한다. Session `ended_at + 10 minutes`에는 남은 blocking Job과 비terminal Recording·Upload를 `FAILED`로 만들고 성공·실패와 관계없이 완료 predicate를 평가한다. HQ 실패 또는 HQ 결과 없이 deadline에 도달하면 LIVE 포인터를 보존하되 이를 완료 기록의 final source로 인정할지는 미정이다. 녹음 동의·접근·보관·삭제와 quota·backup·RPO·RTO도 미정이며, 물리 file·fragment·manifest cardinality를 추가 테이블로 굳히지 않는다.

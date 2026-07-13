@@ -18,6 +18,7 @@ GOAL 서비스의 페이지, 화면 영역, 사용자 기능과 백그라운드 
 - **끝난 class**: 강의 종료 후 기록 정리가 완료된 세션
 - **live final Segment**: 수업 중 발화 단위로 확정해 저장한 실시간 Segment. 영구 Transcript의 `FINALIZED` 상태와는 다르다.
 - **canonical Transcript**: 전체 녹음 HQ STT, Segment 저장, 문장 시간·녹음 위치 매핑과 canonical 전환을 마친 수업 후 기준 Transcript
+- **Answer AI 정리**: LIVE에서 완료된 음성 Answer의 HQ 재매핑 범위 또는 immutable 원본 LIVE 범위를 바탕으로 후처리에서 자동 생성하고 교수자 text와 별도로 보관하는 결과
 - `LIVE_CLASS_PAGE_*`: 학생·교수자 실시간 class 페이지에 공통으로 사용되는 영역
 - `ENDED_CLASS_PAGE_*`: 학생·교수자 완료 class 페이지에 공통으로 사용되는 영역
 
@@ -80,8 +81,8 @@ ROOT(0)
 | Course 삭제 | `COURSE_DELETE` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | 종료·보관 상태나 owner 이전 없이 유일한 owner가 Course 삭제를 요청; active class가 있을 때의 삭제와 삭제 후 복구 정책은 미정 | owner가 Course 삭제를 선택하고 확인 |
 | class 제목 수정 | `CLASS_TITLE_EDIT` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`LIVE`·`PROCESSING`·`COMPLETED`에서 제목을 수정하며 빈 제목은 Course 제목·날짜·시각을 포함한 서버 자동 제목 사용; 날짜와 상태 시각은 수정 불가 | owner가 해당 class의 제목 수정 선택 |
 | class 삭제 | `CLASS_DELETE` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`COMPLETED`에서 삭제; `LIVE`는 종료 후 `PROCESSING` 완료를 기다리고 `PROCESSING`은 완료까지 삭제 불가 | owner가 삭제 가능한 상태의 class에서 삭제 선택 |
-| 끝난 class 메인 페이지-교수자 | `ENDED_CLASS_PAGE_PROF` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | 강의자료 추가·삭제·열람, canonical Transcript의 final·empty·failed 상태와 mixed gap, 접근 허용 시 녹음 playback·문장 seek, AI 요약, 질문·답변 정리와 실패한 후처리 작업 재시도 제공 | 완료 class 목록에서 특정 class 선택 |
-| 끝난 class 메인 페이지-학생 | `ENDED_CLASS_PAGE_STUD` | 4 | 페이지 | `COURSE_PAGE_STUD` | 학생 | MVP 필수 | 강의자료, canonical Transcript의 final·empty·failed 상태와 mixed gap, 접근 허용 시 녹음 playback·문장 seek, AI 요약, 질문·교수자 답변과 복습 AI 제공 | 완료 class 목록에서 특정 class 선택 |
+| 끝난 class 메인 페이지-교수자 | `ENDED_CLASS_PAGE_PROF` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | 강의자료 추가·삭제·열람, canonical Transcript의 final·empty·failed 상태와 mixed gap, 접근 허용 시 녹음 playback·문장 seek, AI 요약, FINAL 질문 마인드맵·target별 Answer·교수자 text·별도 AI 정리와 실패한 후처리 작업 재시도 제공 | 완료 class 목록에서 특정 class 선택 |
+| 끝난 class 메인 페이지-학생 | `ENDED_CLASS_PAGE_STUD` | 4 | 페이지 | `COURSE_PAGE_STUD` | 학생 | MVP 필수 | 강의자료, canonical Transcript의 final·empty·failed 상태와 mixed gap, 접근 허용 시 녹음 playback·문장 seek, AI 요약, 질문·교수자 text 우선 Answer·별도 AI 정리와 복습 AI 제공 | 완료 class 목록에서 특정 class 선택 |
 | 실시간 class 메인 페이지-교수자 | `LIVE_CLASS_PAGE_PROF` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | 단일 audio publisher, 실시간 음성 전송·브라우저 로컬 녹음, 강의자료 상태, STT, Transcript, 질문·답변과 class 종료 기능 제공 | class 시작 또는 진행 중인 class에 재입장 |
 | 실시간 class 메인 페이지-학생 | `LIVE_CLASS_PAGE_STUD` | 4 | 페이지 | `COURSE_PAGE_STUD` | 학생 | MVP 필수 | 실시간 Transcript, 익명 질문·반응, AI 요약과 현재 연결된 `READY` 강의자료 기반 AI 채팅 제공 | 진행 중인 class 입장 선택 |
 
@@ -96,7 +97,7 @@ ROOT(0)
 | 끝난 class 강의 녹음 재생 | `ENDED_AUDIO_PLAY` | 5 | 기능 | `ENDED_CLASS_PAGE_*` | 교수자·학생(접근 정책 미정) | MVP 필수 | 교수자·학생 화면에 같은 player 구조와 접근 거부 상태를 두고 요청마다 권한을 재확인한 뒤 저장 녹음 playback 제공 | 완료 class에서 녹음 playback 권한 확인 |
 | 끝난 class Transcript 다운로드 | `ENDED_CLASS_TRANSCRIPT_DOWNLOAD` | 5 | 기능 | `ENDED_CLASS_PAGE_*` | 공통 | MVP 이후 | final Transcript를 텍스트 파일로 다운로드 | 완료 class에서 Transcript 다운로드 선택 |
 | 끝난 class 강의자료 다시 보기 | `ENDED_MATERIAL_VIEW` | 5 | 기능 | `ENDED_CLASS_PAGE_*` | 공통 | MVP 필수 | Course 참여 권한을 확인한 뒤 해당 class에 현재 연결된 열람 가능한 PDF를 표시; 삭제된 Material 원문은 제공하지 않음 | 완료 class에 연결된 열람 가능 PDF가 존재 |
-| 끝난 class 질문 목록 영역 | `ENDED_QUESTION_AREA` | 5 | 영역 | `ENDED_CLASS_PAGE_*` | 공통 | MVP 필수 | 질문을 클러스터별로 묶고 반응 수, 답변 상태와 연결된 교수자 답변 표시 | 완료 class 페이지에 항상 표시 |
+| 끝난 class 질문 마인드맵 영역 | `ENDED_QUESTION_AREA` | 5 | 영역 | `ENDED_CLASS_PAGE_*` | 공통 | MVP 필수 | FINAL AI 대표질문을 중앙에, 학생 질문·답변된 과거 대표질문을 typed child로 표시하고 target별 교수자 text 우선 Answer·별도 AI 정리·원본 음성 범위와 마지막 FINAL Job 상태 제공 | 완료 class 페이지에 항상 표시 |
 | 끝난 class AI 강의 요약 영역 | `ENDED_SUMMARY_AREA` | 5 | 영역 | `ENDED_CLASS_PAGE_*` | 공통 | MVP 필수 | 핵심 내용·주요 개념을 표시하고 `NO_FINAL_TRANSCRIPT`의 요약 대상 없음과 `SUMMARY_SOURCE_UNAVAILABLE`의 원본 장애를 구분하며 실패 시 재시도 또는 저장 기록 우선 열람 지원 | 완료 class 페이지에 진입 |
 | 끝난 class Transcript 영역 | `ENDED_TRANSCRIPT_AREA` | 5 | 영역 | `ENDED_CLASS_PAGE_*` | 공통 | MVP 필수 | canonical Transcript의 `FINALIZED`·`EMPTY`·`FAILED`를 구분하고 Segment와 gap을 시간 순으로 함께 표시 | 완료 class 페이지에 항상 표시 |
 | 실시간 class AI 대화 영역 | `LIVE_AI_CHAT_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | 현재 연결된 `READY` PDF와 현재 Transcript 기반 요약·설명·질의응답 및 처리·실패·재시도 상태 제공 | 학생 실시간 class 페이지에 표시하거나 접고 펼침 |
@@ -105,7 +106,7 @@ ROOT(0)
 | 브라우저 로컬 녹음 | `LIVE_LOCAL_RECORDING` | 5 | 백그라운드 작업 | `LIVE_CLASS_PAGE_PROF` | 교수자 | MVP 필수 | 실시간 Audio WS와 독립적으로 같은 마이크를 로컬 녹음하고 종료 후 resumable upload 준비 | active publisher 탭에서 audio 시작 성공 |
 | 실시간 class 끝내기 | `LIVE_CLASS_QUIT` | 5 | 기능 | `LIVE_CLASS_PAGE_PROF` | 교수자 | MVP 필수 | 새 실시간 입력을 마감하고 class를 정리 중 상태로 전환해 후처리 시작 | 교수자가 종료 버튼을 선택하고 확인 |
 | 실시간 class 시작하기 | `LIVE_CLASS_START` | 5 | 기능 | `CLASS_CREATE_PAGE` | 교수자 | MVP 필수 | attached Material 중 `PROCESSING`이 없으면 PDF 0개 또는 `READY`·`UPLOADED`·`FAILED` 상태로도 `READY` class를 시작; AI는 `READY`만 참고 | class 정보가 준비되고 attached `PROCESSING` Material이 없을 때 시작 선택 |
-| 실시간 class 질문 목록 영역 | `LIVE_QUESTION_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | 익명 질문, 반응 수, 답변 상태와 유사 질문 클러스터 표시; 교수자는 정렬·답변 대상 선택 | 실시간 class 페이지에 항상 표시 |
+| 실시간 class 질문 마인드맵 영역 | `LIVE_QUESTION_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | AI 대표질문 중앙, 학생 질문과 `CAPTURING`·`COMPLETED` Answer로 보존된 과거 대표질문 typed child 구조, 익명 질문·반응·target별 답변 상태·자동 클러스터링과 마지막 Job 상태 표시; 교수자는 정렬·답변 target 하나 선택 | 실시간 class 페이지에 항상 표시 |
 | 실시간 class Transcript 영역 | `LIVE_TRANSCRIPT_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | partial STT를 즉시 갱신하고 final Transcript를 누적 표시하며 연결·재연결 상태 구분 | 실시간 class 페이지에 항상 표시 |
 
 ### Level 6 · 세부 기능 및 후처리
@@ -114,17 +115,18 @@ ROOT(0)
 |---|---|---:|---|---|---|---|---|---|
 | 끝난 class에서 AI와 질의응답 | `ENDED_AI_CHATING` | 6 | 기능 | `ENDED_AI_CHAT_AREA` | 공통 | MVP 필수 | 해당 class에 현재 연결된 `READY` PDF, final Transcript와 Q&A를 검색해 근거 기반 답변 생성 | 완료 class AI 채팅에 복습 질문 전송 |
 | 끝난 class Transcript 위치 재생 | `ENDED_CLASS_TRANSCRIPT_PLAY` | 6 | 기능 | `ENDED_TRANSCRIPT_AREA` | 교수자·학생(접근 정책 미정) | MVP 필수 | 권한 재확인 후 Transcript 문장을 선택해 표시 시각 추정값이 아닌 서버 제공 녹음 위치로 seek | 저장 녹음과 문장 위치가 제공되고 playback 권한 확인 |
-| 끝난 class 복습 질문 답변 | `ENDED_QUESTION_ANSWER` | 6 | 기능 | `ENDED_QUESTION_AREA` | 교수자 | MVP 이후 | 종료 후 추가된 복습 질문에 텍스트 답변 등록 | 완료 class의 미답변 복습 질문 선택 |
+| 끝난 class 텍스트 Answer | `ENDED_QUESTION_ANSWER` | 6 | 기능 | `ENDED_QUESTION_AREA` | Course 교수자 | MVP 필수 | LIVE에서는 text를 작성하지 않고, `COMPLETED`에서 미답변 학생 질문·AI 대표질문 target에 text-only Answer를 등록하거나 기존 음성 Answer의 교수자 text를 추가·수정; 최대 길이·삭제 정책은 미정 | 교수자가 `COMPLETED` class의 Answer target 선택 |
+| 끝난 class Answer AI 정리 | `ENDED_ANSWER_ORGANIZATION` | 6 | 영역·기능 | `ENDED_QUESTION_AREA` | 공통·Course 교수자 | MVP 필수 | 교수자 text를 우선 표시하고 AI 정리 결과를 별도 label로 표시하며 원본 음성 범위를 항상 제공; Course 교수자에게만 실패한 같은 `ANSWER_ORGANIZATION` Job의 `attempt + 1` 재시도 제공 | 완료된 음성 Answer가 있거나 정리 Job이 실패 |
 | 끝난 class 복습 질문 올리기 | `ENDED_QUESTION_UPLOAD` | 6 | 기능 | `ENDED_QUESTION_AREA` | 학생 | MVP 이후 | 종료 후 추가 질문을 남기는 확장 기능; MVP에서는 종료된 class에 새 질문·반응 등록 불가 | 완료 class에서 추가 복습 질문 등록 |
 | 실시간 class에서 AI와 질의응답 | `LIVE_AI_CHATING` | 6 | 기능 | `LIVE_AI_CHAT_AREA` | 공통 | MVP 필수 | 현재 class에 연결된 `READY` PDF와 Transcript를 우선 근거로 답변하고 근거가 없으면 확인 불가 안내 | AI 채팅창에 질문 또는 설명 요청 전송 |
-| class 종료 후 기록 정리 | `LIVE_CLASS_QUIT_PROCESS` | 6 | 백그라운드 작업 | `LIVE_CLASS_QUIT` | 공통 | MVP 필수 | 녹음 upload, 전체 녹음 HQ STT, canonical 전환, 기존 Answer 시간 범위 재매핑, 강의 요약과 질문 클러스터링을 독립 처리하고 부분 성공·재시도 지원 | 교수자가 class 종료 확정 |
-| 실시간 질문 답변 시작 | `LIVE_QUESTION_ANSWER` | 6 | 기능 | `LIVE_QUESTION_AREA` | 교수자 | MVP 필수 | 선택 시점부터 교수자 음성의 final Transcript를 답변 후보 구간으로 연결 | 미답변 질문 또는 질문 클러스터 선택 |
-| 실시간 질문 답변 완료 | `LIVE_QUESTION_ANSWER_COMPLETE` | 6 | 기능 | `LIVE_QUESTION_AREA` | 교수자 | MVP 필수 | 답변 종료 시 해당 final Transcript 구간을 질문 답변으로 확정하고 상태 전파 | 답변 대상 선택 후 음성 답변 완료 |
-| 실시간 유사 질문 클러스터링 | `LIVE_QUESTION_CLUSTER` | 6 | 백그라운드 작업 | `LIVE_QUESTION_AREA` | 공통 | MVP 필수 | 같은 class의 열린 질문을 의미 유사도로 묶고 대표 주제와 원본 질문 목록 갱신 | 새 질문 등록 후 클러스터링 실행 |
-| AI 질문 문장 작성 도움 | `LIVE_QUESTION_DRAFT_HELP` | 6 | 기능 | `LIVE_AI_CHAT_AREA` | 학생 | MVP 필수 | 현재 강의 맥락에 맞는 익명 질문 문장 후보 제안 | 학생이 질문 작성 도움 요청 |
+| class 종료 후 기록 정리 | `LIVE_CLASS_QUIT_PROCESS` | 6 | 백그라운드 작업 | `LIVE_CLASS_QUIT` | 공통 | MVP 필수 | 실행 중 LIVE 클러스터링 commit을 차단하고, 녹음 upload·HQ STT·canonical 전환·Answer 재매핑·완료된 음성 Answer별 AI 정리·Summary와 종료 시점 학생 실제 질문+답변 완료 AI 대표질문의 FINAL 재클러스터링을 독립 처리 | 교수자가 class 종료 확정 |
+| 실시간 질문 답변 시작 | `LIVE_QUESTION_ANSWER` | 6 | 기능 | `LIVE_QUESTION_AREA` | 교수자 | MVP 필수 | 미답변 학생 질문 또는 AI 대표질문 하나를 target으로 선택해 `CAPTURING` Answer를 만들고 선택 시점 문구와 이후 final Transcript를 보존 | 미답변 target 하나 선택 |
+| 실시간 질문 답변 완료·취소 | `LIVE_QUESTION_ANSWER_COMPLETE` | 6 | 기능 | `LIVE_QUESTION_AREA` | 교수자 | MVP 필수 | 완료 시 target 하나에만 final Transcript 범위를 확정하고, 취소 시 `CAPTURING` Answer를 hard delete해 취소 기록을 노출하지 않음 | Answer 캡처 중 완료 또는 취소 선택 |
+| 실시간 유사 질문 클러스터링 | `LIVE_QUESTION_CLUSTER` | 6 | 백그라운드 작업 | `LIVE_QUESTION_AREA` | 공통 | MVP 필수 | 질문 commit마다 pending watermark를 갱신하고 `active_job_id`·`retry_job_id`가 모두 없을 때만 fresh Job 생성; retry 예약 중에는 같은 행의 `attempt + 1`을 기다리며 새 질문을 watermark에 합치고, 새 질문만 배치해 영향받은 Cluster의 immutable AI 대표질문만 재생성 | 새 질문 commit 후 시스템이 자동 예약 |
+| AI 질문 문장 작성 도움 | `LIVE_QUESTION_DRAFT_HELP` | 6 | 기능 | `LIVE_QUESTION_AREA` | 학생 | MVP 필수 | `btrim` 후 Unicode code point 500자 이하 초안을 AIJob 없는 동기 `200`으로 다듬어 300자 이하 후보 제안; 초과는 자르지 않고 거부 | 학생이 질문 작성 도움 요청 |
 | ‘나도 궁금해요’ 반응 | `LIVE_QUESTION_METOO` | 6 | 기능 | `LIVE_QUESTION_AREA` | 학생 | MVP 필수 | 학생별 한 번만 반응하고 추가·취소 결과와 최신 수를 실시간 반영 | 다른 질문의 반응을 선택 또는 취소 |
 | 실시간 인기 질문 우선 정렬 | `LIVE_QUESTION_SORT` | 6 | 기능 | `LIVE_QUESTION_AREA` | 공통 | MVP 필수 | 미답변 질문을 반응 수 내림차순으로 정렬해 교수자의 답변 우선순위 판단 지원 | 교수자가 인기순 정렬 선택 |
-| 실시간 class 질문 올리기 | `LIVE_QUESTION_UPLOAD` | 6 | 기능 | `LIVE_QUESTION_AREA` | 학생 | MVP 필수 | 작성자 이름을 노출하지 않고 질문을 추가하며 빈 입력·중복 제출·전송 실패 처리 | 질문 내용을 입력하고 등록 |
+| 실시간 class 질문 올리기 | `LIVE_QUESTION_UPLOAD` | 6 | 기능 | `LIVE_QUESTION_AREA` | 학생 | MVP 필수 | 작성자를 노출하지 않고 `btrim` 후 Unicode code point 300자 이하 질문을 commit한 뒤 클러스터링 pending watermark를 자동 갱신; 초과는 자르지 않고 거부 | 질문 내용을 입력하고 등록 |
 | 실시간 class Transcript 요약 | `LIVE_TRANSCRIPT_SUMMARY` | 6 | 기능 | `LIVE_TRANSCRIPT_AREA` | 학생 | MVP 필수 | 현재까지 또는 선택한 Transcript와 현재 연결된 `READY` PDF를 바탕으로 놓친 맥락 요약 | 학생이 현재까지 또는 선택 영역 요약 요청 |
 | 동일 publisher 재연결 | `LIVE_AUDIO_PUBLISHER_RESUME` | 6 | 백그라운드 작업 | `LIVE_AUDIO_PUBLISHER` | 교수자 | MVP 필수 | active publisher가 같은 `client_stream_id`로 재연결하고 서버가 수락한 위치부터 resume; 다른 탭 takeover는 미정 | active publisher Audio 연결 단절 |
 
@@ -132,10 +134,12 @@ ROOT(0)
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| class 기록 정리 중 상태 | `CLASS_PROCESSING_STATE` | 7 | 영역 | `LIVE_CLASS_QUIT_PROCESS` | 공통 | MVP 필수 | 새 입력이 막힌 `PROCESSING`에서 녹음 upload·HQ STT·canonical 전환·Answer 재매핑·최종 AI 작업과 부분 실패를 독립 표시하고 완료 후 기록 페이지로 전환; owner는 제목만 수정하고 class·Material 삭제와 Material 업로드는 불가 | class 종료 확정 직후 |
+| class 기록 정리 중 상태 | `CLASS_PROCESSING_STATE` | 7 | 영역 | `LIVE_CLASS_QUIT_PROCESS` | 공통 | MVP 필수 | 새 입력이 막힌 `PROCESSING`에서 녹음 upload·HQ STT·canonical 전환·Answer 재매핑·음성 Answer별 AI 정리·최종 AI 작업과 부분 실패를 독립 표시하고 완료 후 기록 페이지로 전환; owner는 제목만 수정하고 class·Material 삭제와 Material 업로드는 불가 | class 종료 확정 직후 |
 | 녹음 resumable upload 상태 | `CLASS_RECORDING_UPLOAD_STATE` | 7 | 영역 | `CLASS_PROCESSING_STATE` | 공통 | MVP 필수 | upload 준비·진행 중·중단·재개 중·완료·실패와 원본 저장을 표시하고 완료 뒤 HQ STT 시작; protocol 세부는 미정 | publisher 탭의 로컬 녹음 마감 뒤 |
 | HQ STT·canonical Transcript 상태 | `CLASS_HQ_STT_START` | 7 | 영역 | `CLASS_PROCESSING_STATE` | 공통 | MVP 필수 | 녹음 upload 완료 뒤 전체 녹음 HQ STT를 시작하고 영구 Transcript의 `FINALIZING`·`FINALIZED`·`FAILED`·`EMPTY`, Segment 저장·시간/녹음 위치 매핑과 canonical 전환을 표시 | 녹음 upload 완료 뒤 |
 | Answer 시간 범위 재매핑 상태 | `CLASS_ANSWER_REMAP_STATE` | 7 | 영역 | `CLASS_PROCESSING_STATE` | 공통 | MVP 필수 | canonical 전환 뒤 기존 Answer 시간 범위를 HQ Segment에 다시 연결해 `PENDING`·`SUCCEEDED`·`FAILED`를 표시하고 일부 실패를 다른 기록과 분리; 허용 오차·부분 일치 상태는 미정 | canonical HQ Transcript 확정 뒤 |
+| Answer AI 정리 상태 | `CLASS_ANSWER_ORGANIZATION_STATE` | 7 | 영역 | `CLASS_PROCESSING_STATE` | 공통 | MVP 필수 | LIVE 완료 음성 Answer를 Job 없는 `WAITING_SOURCE`로 표시하고 재매핑·source가 terminal이 되면 coordinator가 공유 완료 차단 `ANSWER_ORGANIZATION` Job을 자동 생성; HQ 성공 범위 우선·immutable LIVE 범위 fallback과 Answer별 terminal 성공·실패를 독립 표시 | Session `PROCESSING` 전환 뒤 source 선택 대기부터 시작 |
+| FINAL 질문 클러스터링 상태 | `CLASS_FINAL_CLUSTER_STATE` | 7 | 영역 | `CLASS_PROCESSING_STATE` | 공통 | MVP 필수 | LIVE 결과 commit을 차단하고 종료 시점 학생 실제 질문 전체·그때까지 `COMPLETED` Answer가 있는 AI 대표질문을 중앙 여부와 무관하게 처음부터 재배치하는 최종 Job의 mode·상태·attempt·부분 실패 표시; FAILED 뒤 명시적 retry는 Answer 시각 상한을 다시 캡처 | Session `PROCESSING` 전환 뒤 |
 
 ## 3. MVP 범위 요약
 
@@ -151,7 +155,10 @@ ROOT(0)
 - 전체 녹음 HQ STT, 문장 Segment의 시간·녹음 위치 정렬과 영구 Transcript `FINALIZING`·`FINALIZED`·`FAILED`·`EMPTY`
 - canonical Transcript 전환과 기존 Answer 시간 범위·AI 검색 데이터 재연결
 - 첫 audio publisher 탭·동일 publisher 재연결과 중복 publisher 전송 거부
-- 익명 질문, ‘나도 궁금해요’, 유사 질문 클러스터링과 교수자 답변 연결
+- 300자 익명 질문, 500자 AI 작성 도움 초안, ‘나도 궁금해요’와 자동 LIVE 클러스터링·coalescing
+- AI 대표질문 중앙·typed child 마인드맵, target별 교수자 음성 Answer와 취소 hard delete
+- LIVE 완료 음성 Answer별 자동 AI 정리, HQ 재매핑 우선·원본 LIVE 범위 fallback, 교수자 text 우선·AI 결과 분리 표시와 실패 재시도
+- FINAL 전체 재클러스터링과 `COMPLETED` class의 교수자 text-only·기존 Answer text 추가·수정
 - 수업 중 Transcript 요약과 현재 연결된 `READY` 강의자료 기반 AI 질의응답
 - class 종료 후 canonical Transcript의 Segment·gap, 요약·질문·답변 기록 생성과 부분 실패 표시
 - 해당 class 기록 기반 복습 AI
@@ -161,5 +168,5 @@ ROOT(0)
 
 - 음성 원본 다운로드
 - Transcript 파일 다운로드
-- 종료 후 추가 복습 질문과 교수자 텍스트 답변
+- 종료 후 학생의 추가 복습 질문
 - 교수자의 canonical Transcript 수정
