@@ -68,6 +68,20 @@ function setAttempt(container, selector) {
   });
 }
 
+function moveFocusToState(container) {
+  if (!container) return;
+  container.tabIndex = -1;
+  container.focus();
+}
+
+function setChatLocked(form, locked) {
+  if (!form) return;
+  form.setAttribute("aria-busy", String(locked));
+  form.querySelectorAll("textarea, button").forEach((control) => {
+    control.disabled = locked;
+  });
+}
+
 function initLiveAi(root, announce) {
   const summary = root.querySelector("[data-live-summary-state]");
   const chat = root.querySelector("[data-live-chat-state]");
@@ -83,10 +97,12 @@ function initLiveAi(root, announce) {
       if (action === "retry") {
         setAttempt(summary, "[data-live-summary-attempt]");
         setDemoState(summary, "pending");
+        moveFocusToState(summary);
         announce("같은 LIVE_SUMMARY Job을 attempt + 1로 다시 요청했습니다.");
         return;
       }
       setDemoState(summary, action);
+      if (action === "pending") moveFocusToState(summary);
       const messages = {
         pending: "개인 LIVE Summary Job을 만들고 polling을 시작했습니다.",
         running: "개인 LIVE Summary Job이 실행 중입니다.",
@@ -103,10 +119,15 @@ function initLiveAi(root, announce) {
       if (action === "retry") {
         setAttempt(chat, "[data-live-chat-attempt]");
         setDemoState(chat, "pending");
+        setChatLocked(chatForm, true);
+        moveFocusToState(chat);
         announce("동일 USER Message로 같은 CHAT_RESPONSE Job을 재시도합니다.");
         return;
       }
       setDemoState(chat, action);
+      if (["evidence", "no-evidence", "error"].includes(action)) {
+        setChatLocked(chatForm, false);
+      }
       const messages = {
         evidence: "저장된 최종 Chat 답변과 Evidence를 불러왔습니다.",
         "no-evidence": "근거 없는 저장 완료 Chat 답변을 불러왔습니다.",
@@ -119,17 +140,15 @@ function initLiveAi(root, announce) {
   chatForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!validateLiveField(chatInput)) return;
-    setDemoState(chat, "pending");
-    chatForm.setAttribute("aria-busy", "true");
-    chatForm.querySelectorAll("button").forEach((button) => {
-      button.disabled = true;
+    const snapshot = normalizeLiveInput(chatInput.value);
+    root.querySelectorAll("[data-live-chat-snapshot]").forEach((item) => {
+      item.textContent = snapshot;
     });
-    window.setTimeout(() => {
-      chatForm.setAttribute("aria-busy", "false");
-      chatForm.querySelectorAll("button").forEach((button) => {
-        button.disabled = false;
-      });
-    }, 350);
+    root.dataset.activeChatMessage = snapshot;
+    root.dataset.activeChatJob = "job-live-chat-demo";
+    setDemoState(chat, "pending");
+    setChatLocked(chatForm, true);
+    moveFocusToState(chat);
     announce(
       "USER Message와 CHAT_RESPONSE Job을 함께 저장하고 requester-only polling을 시작했습니다.",
     );
@@ -143,6 +162,20 @@ export function purgeLivePrivateAi(root = document) {
       updateCounter(field);
     });
     section.dataset.livePurged = "true";
+    delete section.dataset.activeChatMessage;
+    delete section.dataset.activeChatJob;
+    section.querySelectorAll("[data-live-summary-state]").forEach((state) => {
+      state.dataset.demoState = "purged";
+      delete state.dataset.selectedJobId;
+    });
+    section.querySelectorAll("[data-live-chat-state]").forEach((state) => {
+      state.dataset.demoState = "purged";
+      delete state.dataset.selectedJobId;
+      delete state.dataset.selectedChatId;
+    });
+    section
+      .querySelectorAll("button, textarea, input")
+      .forEach((control) => (control.disabled = true));
     section.querySelectorAll("[data-live-private-content]").forEach((item) => {
       item.hidden = true;
     });
