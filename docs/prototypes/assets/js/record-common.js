@@ -6,7 +6,7 @@ function initPlayback() {
   const player = document.querySelector("[data-recording-player]");
   if (!player) return;
 
-  const time = player.querySelector("[data-playback-time]");
+  const times = [...player.querySelectorAll("[data-playback-time]")];
   const updateSeekAvailability = (state) => {
     const allowed = ["ready", "playing", "paused", "ended"].includes(state);
     document.querySelectorAll("[data-recording-seek]").forEach((item) => {
@@ -18,7 +18,7 @@ function initPlayback() {
   };
   const setPlayback = (state, label, progress) => {
     setDemoState(player, state);
-    if (time && label) time.textContent = label;
+    if (label) times.forEach((item) => (item.textContent = label));
     if (progress) player.style.setProperty("--recording-progress", progress);
     updateSeekAvailability(state);
   };
@@ -32,7 +32,7 @@ function initPlayback() {
         setPlayback("playing", "10:28 / 52:14", "20%");
         showToast("재생 권한을 다시 확인한 뒤 음성을 재생합니다.", "info");
       } else if (action.dataset.playbackAction === "pause") {
-        setPlayback("paused", time?.textContent || "10:28 / 52:14");
+        setPlayback("paused", times[0]?.textContent || "10:28 / 52:14");
       } else if (action.dataset.playbackAction === "retry") {
         setPlayback("ready", "00:00 / 52:14", "0%");
         showToast("녹음 접근 권한과 재생 URL을 다시 확인했습니다.", "success");
@@ -105,6 +105,12 @@ function initReviewChat() {
   const log = chat?.querySelector("[data-review-log]");
   if (!chat || !form || !input) return;
 
+  const setFormAvailable = (available) => {
+    form.querySelectorAll("textarea, button").forEach((item) => {
+      item.disabled = !available;
+    });
+  };
+
   const validate = () => {
     const normalized = input.value.trim().normalize("NFC");
     const length = codePointLength(normalized);
@@ -137,6 +143,7 @@ function initReviewChat() {
     log?.append(message);
     input.value = "";
     validate();
+    setFormAvailable(false);
     setDemoState(chat, "pending");
     showToast("USER Message와 CHAT_RESPONSE Job을 함께 저장했습니다.");
   });
@@ -144,12 +151,17 @@ function initReviewChat() {
   document.addEventListener("click", (event) => {
     const outcome = event.target.closest("[data-review-outcome]");
     const retry = event.target.closest("[data-review-retry]");
-    if (outcome) setDemoState(chat, outcome.dataset.reviewOutcome);
+    if (outcome) {
+      const state = outcome.dataset.reviewOutcome;
+      setDemoState(chat, state);
+      setFormAvailable(["complete", "no-evidence"].includes(state));
+    }
     if (retry) {
       chat.querySelectorAll("[data-review-attempt]").forEach((item) => {
         item.textContent = "attempt 2";
       });
       setDemoState(chat, "pending");
+      setFormAvailable(false);
       showToast("같은 CHAT_RESPONSE Job을 attempt 2로 재시도합니다.");
     }
   });

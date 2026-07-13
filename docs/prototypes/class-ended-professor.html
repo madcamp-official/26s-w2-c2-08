@@ -7,12 +7,15 @@
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
-    <script type="module" src="assets/js/prototype.js"></script>
+    <script type="module" src="assets/js/class-ended-professor.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
-      Static prototype · 완료 기록은 읽기 전용 목 데이터입니다
+      Static prototype · 녹음 접근 정책은 미정 ·
+      <a href="?playback=checking">권한 확인</a> ·
+      <a href="?playback=ready">재생 허용 fixture</a> ·
+      <a href="?playback=forbidden">녹음만 거부</a>
     </div>
     <header class="site-header">
       <div class="container site-header__inner">
@@ -29,102 +32,216 @@
         </nav>
       </div>
     </header>
+
     <main class="container page-main" id="mainContent">
       <header class="record-header">
         <div>
           <p class="eyebrow">ENDED_CLASS_PAGE_PROF · COMPLETED</p>
-          <h1>그래프 탐색과 최단 경로</h1>
+          <h1 id="professorRecordTitle">그래프 탐색과 최단 경로</h1>
           <p>
-            2026년 7월 12일 · 이 Course의 교수자 · GET /sessions/{id}/record
-            canonical
+            class 날짜 2026년 7월 12일 · 시작 10:00 · 완료 11:02 · completed_at
+            2026-07-12 11:02:18
           </p>
           <div class="record-availability">
-            <span class="status-chip status-chip--success">COMPLETED</span
-            ><span class="badge">PDF 2개</span
-            ><span class="badge">final Transcript</span
-            ><span class="badge">질문·Answer</span>
+            <span class="status-chip status-chip--success">COMPLETED</span>
+            <span class="badge">PDF 3 / 10</span>
+            <span class="badge">RECORDING v2 canonical</span>
+            <span class="badge">부분 실패 1</span>
+          </div>
+          <div class="record-admin-actions">
+            <button
+              class="button button--secondary"
+              type="button"
+              data-dialog-open="titleEditDialog"
+            >
+              제목 수정
+            </button>
+            <button
+              class="button button--danger"
+              type="button"
+              data-dialog-open="classDeleteDialog"
+            >
+              이 class 삭제
+            </button>
           </div>
         </div>
         <a class="button button--secondary" href="course-professor.html"
           >Course로 돌아가기</a
         >
       </header>
+
       <nav class="record-toc" aria-label="완료 기록 목차">
-        <a href="#materialsTitle">강의자료</a
-        ><a href="#finalSummaryTitle">최종 요약</a
-        ><a href="#recordTranscriptTitle">Transcript</a
-        ><a href="#recordQuestionsTitle">질문·답변</a
-        ><a href="#recordJobsTitle">작업 상태</a>
+        <a href="#profMaterialsTitle">강의자료</a>
+        <a href="#profRecordingTitle">녹음</a>
+        <a href="#profSummaryTitle">요약</a>
+        <a href="#profTranscriptTitle">Transcript</a>
+        <a href="#profQuestionsTitle">질문</a>
+        <a href="#profClustersTitle">마인드맵</a>
+        <a href="#profAnswersTitle">답변</a>
+        <a href="#profReviewTitle">복습 AI</a>
       </nav>
+
       <section
         id="professorRecordView"
         data-demo-state="normal"
         data-query-state="view"
         data-query-default="normal"
-        aria-live="polite"
       >
         <div data-show-state="normal">
+          <section class="record-manifest" aria-label="record manifest 요약">
+            <div class="record-manifest__item">
+              <small>materials · 공개 list_url</small
+              ><strong data-material-count>3</strong>
+            </div>
+            <div class="record-manifest__item">
+              <small>Transcript · selected version</small
+              ><strong>132 + gap 1</strong>
+            </div>
+            <div class="record-manifest__item">
+              <small>questions / final clusters</small><strong>24 / 4</strong>
+            </div>
+            <div class="record-manifest__item">
+              <small>answers / shared jobs</small><strong>3 / 7</strong>
+            </div>
+          </section>
+          <p class="record-data-note">
+            이 요약은 compact manifest입니다. 큰 배열을 포함하지 않고 각 영역의
+            count와 안정적인 공개 조회 경로만 제공하며, 아래 영역은 서로
+            독립적으로 cursor 조회합니다.
+          </p>
+
           <div class="record-layout">
             <div class="record-main">
               <section
                 class="panel record-section"
-                id="materialsRegion"
+                id="profMaterials"
                 data-demo-state="multiple"
                 data-query-state="materials"
                 data-query-default="multiple"
-                aria-labelledby="materialsTitle"
+                aria-labelledby="profMaterialsTitle"
               >
-                <h2 id="materialsTitle">강의자료</h2>
-                <p>업로드·삭제 control 없이 권한 확인된 원본만 열람합니다.</p>
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profMaterialsTitle">강의자료</h2>
+                    <p>
+                      owner는 COMPLETED에서도 PDF를 추가하거나 즉시 분리할 수
+                      있습니다.
+                    </p>
+                  </div>
+                  <label
+                    class="button button--primary"
+                    for="completedMaterialInput"
+                  >
+                    PDF 추가
+                  </label>
+                  <input
+                    class="sr-only"
+                    id="completedMaterialInput"
+                    type="file"
+                    accept="application/pdf,.pdf"
+                  />
+                </div>
+                <p class="record-region-status" aria-live="polite">
+                  active <span data-material-count>3</span> / 10 · 파일당 100 MB
+                </p>
                 <ul
                   class="record-material-list"
-                  data-show-state="normal multiple"
+                  data-material-list
+                  data-show-state="multiple uploading deleting failed"
                 >
-                  <li class="record-material">
+                  <li class="record-material" data-material-row>
                     <span class="material-item__icon">PDF</span>
                     <div>
-                      <strong>07-그래프-탐색.pdf</strong
-                      ><small>3.2 MB · 42쪽 · READY</small>
+                      <strong>07-그래프-탐색.pdf</strong>
+                      <small>3.2 MB · 42쪽 · READY · 복습 AI 사용 가능</small>
                     </div>
-                    <button
-                      class="button button--secondary"
-                      type="button"
-                      data-toast="권한 확인 후 PDF 원본을 엽니다."
-                    >
-                      PDF 열람
-                    </button>
+                    <div class="record-admin-actions">
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-toast="권한 확인 후 PDF 원본을 엽니다."
+                      >
+                        열람
+                      </button>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-material-delete
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </li>
-                  <li class="record-material" data-show-state="multiple">
+                  <li class="record-material" data-material-row>
                     <span class="material-item__icon">PDF</span>
                     <div>
-                      <strong>보충-예제.pdf</strong
-                      ><small>1.1 MB · 18쪽 · READY</small>
+                      <strong>보충-예제.pdf</strong>
+                      <small>1.1 MB · 18쪽 · READY · 복습 AI 사용 가능</small>
+                    </div>
+                    <div class="record-admin-actions">
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-toast="권한 확인 후 PDF 원본을 엽니다."
+                      >
+                        열람
+                      </button>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-material-delete
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </li>
+                  <li class="record-material" data-material-row>
+                    <span class="material-item__icon">PDF</span>
+                    <div>
+                      <strong>추가-연습.pdf</strong>
+                      <small
+                        >840 KB · UPLOADED · 처리 대기 · 아직 AI 근거
+                        아님</small
+                      >
                     </div>
                     <button
-                      class="button button--secondary"
+                      class="button button--ghost"
                       type="button"
-                      data-toast="권한 확인 후 PDF 원본을 엽니다."
+                      data-material-delete
                     >
-                      PDF 열람
+                      삭제
                     </button>
                   </li>
                 </ul>
                 <div class="state-panel" data-show-state="empty" hidden>
                   <div class="state-panel__content">
-                    <h3>업로드된 PDF가 없습니다</h3>
+                    <h3>PDF가 없습니다</h3>
                   </div>
                 </div>
-                <div
-                  class="state-panel"
+                <p
+                  class="notice notice--info"
+                  data-show-state="uploading"
+                  hidden
+                >
+                  새 PDF를 업로드했습니다. PROCESSING이 끝나 READY가 되기 전까지
+                  새 AI 근거로 사용하지 않습니다.
+                </p>
+                <p
+                  class="notice notice--warning"
+                  data-show-state="deleting"
+                  hidden
+                >
+                  목록·열람·새 AI 검색에서 즉시 분리했습니다. 실제 저장물 삭제는
+                  background cleanup이 처리합니다.
+                </p>
+                <p
+                  class="notice notice--warning"
                   data-show-state="failed"
                   hidden
-                  role="alert"
                 >
-                  <div class="state-panel__content">
-                    <h3>일부 PDF 처리 실패</h3>
-                    <p>READY PDF 원본은 계속 열람합니다.</p>
-                  </div>
-                </div>
+                  일부 PDF가 FAILED입니다. 실패 행은 열람하거나 AI 근거로 사용할
+                  수 없습니다.
+                </p>
                 <div
                   class="state-panel"
                   data-show-state="error"
@@ -132,19 +249,149 @@
                   role="alert"
                 >
                   <div class="state-panel__content">
-                    <h3>강의자료 조회 오류</h3>
+                    <h3>강의자료를 불러오지 못했습니다</h3>
+                    <button class="button button--secondary" type="button">
+                      이 영역 재시도
+                    </button>
                   </div>
                 </div>
               </section>
+
               <section
                 class="panel record-section"
-                id="summaryRegion"
+                aria-labelledby="profRecordingTitle"
+              >
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profRecordingTitle">수업 녹음</h2>
+                    <p>
+                      역할별 허용 정책은 미정이며 실제 재생 전에 권한을 다시
+                      확인합니다.
+                    </p>
+                  </div>
+                  <span class="record-region-status">다운로드 없음</span>
+                </div>
+                <div
+                  class="recording-player"
+                  data-recording-player
+                  data-demo-state="checking"
+                  data-query-state="playback"
+                  data-query-default="checking"
+                  aria-live="polite"
+                >
+                  <div data-show-state="checking" aria-busy="true">
+                    <h3>녹음 접근 권한 확인 중</h3>
+                    <p>이 화면에 저장 경로나 장기 재생 URL을 넣지 않습니다.</p>
+                  </div>
+                  <div data-show-state="ready" hidden>
+                    <h3>재생 준비됨</h3>
+                    <div class="recording-player__track"><span></span></div>
+                    <div class="recording-player__controls">
+                      <button
+                        class="button button--primary"
+                        type="button"
+                        data-playback-action="play"
+                      >
+                        재생
+                      </button>
+                      <span class="recording-player__time" data-playback-time
+                        >00:00 / 52:14</span
+                      >
+                    </div>
+                  </div>
+                  <div data-show-state="loading" hidden aria-busy="true">
+                    <h3>재생 위치를 준비 중</h3>
+                  </div>
+                  <div data-show-state="playing" hidden>
+                    <h3>재생 중</h3>
+                    <div class="recording-player__track"><span></span></div>
+                    <div class="recording-player__controls">
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-playback-action="pause"
+                      >
+                        일시정지
+                      </button>
+                      <span class="recording-player__time" data-playback-time
+                        >10:28 / 52:14</span
+                      >
+                    </div>
+                  </div>
+                  <div data-show-state="paused" hidden>
+                    <h3>일시정지</h3>
+                    <div class="recording-player__track"><span></span></div>
+                    <div class="recording-player__controls">
+                      <button
+                        class="button button--primary"
+                        type="button"
+                        data-playback-action="play"
+                      >
+                        계속 재생
+                      </button>
+                      <span class="recording-player__time" data-playback-time
+                        >10:28 / 52:14</span
+                      >
+                    </div>
+                  </div>
+                  <div data-show-state="ended" hidden>
+                    <h3>재생이 끝났습니다</h3>
+                    <button
+                      class="button button--primary"
+                      type="button"
+                      data-playback-action="play"
+                    >
+                      처음부터 재생
+                    </button>
+                  </div>
+                  <div data-show-state="unavailable" hidden>
+                    <h3>저장된 녹음을 재생할 수 없습니다</h3>
+                    <p>PDF·Transcript·질문·답변은 계속 볼 수 있습니다.</p>
+                  </div>
+                  <div data-show-state="forbidden" hidden role="alert">
+                    <h3>녹음 접근 권한이 없습니다</h3>
+                    <p>다른 허용된 완료 기록은 그대로 유지합니다.</p>
+                  </div>
+                  <div data-show-state="expired" hidden role="alert">
+                    <h3>재생 승인을 다시 받아야 합니다</h3>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-playback-action="retry"
+                    >
+                      권한 다시 확인
+                    </button>
+                  </div>
+                  <div data-show-state="error" hidden role="alert">
+                    <h3>녹음을 불러오지 못했습니다</h3>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-playback-action="retry"
+                    >
+                      재생 다시 준비
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section
+                class="panel record-section"
+                id="profSummary"
                 data-demo-state="normal"
                 data-query-state="summary"
                 data-query-default="normal"
-                aria-labelledby="finalSummaryTitle"
+                aria-labelledby="profSummaryTitle"
               >
-                <h2 id="finalSummaryTitle">FINAL 강의 요약</h2>
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profSummaryTitle">FINAL 강의 요약</h2>
+                    <p>
+                      최신 HQ RECORDING FINALIZED source에 고정된 결과입니다.
+                    </p>
+                  </div>
+                  <span class="record-region-status">FINAL · AVAILABLE</span>
+                </div>
                 <div data-show-state="normal">
                   <h3>다익스트라 알고리즘의 핵심</h3>
                   <p>
@@ -152,287 +399,711 @@
                     그래프에서 동작합니다.
                   </p>
                 </div>
-                <div class="state-panel" data-show-state="empty" hidden>
-                  <div class="state-panel__content">
-                    <h3>요약 결과가 없습니다</h3>
-                    <p>Job 상태가 없으면 데이터 불일치 여부를 확인합니다.</p>
-                  </div>
+                <div data-show-state="not-applicable" hidden>
+                  <h3>요약할 강의 내용이 없습니다</h3>
+                  <p>NOT_APPLICABLE · NO_FINAL_TRANSCRIPT · Job 없음</p>
                 </div>
-                <div
-                  class="state-panel"
-                  data-show-state="failed"
-                  hidden
-                  role="alert"
-                >
-                  <div class="state-panel__content">
-                    <h3>FINAL Summary 실패</h3>
-                    <p>PDF·Transcript·Q&A는 계속 열람합니다.</p>
-                  </div>
+                <div data-show-state="source-unavailable" hidden role="alert">
+                  <h3>Transcript 처리 문제로 요약을 만들지 못했습니다</h3>
+                  <p>FAILED · SUMMARY_SOURCE_UNAVAILABLE · Job 없음</p>
                 </div>
-                <div
-                  class="state-panel"
-                  data-show-state="retrying"
-                  hidden
-                  aria-busy="true"
-                >
-                  <div class="state-panel__content">
-                    <h3>같은 Summary Job 재시도 중</h3>
-                  </div>
+                <div data-show-state="failed" hidden role="alert">
+                  <h3>FINAL Summary 생성에 실패했습니다</h3>
+                  <p>
+                    모델 Job 실패이며 PDF·Transcript·질문·Answer는 유지합니다.
+                  </p>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-shared-job-retry="FINAL Summary"
+                    data-state-action
+                    data-state-target="#profSummary"
+                    data-state="retrying"
+                  >
+                    FINAL Summary 재시도
+                  </button>
+                </div>
+                <div data-show-state="retrying" hidden aria-busy="true">
+                  <h3>같은 FINAL_SUMMARY Job 재시도 중 · attempt 2</h3>
+                </div>
+                <div data-show-state="data-error" hidden role="alert">
+                  <h3>요약 상태를 확인할 수 없습니다</h3>
+                  <p>
+                    잠시 후 다시 시도해 주세요. 잘못된 retry control은 제공하지
+                    않습니다.
+                  </p>
                 </div>
               </section>
+
               <section
                 class="panel record-section"
-                id="transcriptRegion"
-                data-demo-state="normal"
+                id="profTranscript"
+                data-page-region
+                data-demo-state="finalized"
                 data-query-state="transcript"
-                data-query-default="normal"
-                aria-labelledby="recordTranscriptTitle"
+                data-query-default="finalized"
+                aria-labelledby="profTranscriptTitle"
               >
-                <h2 id="recordTranscriptTitle">전체 final Transcript</h2>
-                <p>
-                  sequence 오름차순이며 partial·음성 재생·다운로드를 제공하지
-                  않습니다.
-                </p>
-                <div class="record-transcript" data-show-state="normal">
-                  <ol class="transcript-stream" id="professorFinalTranscript">
-                    <li class="transcript-segment" data-sequence="126">
-                      <time>10:12</time>
-                      <div>
-                        <p>
-                          우선순위 큐에서 가장 짧은 거리의 정점을 먼저
-                          선택합니다.
-                        </p>
-                        <small>final · sequence 126</small>
-                      </div>
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profTranscriptTitle">Final Transcript</h2>
+                    <p>
+                      RECORDING · version 2 · canonical · FINALIZED · 기술적
+                      완료
+                    </p>
+                  </div>
+                  <span class="record-region-status">SEGMENT 132 · GAP 1</span>
+                </div>
+                <div data-show-state="finalized page-error">
+                  <ol class="record-timeline" id="professorFinalTranscript">
+                    <li class="record-timeline__segment" data-sequence="126">
+                      <time datetime="PT10M12S">10:12~10:25</time>
+                      <p>
+                        우선순위 큐에서 가장 짧은 거리의 정점을 먼저 선택합니다.
+                      </p>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-recording-seek
+                        data-recording-label="10:12"
+                        aria-label="10분 12초 문장부터 녹음 재생"
+                      >
+                        이 문장 듣기
+                      </button>
                     </li>
-                    <li class="transcript-segment" data-sequence="127">
-                      <time>10:27</time>
-                      <div>
-                        <p>
-                          음수 간선이 없다면 확정된 거리는 다시 작아지지
-                          않습니다.
-                        </p>
-                        <small>final · sequence 127</small>
-                      </div>
+                    <li class="record-timeline__gap">
+                      <time datetime="PT10M25S">10:25~10:31</time>
+                      <p>연결 문제로 기록되지 않은 구간입니다.</p>
                     </li>
-                    <li class="transcript-segment" data-sequence="128">
-                      <time>10:34</time>
-                      <div>
-                        <p>이제 학생 질문에 답해보겠습니다.</p>
-                        <small>final · sequence 128</small>
-                      </div>
+                    <li class="record-timeline__segment" data-sequence="127">
+                      <time datetime="PT10M31S">10:31~10:44</time>
+                      <p>
+                        음수 간선이 없다면 확정된 거리는 다시 작아지지 않습니다.
+                      </p>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-recording-seek
+                        data-recording-label="10:31"
+                        aria-label="10분 31초 문장부터 녹음 재생"
+                      >
+                        이 문장 듣기
+                      </button>
                     </li>
-                    <li class="transcript-segment" data-sequence="129">
-                      <time>10:46</time>
-                      <div>
-                        <p>음수 가중치는 탐욕적 확정 가정을 깨뜨립니다.</p>
-                        <small>final · sequence 129</small>
-                      </div>
-                    </li>
-                    <li class="transcript-segment" data-sequence="130">
-                      <time>10:58</time>
-                      <div>
-                        <p>
-                          이 경우 벨만-포드 같은 다른 알고리즘이 필요합니다.
-                        </p>
-                        <small>final · sequence 130</small>
-                      </div>
+                    <li
+                      class="record-timeline__segment record-page-extra"
+                      data-page-extra
+                      data-sequence="128"
+                      hidden
+                    >
+                      <time datetime="PT10M46S">10:46~10:58</time>
+                      <p>음수 가중치는 탐욕적 확정 가정을 깨뜨립니다.</p>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-recording-seek
+                        data-recording-label="10:46"
+                        aria-label="10분 46초 문장부터 녹음 재생"
+                      >
+                        이 문장 듣기
+                      </button>
                     </li>
                   </ol>
-                </div>
-                <div class="state-panel" data-show-state="empty" hidden>
-                  <div class="state-panel__content">
-                    <h3>저장된 final이 없습니다</h3>
+                  <div class="record-pagination">
+                    <p data-page-status role="status">
+                      <span data-loaded-count data-loaded-complete="3">2</span>
+                      / 133 항목
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-load-more
+                    >
+                      Transcript 더 보기
+                    </button>
                   </div>
-                </div>
-                <div
-                  class="state-panel"
-                  data-show-state="error"
-                  hidden
-                  role="alert"
-                >
-                  <div class="state-panel__content">
-                    <h3>Transcript 조회 오류</h3>
-                  </div>
-                </div>
-              </section>
-              <section
-                class="panel record-section"
-                id="questionsRegion"
-                data-demo-state="normal"
-                data-query-state="questions"
-                data-query-default="normal"
-                aria-labelledby="recordQuestionsTitle"
-              >
-                <h2 id="recordQuestionsTitle">최종 질문·교수자 Answer</h2>
-                <p>
-                  현재 확정 Cluster와 원본 질문만 표시하며 과거 membership은
-                  제공하지 않습니다.
-                </p>
-                <div data-show-state="normal">
-                  <article class="record-cluster">
-                    <span class="badge">최종 현재 묶음</span>
-                    <h3>음수 가중치와 최단 경로</h3>
+                  <p
+                    class="notice notice--warning"
+                    data-show-state="page-error"
+                    hidden
+                    role="alert"
+                  >
+                    다음 항목을 불러오지 못했습니다. 이미 불러온 문장은
+                    유지합니다.
                     <button
                       class="button button--ghost"
                       type="button"
-                      data-disclosure-trigger
-                      aria-expanded="true"
-                      aria-controls="profClusterQuestions"
+                      data-page-retry
                     >
-                      원본 질문 접기/펼치기
+                      같은 cursor 재시도
                     </button>
-                    <ul class="record-question-list" id="profClusterQuestions">
-                      <li
-                        class="record-question"
-                        data-question-status="answered"
-                      >
-                        <div class="split">
-                          <strong
-                            >음수 가중치가 있으면 왜 다시 봐야 하나요?</strong
-                          ><span class="reaction-count">궁금해요 18</span>
-                        </div>
+                  </p>
+                </div>
+                <div data-show-state="empty" hidden>
+                  <h3>확정된 강의 문장이 없습니다</h3>
+                  <p>
+                    RECORDING version 2 · EMPTY · final Gap은 별도로 표시할 수
+                    있습니다.
+                  </p>
+                </div>
+                <div data-show-state="failed" hidden role="alert">
+                  <h3>HQ Transcript 처리에 실패했습니다</h3>
+                  <p>
+                    latest RECORDING version 2는 FAILED이고, 아래 LIVE version 1
+                    canonical은 보존됐습니다. 완료 기록 final source 인정 여부는
+                    미정입니다.
+                  </p>
+                  <ol class="record-timeline">
+                    <li class="record-timeline__segment">
+                      <time>10:12</time>
+                      <p>보존된 LIVE 확정 발화입니다.</p>
+                    </li>
+                  </ol>
+                </div>
+                <div data-show-state="data-error" hidden role="alert">
+                  <h3>완료됐지만 Transcript가 아직 FINALIZING입니다</h3>
+                  <p>DATA_INTEGRITY_ERROR · 기록 상태를 다시 확인합니다.</p>
+                </div>
+                <div data-show-state="error" hidden role="alert">
+                  <h3>Transcript 첫 페이지 조회 오류</h3>
+                  <button class="button button--secondary" type="button">
+                    이 영역 재시도
+                  </button>
+                </div>
+              </section>
+
+              <section
+                class="panel record-section"
+                id="profQuestions"
+                data-page-region
+                data-demo-state="normal"
+                data-query-state="questions"
+                data-query-default="normal"
+                aria-labelledby="profQuestionsTitle"
+              >
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profQuestionsTitle">원본 학생 질문</h2>
+                    <p>최종 Cluster와 독립된 RECENT cursor 목록입니다.</p>
+                  </div>
+                  <button
+                    class="button button--primary"
+                    type="button"
+                    data-dialog-open="textAnswerDialog"
+                  >
+                    미답변 질문에 텍스트 답변
+                  </button>
+                </div>
+                <ul
+                  class="record-question-list"
+                  data-show-state="normal page-error"
+                >
+                  <li class="record-question" data-question-status="answered">
+                    <div class="split">
+                      <strong>음수 가중치가 있으면 왜 다시 봐야 하나요?</strong>
+                      <span class="badge">ANSWERED · 궁금해요 18</span>
+                    </div>
+                  </li>
+                  <li class="record-question">
+                    <div class="split">
+                      <strong>힙 대신 배열을 쓰면 얼마나 느려지나요?</strong>
+                      <span class="badge">OPEN · 궁금해요 7</span>
+                    </div>
+                  </li>
+                  <li
+                    class="record-question record-page-extra"
+                    data-page-extra
+                    hidden
+                  >
+                    <strong>방향 그래프에서도 같은 방식인가요?</strong>
+                  </li>
+                </ul>
+                <div
+                  class="record-pagination"
+                  data-show-state="normal page-error"
+                >
+                  <p data-page-status role="status">
+                    <span data-loaded-count data-loaded-complete="3">2</span> /
+                    24 질문
+                  </p>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-load-more
+                  >
+                    질문 더 보기
+                  </button>
+                </div>
+                <p
+                  class="notice notice--warning"
+                  data-show-state="page-error"
+                  hidden
+                  role="alert"
+                >
+                  다음 질문을 불러오지 못했습니다. 기존 질문은 유지합니다.
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    data-page-retry
+                  >
+                    같은 cursor 재시도
+                  </button>
+                </p>
+                <div data-show-state="empty" hidden>
+                  <h3>등록된 질문이 없습니다</h3>
+                </div>
+                <div data-show-state="error" hidden role="alert">
+                  <h3>질문 첫 페이지를 불러오지 못했습니다</h3>
+                </div>
+              </section>
+
+              <section
+                class="panel record-section"
+                id="profClusters"
+                data-page-region
+                data-demo-state="normal"
+                data-query-state="clusters"
+                data-query-default="normal"
+                aria-labelledby="profClustersTitle"
+              >
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profClustersTitle">최종 질문 마인드맵</h2>
+                    <p>is_final=true · ordinal ASC, id ASC</p>
+                  </div>
+                  <span class="record-region-status">
+                    FINAL · SUCCEEDED · attempt 1 · 10:54:22
+                  </span>
+                </div>
+                <article
+                  class="record-cluster"
+                  data-show-state="normal page-error"
+                >
+                  <div class="record-cluster-map">
+                    <div class="record-cluster-map__center">
+                      <span class="badge">AI 대표질문 · 중앙</span>
+                      <h3>음수 가중치와 최단 경로는 어떤 관계인가요?</h3>
+                    </div>
+                    <ul
+                      class="record-cluster-map__branches"
+                      aria-label="대표질문의 하위 질문"
+                    >
+                      <li>
+                        <small>STUDENT_QUESTION</small><br />음수 간선은 왜
+                        문제가 되나요?
                       </li>
-                      <li
-                        class="record-question"
-                        data-question-status="answered"
-                      >
-                        <div class="split">
-                          <strong>벨만-포드는 어떻게 다른가요?</strong
-                          ><span class="reaction-count">궁금해요 9</span>
-                        </div>
+                      <li>
+                        <small>AI_REPRESENTATIVE_QUESTION · 답변 보존</small
+                        ><br />
+                        벨만-포드는 어떻게 다른가요?
+                      </li>
+                      <li class="record-page-extra" data-page-extra hidden>
+                        <small>STUDENT_QUESTION</small><br />음수 사이클은
+                        어떻게 찾나요?
                       </li>
                     </ul>
-                    <article class="record-answer">
-                      <h4>연결 질문 2개 · 교수자 Answer</h4>
-                      <p>
-                        자유 텍스트가 아니라 final Transcript sequence 128~130
-                        범위입니다. source Cluster를 현재 Cluster에 다시
-                        join하지 않습니다.
-                      </p>
-                      <button
-                        class="range-link"
-                        type="button"
-                        data-transcript-range-link
-                        data-transcript-target="#professorFinalTranscript"
-                        data-start-sequence="128"
-                        data-end-sequence="130"
-                      >
-                        Transcript 답변 범위로 이동
-                      </button>
-                    </article>
-                  </article>
-                </div>
-                <div class="state-panel" data-show-state="empty" hidden>
-                  <div class="state-panel__content">
-                    <h3>저장된 질문이 없습니다</h3>
                   </div>
-                </div>
-                <div
-                  class="state-panel"
+                  <div class="record-pagination">
+                    <p data-page-status role="status">child 2 / 3</p>
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-load-more
+                    >
+                      이 Cluster 질문 더 보기
+                    </button>
+                  </div>
+                </article>
+                <p
+                  class="notice notice--warning"
                   data-show-state="cluster-failed"
                   hidden
                   role="alert"
                 >
-                  <div class="state-panel__content">
-                    <h3>최종 clustering 실패</h3>
-                    <p>원본 질문과 완료 Answer는 유지됩니다.</p>
-                  </div>
+                  마지막 FINAL Job이 FAILED입니다. 원본 질문과 Answer는 위·아래
+                  독립 영역에서 계속 볼 수 있습니다.
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-shared-job-retry="FINAL 질문 정리"
+                    data-state-action
+                    data-state-target="#profClusters"
+                    data-state="cluster-retrying"
+                  >
+                    FINAL clustering 재시도
+                  </button>
+                </p>
+                <p data-show-state="cluster-retrying" hidden aria-busy="true">
+                  FINAL QUESTION_CLUSTERING · PENDING · attempt 2. 기존 저장
+                  질문은 유지합니다.
+                </p>
+                <div data-show-state="empty" hidden>
+                  <h3>최종 Cluster가 없습니다</h3>
                 </div>
-                <div
-                  class="state-panel"
-                  data-show-state="error"
+                <div data-show-state="error" hidden role="alert">
+                  <h3>최종 Cluster를 불러오지 못했습니다</h3>
+                </div>
+              </section>
+
+              <section
+                class="panel record-section"
+                id="profAnswers"
+                data-page-region
+                data-demo-state="normal"
+                data-query-state="answers"
+                data-query-default="normal"
+                aria-labelledby="profAnswersTitle"
+              >
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profAnswersTitle">교수자 Answer</h2>
+                    <p>각 Answer는 snapshot 질문 하나만 target으로 가집니다.</p>
+                  </div>
+                  <span class="record-region-status">3 ANSWERS</span>
+                </div>
+                <article class="record-answer">
+                  <span class="badge">AI 대표질문 snapshot · VOICE</span>
+                  <h3>음수 가중치가 있으면 왜 다시 봐야 하나요?</h3>
+                  <strong>교수자 답변</strong>
+                  <p data-professor-answer-text>
+                    확정된 정점을 다시 줄여야 할 수 있어서 다익스트라의 전제가
+                    깨집니다.
+                  </p>
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    data-answer-text-edit
+                  >
+                    교수자 text 수정
+                  </button>
+                  <div class="record-answer__meta">
+                    <button
+                      class="range-link"
+                      type="button"
+                      data-transcript-range-link
+                      data-transcript-target="#professorFinalTranscript"
+                      data-start-sequence="126"
+                      data-end-sequence="128"
+                    >
+                      HQ 재매핑 범위 · sequence 126~128
+                    </button>
+                    <span class="badge"
+                      >원본 LIVE · sequence 128~130 · 변경 불가</span
+                    >
+                  </div>
+                  <strong>AI로 정리한 답변</strong>
+                  <p>
+                    음수 간선은 확정한 최단 거리가 이후 더 작아질 수 있게
+                    만듭니다.
+                  </p>
+                </article>
+                <article class="record-answer">
+                  <span class="badge">STUDENT_QUESTION snapshot · TEXT</span>
+                  <h3>방향 그래프에서도 같은 방식인가요?</h3>
+                  <strong>교수자 답변</strong>
+                  <p data-professor-answer-text>
+                    정점 선택이 선형 탐색이 되어 전체 복잡도가 커집니다.
+                  </p>
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    data-answer-text-edit
+                  >
+                    교수자 text 수정
+                  </button>
+                </article>
+                <article
+                  class="record-answer record-page-extra"
+                  data-page-extra
+                  hidden
+                >
+                  <span class="badge">STUDENT_QUESTION snapshot · VOICE</span>
+                  <h3>벨만-포드는 어떻게 다른가요?</h3>
+                  <strong>교수자 답변</strong>
+                  <p data-professor-answer-text>
+                    모든 간선을 반복해 완화하므로 음수 간선도 다룹니다.
+                  </p>
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    data-answer-text-edit
+                  >
+                    교수자 text 수정
+                  </button>
+                </article>
+                <p
+                  class="notice notice--warning"
+                  data-show-state="organization-failed"
                   hidden
                   role="alert"
                 >
-                  <div class="state-panel__content">
-                    <h3>질문·Answer 조회 오류</h3>
-                  </div>
+                  Answer 1의 AI 정리가 실패했습니다. 교수자 text와 원본 LIVE
+                  범위는 유지합니다.
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-shared-job-retry="Answer AI 정리"
+                    data-state-action
+                    data-state-target="#profAnswers"
+                    data-state="organization-retrying"
+                  >
+                    이 Answer 정리 재시도
+                  </button>
+                </p>
+                <p
+                  data-show-state="organization-retrying"
+                  hidden
+                  aria-busy="true"
+                >
+                  ANSWER_ORGANIZATION · RUNNING · attempt 2. 다른 Answer는
+                  그대로 표시합니다.
+                </p>
+                <p
+                  data-show-state="organization-data-error"
+                  hidden
+                  role="alert"
+                >
+                  답변 정리 상태를 확인할 수 없습니다. 저장된 답변은 유지합니다.
+                </p>
+                <div class="record-pagination">
+                  <p data-page-status role="status">2 / 3 Answer</p>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-load-more
+                  >
+                    Answer 더 보기
+                  </button>
                 </div>
               </section>
             </div>
+
             <aside class="record-sidebar">
               <section
                 class="panel record-section"
-                id="jobsRegion"
-                data-demo-state="success"
+                id="profJobs"
+                data-demo-state="partial-failure"
                 data-query-state="jobs"
-                data-query-default="success"
-                aria-labelledby="recordJobsTitle"
+                data-query-default="partial-failure"
+                aria-labelledby="profJobsTitle"
               >
-                <h2 id="recordJobsTitle">공유 후처리 Job</h2>
-                <p>유일한 쓰기 control은 FAILED+retryable Job 재시도입니다.</p>
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profJobsTitle">공유 후처리 Job</h2>
+                    <p>
+                      COMPLETED를 유지한 채 FAILED+retryable만 같은 행으로
+                      재시도합니다.
+                    </p>
+                  </div>
+                </div>
                 <ul class="record-job-list">
-                  <li
-                    class="record-job-card"
-                    data-record-job
-                    data-job-status="succeeded"
-                  >
+                  <li class="record-job-card">
                     <div>
-                      <h3>
-                        FINAL_SUMMARY · <span data-job-status>SUCCEEDED</span>
-                      </h3>
-                      <p data-job-attempt data-attempt="1">
-                        attempt 1 · 성공 결과 재생성 금지
-                      </p>
+                      <h3>RECORDING_TRANSCRIPTION · SUCCEEDED</h3>
+                      <p>attempt 1 · blocks_session_completion=true</p>
+                    </div>
+                  </li>
+                  <li class="record-job-card">
+                    <div>
+                      <h3>QUESTION_CLUSTERING · FINAL · SUCCEEDED</h3>
+                      <p>attempt 1 · finalized_at 10:54:22</p>
                     </div>
                   </li>
                   <li
                     class="record-job-card"
                     data-record-job
-                    data-job-status="succeeded"
-                  >
-                    <div>
-                      <h3>
-                        QUESTION_CLUSTERING ·
-                        <span data-job-status>SUCCEEDED</span>
-                      </h3>
-                      <p data-job-attempt data-attempt="1">attempt 1</p>
-                    </div>
-                  </li>
-                  <li
-                    class="record-job-card"
-                    data-record-job
-                    data-job-status="failed"
                     data-show-state="partial-failure retrying"
                   >
                     <div>
                       <h3>
-                        SESSION_POSTPROCESSING ·
+                        ANSWER_ORGANIZATION ·
                         <span data-job-status>FAILED</span>
                       </h3>
                       <p data-job-attempt data-attempt="1">
-                        attempt 1 · COMPLETED 유지
+                        attempt 1 · Answer 3 · retryable
                       </p>
                     </div>
                     <button
                       class="button button--secondary"
                       type="button"
-                      data-shared-job-retry="Session 후처리"
-                      aria-label="SESSION_POSTPROCESSING 작업 재시도"
+                      data-shared-job-retry="Answer 3 AI 정리"
                     >
-                      재시도
+                      Answer 3 정리 재시도
                     </button>
                   </li>
                 </ul>
                 <p
                   class="notice notice--warning"
-                  data-show-state="partial-failure retrying"
-                  hidden
+                  data-show-state="partial-failure"
                 >
-                  일부 Job 실패가 저장 기록을 가리지 않습니다.
+                  일부 실패가 PDF·Transcript·질문·Answer와 성공 결과를 가리지
+                  않습니다.
                 </p>
               </section>
-              <section class="panel">
-                <h2>읽기 전용 정책</h2>
-                <p>
-                  새 질문·반응·Answer 시작, PDF 업로드·삭제, 음성
-                  재생·다운로드와 교수자 REVIEW Chat은 제공하지 않습니다.
+
+              <section
+                class="panel record-section"
+                id="profReviewChat"
+                data-review-chat
+                data-demo-state="empty"
+                data-query-state="chat"
+                data-query-default="empty"
+                aria-labelledby="profReviewTitle"
+              >
+                <div class="record-section__heading">
+                  <div>
+                    <h2 id="profReviewTitle">개인 복습 AI · REVIEW</h2>
+                    <p>
+                      학생과 동일한 polling-only UI이며 요청자에게만 보입니다.
+                    </p>
+                  </div>
+                </div>
+                <ul
+                  class="record-chat-log"
+                  data-review-log
+                  role="log"
+                  aria-label="복습 AI 대화"
+                >
+                  <li class="record-chat-message" data-role="assistant">
+                    완료 기록을 근거로 복습을 도와드릴게요.
+                  </li>
+                </ul>
+                <div class="ai-state-card" data-show-state="empty">
+                  <p>
+                    USER Message와 Job을 함께 저장한 뒤 상태를 polling합니다.
+                  </p>
+                </div>
+                <div
+                  class="ai-state-card"
+                  data-show-state="pending"
+                  hidden
+                  aria-busy="true"
+                >
+                  <strong
+                    >CHAT_RESPONSE · PENDING ·
+                    <span data-review-attempt>attempt 1</span></strong
+                  >
+                  <p>생성 중 부분 문장은 저장·표시·공유하지 않습니다.</p>
+                  <div class="record-admin-actions">
+                    <button
+                      class="button button--primary"
+                      type="button"
+                      data-review-outcome="complete"
+                    >
+                      저장 결과 완료
+                    </button>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-review-outcome="no-evidence"
+                    >
+                      근거 없음 완료
+                    </button>
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-review-outcome="failed"
+                    >
+                      실패 fixture
+                    </button>
+                  </div>
+                </div>
+                <div class="ai-state-card" data-show-state="complete" hidden>
+                  <strong>저장된 최종 답변</strong>
+                  <p>
+                    음수 간선은 이미 확정한 거리의 전제를 깨뜨릴 수 있습니다.
+                  </p>
+                  <div class="record-evidence" aria-label="답변 근거">
+                    <button
+                      class="record-evidence-link"
+                      type="button"
+                      data-evidence-link
+                      data-source-kind="MATERIAL"
+                      data-public-link="/api/v1/materials/material_public/content#page=12"
+                    >
+                      강의자료 · 12쪽
+                    </button>
+                    <button
+                      class="record-evidence-link"
+                      type="button"
+                      data-evidence-link
+                      data-source-kind="TRANSCRIPT_SEGMENT"
+                      data-public-link="/api/v1/transcript-segments/segment_public"
+                    >
+                      Transcript · 10:31
+                    </button>
+                    <button
+                      class="record-evidence-link"
+                      type="button"
+                      data-evidence-link
+                      data-evidence-state="error"
+                      data-source-kind="ANSWER"
+                      data-public-link="/api/v1/answers/answer_public"
+                    >
+                      교수자 Answer · 이동 재시도
+                    </button>
+                    <button class="record-evidence-link" type="button" disabled>
+                      폐기된 AI 대표질문 · 이동할 수 없음
+                    </button>
+                  </div>
+                </div>
+                <div class="ai-state-card" data-show-state="no-evidence" hidden>
+                  <strong>저장 완료 · 근거 없음</strong>
+                  <p>현재 완료 기록만으로 확인할 수 없습니다.</p>
+                </div>
+                <div
+                  class="ai-state-card"
+                  data-show-state="failed"
+                  hidden
+                  role="alert"
+                >
+                  <strong
+                    >CHAT_RESPONSE 실패 ·
+                    <span data-review-attempt>attempt 1</span></strong
+                  >
+                  <p>기존 USER Message와 대화는 유지합니다.</p>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-review-retry
+                  >
+                    같은 Job 재시도
+                  </button>
+                </div>
+                <form data-review-form novalidate>
+                  <div class="field">
+                    <label for="profReviewInput">완료 기록에 관해 질문</label>
+                    <textarea
+                      id="profReviewInput"
+                      data-review-input
+                      placeholder="예: 음수 간선이 왜 문제인지 다시 설명해줘"
+                    ></textarea>
+                    <span class="record-codepoint-count" data-review-count
+                      >0 / 2,000자</span
+                    >
+                    <p
+                      class="field__error"
+                      data-review-error
+                      role="alert"
+                      hidden
+                    ></p>
+                  </div>
+                  <button
+                    class="button button--primary button--block"
+                    type="submit"
+                  >
+                    복습 질문 보내기
+                  </button>
+                </form>
+                <p class="field__help">
+                  trim·Unicode NFC 뒤 1~2,000 code point · SSE·streaming·개인 WS
+                  없음
                 </p>
               </section>
             </aside>
           </div>
         </div>
+
         <section
           class="panel course-page-loading"
           data-show-state="loading"
@@ -440,7 +1111,7 @@
           aria-busy="true"
         >
           <div class="skeleton skeleton--title"></div>
-          <span class="sr-only">완료 기록 로딩 중</span>
+          <span class="sr-only">compact record manifest 로딩 중</span>
         </section>
         <section
           class="state-panel auth-expired"
@@ -449,8 +1120,15 @@
           role="alert"
         >
           <div class="state-panel__content">
-            <h2>완료 기록 조회 오류</h2>
-            <p>보호된 이전 데이터를 숨깁니다.</p>
+            <h2>기록 요약을 불러오지 못했습니다</h2>
+            <button
+              class="button button--primary"
+              type="button"
+              data-manifest-retry
+              data-state-target="#professorRecordView"
+            >
+              manifest 다시 조회
+            </button>
           </div>
         </section>
         <section
@@ -471,6 +1149,7 @@
         >
           <div class="state-panel__content">
             <h2>로그인이 만료되었습니다</h2>
+            <a class="button button--primary" href="main.html">다시 로그인</a>
           </div>
         </section>
         <section
@@ -489,6 +1168,147 @@
         </section>
       </section>
     </main>
+
+    <div class="dialog-backdrop" id="titleEditDialog" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titleEditTitle"
+      >
+        <div class="dialog__header">
+          <div>
+            <h2 id="titleEditTitle">class 제목 수정</h2>
+            <p>class 날짜·시작·완료 시각은 변경하지 않습니다.</p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
+        <form id="titleEditForm">
+          <div class="field">
+            <label for="titleEditInput">제목</label>
+            <input
+              id="titleEditInput"
+              required
+              value="그래프 탐색과 최단 경로"
+            />
+          </div>
+          <div class="dialog__actions">
+            <button
+              class="button button--ghost"
+              type="button"
+              data-dialog-close
+            >
+              취소
+            </button>
+            <button class="button button--primary" type="submit">
+              제목 저장
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="dialog-backdrop" id="classDeleteDialog" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="classDeleteTitle"
+      >
+        <div class="dialog__header">
+          <div>
+            <h2 id="classDeleteTitle">이 class 기록을 삭제할까요?</h2>
+            <p>
+              Course 종료 개념은 없으며 완료된 class를 owner가 직접 삭제하는
+              동작입니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
+        <div class="dialog__actions">
+          <button class="button button--ghost" type="button" data-dialog-close>
+            취소
+          </button>
+          <button
+            class="button button--danger"
+            type="button"
+            data-class-delete-confirm
+          >
+            class 삭제 확인
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div class="dialog-backdrop" id="textAnswerDialog" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="textAnswerTitle"
+      >
+        <div class="dialog__header">
+          <div>
+            <h2 id="textAnswerTitle">텍스트 Answer 추가</h2>
+            <p>
+              학생 질문 하나만 target으로 선택하며 저장 시 snapshot을
+              보존합니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </div>
+        <form id="textAnswerForm">
+          <div class="field">
+            <label for="textAnswerTarget">답변할 질문</label>
+            <select id="textAnswerTarget">
+              <option>힙 대신 배열을 쓰면 얼마나 느려지나요?</option>
+              <option>방향 그래프에서도 같은 방식인가요?</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="textAnswerInput">교수자 답변</label>
+            <textarea id="textAnswerInput" required></textarea>
+            <p class="field__help">
+              텍스트 Answer 최대 길이·삭제 정책은 아직 미정입니다.
+            </p>
+          </div>
+          <div class="dialog__actions">
+            <button
+              class="button button--ghost"
+              type="button"
+              data-dialog-close
+            >
+              취소
+            </button>
+            <button class="button button--primary" type="submit">
+              Answer 저장
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <div class="toast-region" data-toast-region aria-live="polite"></div>
   </body>
 </html>
