@@ -104,6 +104,7 @@
 
 .primary-nav a {
   display: inline-flex;
+  min-width: 44px;
   align-items: center;
   justify-content: center;
   min-height: 44px;
@@ -277,6 +278,7 @@
 
 .mobile-nav a {
   flex: 0 0 auto;
+  min-width: 44px;
   min-height: 44px;
   padding: 10px 14px;
   border-radius: var(--radius-pill);
@@ -390,6 +392,7 @@
 .state-switcher button,
 .state-switcher a {
   display: inline-flex;
+  min-width: 44px;
   min-height: 44px;
   flex: 0 0 auto;
   align-items: center;
@@ -3451,6 +3454,7 @@
 
 .course-side-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
 }
 
@@ -3592,6 +3596,7 @@
 
 .breadcrumb a {
   display: inline-flex;
+  min-width: 44px;
   min-height: 44px;
   align-items: center;
 }

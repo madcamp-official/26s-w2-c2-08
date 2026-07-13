@@ -348,6 +348,13 @@
                           업로드</button
                         ><button
                           type="button"
+                          data-state="updated"
+                          aria-pressed="false"
+                          hidden
+                        >
+                          업로드 반영</button
+                        ><button
+                          type="button"
                           data-state="processing"
                           aria-pressed="false"
                         >
@@ -553,6 +560,14 @@
                         </div>
                       </li>
                     </ul>
+
+                    <ul
+                      class="material-list"
+                      id="updatedMaterialList"
+                      data-show-state="updated"
+                      hidden
+                      aria-label="업로드 요청을 반영한 PDF 목록"
+                    ></ul>
 
                     <ul
                       class="material-list"
@@ -844,33 +859,31 @@
                         </li>
                       </ul>
                     </div>
-                    <div
-                      class="state-panel"
-                      data-show-state="full"
-                      hidden
-                      role="status"
-                    >
-                      <div class="state-panel__content">
-                        <span class="state-panel__icon" aria-hidden="true"
-                          >10</span
-                        >
-                        <h3>강의자료 10/10개가 연결되어 있습니다</h3>
-                        <p>
-                          `409 MATERIAL_LIMIT_EXCEEDED` · `UPLOADED`,
-                          `PROCESSING`, `READY`, `FAILED`를 모두 active 개수에
-                          포함합니다. 기존 자료를 삭제해야 새 PDF를 선택할 수
-                          있습니다.
-                        </p>
-                        <button
-                          class="button button--secondary"
-                          type="button"
-                          data-state-action
-                          data-state-target="#materialState"
-                          data-state="all-ready"
-                        >
-                          연결 자료 확인
-                        </button>
+                    <div class="stack" data-show-state="full" hidden>
+                      <div class="state-panel" role="status">
+                        <div class="state-panel__content">
+                          <span
+                            class="state-panel__icon"
+                            data-full-material-icon
+                            aria-hidden="true"
+                            >10</span
+                          >
+                          <h3 data-full-material-heading>
+                            강의자료 10/10개가 연결되어 있습니다
+                          </h3>
+                          <p data-full-material-copy>
+                            `409 MATERIAL_LIMIT_EXCEEDED` · `UPLOADED`,
+                            `PROCESSING`, `READY`, `FAILED`를 모두 active 개수에
+                            포함합니다. 기존 자료를 삭제해야 새 PDF를 선택할 수
+                            있습니다.
+                          </p>
+                        </div>
                       </div>
+                      <ul
+                        class="material-list"
+                        id="fullMaterialList"
+                        aria-label="10개가 연결된 PDF 목록"
+                      ></ul>
                     </div>
                     <div
                       class="state-panel"

@@ -321,7 +321,26 @@ function initStateActions() {
     const action = event.target.closest("[data-state-action]");
     if (!action) return;
     const target = document.querySelector(action.dataset.stateTarget);
-    setDemoState(target, action.dataset.state);
+    const state = action.dataset.state;
+    setDemoState(target, state);
+
+    if (!action.closest("[hidden]")) return;
+    const statePanel = getOwnedStateItems(target).find(
+      (item) =>
+        !item.hidden && item.dataset.showState.split(" ").includes(state),
+    );
+    if (!statePanel) return;
+
+    const focusTarget =
+      statePanel.querySelector("[data-state-focus]") ||
+      statePanel.querySelector(
+        "form input:not([disabled]), form select:not([disabled]), form textarea:not([disabled])",
+      ) ||
+      statePanel.querySelector("h1, h2, h3") ||
+      statePanel.querySelector(focusableSelector) ||
+      statePanel;
+    if (!focusTarget.matches(focusableSelector)) focusTarget.tabIndex = -1;
+    focusTarget.focus();
   });
 }
 
