@@ -168,6 +168,11 @@ sessionForm?.addEventListener("submit", (event) => {
   renderSessionTitle(sessionForm.elements.title.value);
   renderSessionDate(sessionForm.elements.lecture_date.value);
   setDemoState(classStage, "ready");
+  const readyHeading = document.querySelector("#sessionSummaryTitle");
+  if (readyHeading) {
+    readyHeading.tabIndex = -1;
+    readyHeading.focus();
+  }
   showToast("READY class 생성 상태를 표시했습니다.", "success");
 });
 
@@ -281,6 +286,11 @@ document.addEventListener("click", (event) => {
   retry.hidden = true;
   setDemoState(materialState, "processing");
   syncMaterialState("processing");
+  const materialsHeading = document.querySelector("#materialsTitle");
+  if (materialsHeading) {
+    materialsHeading.tabIndex = -1;
+    materialsHeading.focus();
+  }
   showToast(
     `${retry.dataset.materialRetry} 처리 Job의 attempt를 2로 올렸습니다.`,
     "success",
@@ -288,6 +298,11 @@ document.addEventListener("click", (event) => {
 });
 
 confirmMaterialDelete?.addEventListener("click", () => {
+  const row = pendingDeleteRow;
+  const focusFallback =
+    row?.nextElementSibling?.querySelector("button, a[href]") ||
+    row?.previousElementSibling?.querySelector("button, a[href]") ||
+    document.querySelector("#materialsTitle");
   pendingDeleteRow?.remove();
   activeMaterialCount = Math.max(0, activeMaterialCount - 1);
   if (materialCountOutput) {
@@ -295,6 +310,12 @@ confirmMaterialDelete?.addEventListener("click", () => {
   }
   if (fileInput) fileInput.disabled = false;
   closeDialog(materialDeleteDialog);
+  if (focusFallback) {
+    if (!focusFallback.matches("a, button, input, select, textarea")) {
+      focusFallback.tabIndex = -1;
+    }
+    focusFallback.focus();
+  }
   showToast(
     `${pendingDeleteName} 연결을 즉시 해제했습니다. 최신 목록을 다시 확인합니다.`,
     "success",
