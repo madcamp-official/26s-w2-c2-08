@@ -127,7 +127,7 @@ erDiagram
 
 ## 3. class·자료·Transcript·이벤트
 
-한 class에 PDF를 여러 개 연결할 수 있다. streaming STT의 partial 결과와 음성 원본은 이 모델에 없고, 확정된 final Transcript와 복구 불가능한 gap metadata만 저장한다.
+한 class에 연결 상태인 PDF를 최대 10개까지 둘 수 있다. `detached_at IS NULL`인 Material만 현재 연결된 행이며 PDF가 0개여도 class를 시작할 수 있다. streaming STT의 partial 결과와 음성 원본은 이 모델에 없고, 확정된 final Transcript와 복구 불가능한 gap metadata만 저장한다.
 
 ```mermaid
 erDiagram
@@ -150,12 +150,15 @@ erDiagram
         uuid session_id FK
         uuid uploaded_by_user_id FK
         text original_filename
+        text display_name
         text storage_key UK
         bigint byte_size
         integer page_count
         text processing_status
         uuid processed_by_job_id FK
         integer processed_by_job_attempt
+        timestamptz detached_at
+        bigint version
     }
 
     transcriptSegments["transcript_segments"] {
@@ -212,7 +215,7 @@ erDiagram
     lectureSessions o|--o{ outboxEvents : scopes
 ```
 
-`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않는다. Transcript는 `(session_id, sequence)`와 `(session_id, utterance_id)`가 각각 UNIQUE다.
+`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않되 Session 잠금과 trigger가 연결된 행을 최대 10개로 제한한다. `display_name`은 연결된 행 사이에서만 partial UNIQUE이고 생성 뒤 재번호를 매기지 않는다. `storage_key`는 API·공유 event·로그에 노출하지 않는 내부 값이다. Transcript는 `(session_id, sequence)`와 `(session_id, utterance_id)`가 각각 UNIQUE다.
 
 ## 4. 질문·클러스터·Answer
 
@@ -329,6 +332,8 @@ erDiagram
     lectureMaterials["lecture_materials"] {
         uuid id PK
         uuid session_id FK
+        timestamptz detached_at
+        bigint version
     }
 
     questions["questions"] {
@@ -412,7 +417,7 @@ erDiagram
     aiJobs o|--o| chatMessages : creates_assistant
 ```
 
-`created_by_job_attempt`는 변경되는 Job 행에 FK로 걸지 않고 생성 당시 attempt snapshot으로 보관한다. 재시도는 같은 Job 행을 `attempt + 1`, `version + 1`, `PENDING`으로 바꾸고 현재 progress·error·실행 시각·run token을 초기화한다. 결과 삽입과 Job `SUCCEEDED` 전환은 같은 transaction이며, `(job_id, attempt, run_token, RUNNING)`이 현재 실행과 일치할 때만 commit해 이전 attempt의 늦은 결과를 차단한다. API는 `visibility`, `attempt`, `version`, progress, `retryable`, `blocks_session_completion`, `updated_at`을 안전한 lifecycle로 공개한다.
+`created_by_job_attempt`는 변경되는 Job 행에 FK로 걸지 않고 생성 당시 attempt snapshot으로 보관한다. 재시도는 같은 Job 행을 `attempt + 1`, `version + 1`, `PENDING`으로 바꾸고 현재 progress·error·실행 시각·run token을 초기화한다. 결과 삽입과 Job `SUCCEEDED` 전환은 같은 transaction이며, `(job_id, attempt, run_token, RUNNING)`이 현재 실행과 일치할 때만 commit해 이전 attempt의 늦은 결과를 차단한다. Material 처리 결과는 여기에 Material 현재 `version`과 `detached_at IS NULL` 조건을 더해 연결 해제 뒤의 늦은 결과도 폐기한다. API는 `visibility`, `attempt`, `version`, progress, `retryable`, `blocks_session_completion`, `updated_at`을 안전한 lifecycle로 공개한다.
 
 ## 6. 공통 KnowledgeChunk·Chat 근거
 
@@ -428,6 +433,8 @@ erDiagram
     lectureMaterials["lecture_materials"] {
         uuid id PK
         uuid session_id FK
+        text processing_status
+        timestamptz detached_at
     }
 
     transcriptSegments["transcript_segments"] {
@@ -501,39 +508,45 @@ erDiagram
 - Transcript source는 시작·끝 Segment가 둘 다 있거나 둘 다 없다.
 - 모든 typed source, Chunk, Chat Message, Evidence는 복합 FK로 같은 Session임을 검증한다.
 - Transcript 시작 sequence는 끝 sequence보다 작거나 같아야 한다.
-- vector 검색은 SQL에서 `course_id`와 `session_id` 범위를 먼저 제한한다.
+- vector 검색은 SQL에서 `course_id`와 `session_id` 범위를 먼저 제한한다. Material source는 `processing_status = 'READY' AND detached_at IS NULL`도 같은 SQL에서 강제한다.
 
 ## 7. ERD 밖의 핵심 제약
 
 Mermaid cardinality만으로 표현할 수 없는 규칙은 다음과 같다.
 
-| 규칙                                 | DB 보장 방식                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------- |
-| Course의 교수자 owner 정확히 1명     | 교수자 partial UNIQUE + owner 일치 deferrable constraint trigger                |
-| Course당 active class 합계 최대 1개  | `UNIQUE (course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`            |
-| 같은 날짜 class 순차 생성·조회       | 날짜 UNIQUE 없음 + `(lecture_date DESC, started_at DESC, id DESC)` index        |
-| 제목 수정·날짜와 lifecycle 시각 불변 | 빈 제목은 Course 제목·날짜·시각 포함, 상태 전이 trigger와 제한된 update command |
-| class당 PDF 여러 개                  | `lecture_materials.session_id`에 UNIQUE 없음                                    |
-| 질문당 취소되지 않은 Answer 최대 1개 | `UNIQUE (question_id) WHERE released_at IS NULL`                                |
-| Session당 캡처 중 Answer 최대 1개    | `UNIQUE (session_id) WHERE status = 'CAPTURING'`                                |
-| 클러스터 generation·순서·provenance  | `(session_id, generation, ordinal)` UNIQUE + Job attempt constraint trigger     |
-| 클러스터 변경 이력 미보관            | 현재 `questions.cluster_id`를 교체하고 대체된 Cluster 삭제                      |
-| 종료 후 최종 클러스터 보관           | `question_clusters.is_final`, `finalized_at`                                    |
-| Answer 대표 질문 snapshot            | 선택 당시 Cluster `title` exact text를 `source_cluster_title_snapshot` 저장     |
-| AIJob 같은 행 재시도                 | `attempt + 1`, 새 `run_token`, lease·현재 attempt 검증                          |
-| AI 결과 provenance                   | 결과의 `created_by_job_id`, `created_by_job_attempt`                            |
-| 멱등 응답 정확히 24시간              | `expires_at = completed_at + interval '24 hours'` CHECK                         |
-| Knowledge source 정확히 한 종류      | typed nullable FK 조합 `CHECK`                                                  |
-| Chat 근거 source 통합                | `chat_message_evidence.knowledge_chunk_id` FK                                   |
-| 서로 다른 Session의 행 연결 금지     | `(resource_id, session_id)` 복합 FK                                             |
+| 규칙                                 | DB 보장 방식                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Course의 교수자 owner 정확히 1명     | 교수자 partial UNIQUE + owner 일치 deferrable constraint trigger                          |
+| Course당 active class 합계 최대 1개  | `UNIQUE (course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`                      |
+| 같은 날짜 class 순차 생성·조회       | 날짜 UNIQUE 없음 + `(lecture_date DESC, started_at DESC, id DESC)` index                  |
+| 제목 수정·날짜와 lifecycle 시각 불변 | 빈 제목은 Course 제목·날짜·시각 포함, 상태 전이 trigger와 제한된 update command           |
+| Session당 연결 Material 최대 10개    | Session 행 잠금 + `detached_at IS NULL` count trigger                                     |
+| 연결 Material 표시 이름 유일·안정    | `(session_id, display_name) WHERE detached_at IS NULL` partial UNIQUE + suffix allocation |
+| PDF 파일 크기 최대 decimal 100 MB    | `CHECK (byte_size BETWEEN 1 AND 100000000)`                                               |
+| class 시작 Material 조건             | Session→Material 잠금 + 연결된 `PROCESSING` 존재 조건부 거부                              |
+| Material 업로드·연결 해제 상태       | Session 잠금 + `READY`·`LIVE`·`COMPLETED` 허용, `PROCESSING` 거부                         |
+| 질문당 취소되지 않은 Answer 최대 1개 | `UNIQUE (question_id) WHERE released_at IS NULL`                                          |
+| Session당 캡처 중 Answer 최대 1개    | `UNIQUE (session_id) WHERE status = 'CAPTURING'`                                          |
+| 클러스터 generation·순서·provenance  | `(session_id, generation, ordinal)` UNIQUE + Job attempt constraint trigger               |
+| 클러스터 변경 이력 미보관            | 현재 `questions.cluster_id`를 교체하고 대체된 Cluster 삭제                                |
+| 종료 후 최종 클러스터 보관           | `question_clusters.is_final`, `finalized_at`                                              |
+| Answer 대표 질문 snapshot            | 선택 당시 Cluster `title` exact text를 `source_cluster_title_snapshot` 저장               |
+| AIJob 같은 행 재시도                 | `attempt + 1`, 새 `run_token`, lease·현재 attempt 검증                                    |
+| AI 결과 provenance                   | 결과의 `created_by_job_id`, `created_by_job_attempt`                                      |
+| 멱등 응답 정확히 24시간              | `expires_at = completed_at + interval '24 hours'` CHECK                                   |
+| Knowledge source 정확히 한 종류      | typed nullable FK 조합 `CHECK`                                                            |
+| Chat 근거 source 통합                | `chat_message_evidence.knowledge_chunk_id` FK                                             |
+| 서로 다른 Session의 행 연결 금지     | `(resource_id, session_id)` 복합 FK                                                       |
 
 ## 8. 삭제 관계 요약
 
 - Course 삭제는 불변 owner만 요청할 수 있고 CourseMember와 LectureSession aggregate를 삭제한다. active class가 있을 때의 허용 여부와 삭제 후 복구 유예는 아직 미정이다.
 - LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Transcript, Gap, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
+- Material 연결 해제는 교수자가 Session `READY`, `LIVE`, `COMPLETED`에서 `detached_at`을 기록하는 tombstone 처리다. `PROCESSING`에서는 거부하고, 결과가 없는 `PENDING`·`RUNNING`·`FAILED` Material Job을 함께 제거한 뒤 commit 즉시 목록·상세·content·RAG에서 제외한다. 결과 provenance로 참조되는 `SUCCEEDED` Job은 보존한다.
 - User 탈퇴는 공유 학습 기록을 지우지 않고 User 행을 익명화한다. 인증 정보와 개인 Chat·LIVE Summary는 제거한다.
 - Cluster 삭제 시 Question의 현재 Cluster FK만 `NULL` 처리한다. Answer의 선택 Cluster ID·AI 대표 질문 exact text와 AnswerQuestion membership snapshot은 FK 없이 유지한다.
 - 결과→AIJob과 Evidence→KnowledgeChunk는 deferred `NO ACTION`으로 독립 삭제를 막되 aggregate 전체 삭제는 허용한다.
-- 삭제는 `Course → Session → AIJob` 잠금 순서를 사용하고, Session 단독 삭제는 `Session → AIJob` 순서를 사용한다. 삭제된 Job의 늦은 결과는 attempt·run token·상태 fence에서 폐기한다.
-- PDF object 삭제는 DB 행 삭제 전에 key를 수집하고 transactional outbox의 멱등 스토리지 정리 task로 처리한다.
+- 삭제는 `Course → Session → Material → AIJob` 잠금 순서를 사용하고, Session 단독 삭제와 Material lifecycle은 `Session → Material → AIJob` 순서를 사용한다. 삭제·연결 해제된 Material의 늦은 결과는 attempt·run token·상태와 Material version·tombstone fence에서 폐기한다.
+- PDF object와 Material source KnowledgeChunk는 tombstone과 같은 transaction의 내부 outbox task로 background 정리한다. object 삭제는 멱등 재시도하고 정리 실패가 Material을 다시 연결하지 않는다.
+- 연결 해제 Material의 원문 content link는 제공하지 않는다. Evidence가 참조하는 Material source Chunk의 보관, snapshot 또는 FK 변경, 과거 Evidence label·source 표시 방식과 Material·Chunk hard delete 시점은 미정이다. 결정 전에는 deferred `NO ACTION` FK와 Material tombstone을 유지하고 참조 행을 임의로 삭제하지 않는다.
 - Course owner 탈퇴 시 aggregate와 owner membership을 어떻게 처리할지는 미정이며, 현재는 공유 참조를 보존하는 User tombstone 원칙만 있다.

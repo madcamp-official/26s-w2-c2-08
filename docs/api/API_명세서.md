@@ -163,19 +163,19 @@ POST /api/v1/auth/logout
 }
 ```
 
-|  HTTP | 의미                       | 주요 코드                                                                                                                                           |
-| ----: | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                 |
-| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                        |
-| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                             |
-| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`                                                                                                                                |
-| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE` |
-| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                    |
-| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                                                                                                                            |
-| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                  |
-| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                      |
-| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                    |
-| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                            |
+|  HTTP | 의미                       | 주요 코드                                                                                                                                                                                                                                |
+| ----: | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                                                                                                      |
+| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                                                                                                             |
+| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                  |
+| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`, `MATERIAL_NOT_FOUND`                                                                                                                                                                                               |
+| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE`, `MATERIAL_PROCESSING_ACTIVE`, `MATERIAL_LIMIT_EXCEEDED`, `MATERIAL_DELETE_CONFLICT` |
+| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                                                                                                         |
+| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                                                                                                                                                                                                                 |
+| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                                                                                                       |
+| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                                                                                                           |
+| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                         |
+| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                 |
 
 ### 3.2 AI 작업 수락 응답
 
@@ -460,7 +460,9 @@ POST /api/v1/sessions/{session_id}/start
 - 권한: Course `PROFESSOR`
 - 성공: `200 OK`, 상태 `LIVE`
 - `READY`에서만 시작한다.
-- 강의자료 없이 시작을 허용할지는 TBD이다.
+- 외부에서 연결된 강의자료가 0개여도 시작할 수 있다.
+- 연결된 강의자료가 모두 `READY`, `UPLOADED`, `FAILED` 중 하나이면 시작할 수 있다. `READY` 자료만 AI 근거로 사용하고 `UPLOADED`, `FAILED` 자료는 제외한다.
+- 연결된 강의자료가 하나라도 `PROCESSING`이면 `409 MATERIAL_PROCESSING_ACTIVE`를 반환하고 Session은 `READY`를 유지한다. 이미 분리된 자료는 시작 조건에 포함하지 않는다.
 - Course의 유일한 active Session이 이 Session이므로 같은 Course의 다른 `READY`, `LIVE`, `PROCESSING` Session과 공존할 수 없다.
 
 ### 7.7 class 종료
@@ -492,11 +494,13 @@ Content-Type: multipart/form-data
 | `file` | binary |    Y | PDF 파일 |
 
 - 권한: Course `PROFESSOR`
-- 성공: `202 Accepted`
-- 원본 파일 저장 후 PDF 전처리 Job을 생성한다.
-- 용량은 서버 `MAX_UPLOAD_BYTES`를 따르며 현재 예시는 50 MiB이다.
-- PDF MIME과 파싱 가능 여부를 검증한다.
-- Session당 PDF 개수 제한은 TBD이다.
+- Session 상태가 `READY`, `LIVE`, `COMPLETED`일 때 업로드할 수 있다. `PROCESSING`에서는 `409 SESSION_STATE_CONFLICT`를 반환한다.
+- 파일 하나의 최대 크기는 십진수 `100000000` bytes이다. 초과하면 `413 FILE_TOO_LARGE`, MIME과 파일 signature가 PDF가 아니면 `415 UNSUPPORTED_MEDIA_TYPE`을 반환한다.
+- 한 Session에 외부에서 연결된 강의자료는 최대 10개이다. 이미 10개이면 `409 MATERIAL_LIMIT_EXCEEDED`를 반환하며, 분리된 자료는 이 개수에 포함하지 않는다.
+- 동일 내용의 파일 재업로드를 허용한다. `Idempotency-Key`가 없는 별도 요청 또는 서로 다른 키의 요청은 content hash가 같아도 새 Material을 생성한다.
+- 서버는 업로드 파일명을 안전한 초기 `display_name`으로 정규화한다. 같은 Session의 연결된 자료와 충돌하면 확장자 앞에 ` (1)`, ` (2)` 순서로 사용 가능한 번호를 붙인다. 할당한 `display_name`은 업로드 시 저장하고 조회할 때 다시 계산하지 않는다.
+- 성공: `202 Accepted`. Material을 `processing_status=UPLOADED`로 저장하고 `MATERIAL_PROCESSING` AIJob을 생성한다. 이 Job은 `visibility=SHARED`, `blocks_session_completion=false`이며, `COMPLETED` Session에 업로드해도 Session 상태는 바뀌지 않는다.
+- 전처리 중에는 `PROCESSING`, 성공하면 `READY`, 실패하면 `FAILED`로 갱신한다. `READY` 자료만 새 AI 검색과 근거 생성에 사용할 수 있고 `UPLOADED`, `PROCESSING`, `FAILED` 자료는 제외한다.
 
 ### 8.2 자료 목록과 메타데이터
 
@@ -506,8 +510,9 @@ GET /api/v1/materials/{material_id}
 ```
 
 - 권한: Course 멤버
-- 응답: 원본 파일명, MIME, 크기, 페이지 수, 처리 상태
-- 내부 파일 경로나 스토리지 키는 응답하지 않는다.
+- 외부에서 연결된 자료만 반환한다. 응답은 업로드 시 확정한 `display_name`, MIME, 크기, 페이지 수와 처리 상태를 포함한다.
+- 분리된 자료의 단건 조회는 존재를 공개하지 않고 `404 MATERIAL_NOT_FOUND`를 반환한다.
+- 내부 파일 경로, 스토리지 키와 `detached_at`은 응답하지 않는다.
 
 ### 8.3 PDF 열람
 
@@ -517,7 +522,25 @@ GET /api/v1/materials/{material_id}/content
 
 - 권한: Course 멤버
 - 성공: `200 OK`, `application/pdf`
+- `Content-Disposition` 파일명에는 저장된 `display_name`을 안전하게 인코딩해 사용한다.
+- 분리된 자료는 `404 MATERIAL_NOT_FOUND`를 반환한다.
 - 추후 객체 스토리지를 사용하면 짧은 만료 시간의 서명 URL 응답으로 변경할 수 있다.
+
+### 8.4 자료 분리
+
+```http
+DELETE /api/v1/materials/{material_id}
+Idempotency-Key: <key>
+```
+
+- 권한: Course `PROFESSOR`
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- Session 상태가 `READY`, `LIVE`, `COMPLETED`일 때 분리할 수 있다. `PROCESSING`에서는 `409 SESSION_STATE_CONFLICT`를 반환한다.
+- 동시 상태 변경이나 version 경합으로 분리를 확정할 수 없으면 `409 MATERIAL_DELETE_CONFLICT`를 반환한다. 클라이언트는 자료 목록을 다시 불러온 뒤 재시도한다.
+- 성공: `204 No Content`. 응답 전에 외부 연결을 즉시 끊어 목록·단건·본문·수업 기록에서 제외하고 새 AI 검색과 근거 생성에도 사용하지 않는다.
+- 동일한 멱등성 키와 요청의 재시도는 최초 `204`를 반환한다. 분리 완료 후 새 요청으로 접근하면 `404 MATERIAL_NOT_FOUND`를 반환한다.
+- 파일 객체와 파생 chunk는 background cleanup으로 정리한다. 스토리지 키와 `detached_at`은 외부 API에 노출하지 않는다.
+- 이미 저장된 Assistant 근거를 보존하는 경우 안전한 `label` snapshot은 남길 수 있지만 자료 `resource_url`은 `null`로 반환한다. 근거의 정확한 보관 기간·FK 정책과 `410 Gone` 도입 여부는 미정이다.
 
 ## 9. Transcript API
 
@@ -745,7 +768,7 @@ Idempotency-Key: <key>
 
 - 권한: Course 멤버. 실시간 UI는 학생 중심이지만 교수자 허용 여부는 TBD이다.
 - `LIVE` Session에서 현재까지 또는 선택한 final Transcript 범위를 요약한다.
-- 관련 PDF 조각을 같은 Session 범위에서만 검색한다.
+- 같은 Session에 연결되고 `READY`인 PDF 조각만 검색한다. `UPLOADED`, `PROCESSING`, `FAILED` 또는 분리된 자료는 제외한다.
 - 성공: `202 Accepted`, AIJob 반환
 - 완료 결과는 `summary.completed`와 요약 조회 API로 확인한다.
 
@@ -822,7 +845,7 @@ Idempotency-Key: <key>
 ```
 
 - 권한: 대화 소유자이자 Course 멤버
-- 서버는 같은 Session의 PDF, final Transcript와 Q&A만 검색한다.
+- 서버는 같은 Session에 연결되고 `READY`인 PDF, final Transcript와 Q&A만 검색한다. `UPLOADED`, `PROCESSING`, `FAILED` 또는 분리된 자료는 제외한다.
 - 근거가 부족하면 확인할 수 없음을 응답한다.
 - 성공: `202 Accepted`, 사용자 Message와 AIJob 반환
 - AI 토큰 스트리밍 방식은 TBD이다.
@@ -835,8 +858,8 @@ GET /api/v1/chats/{chat_id}/messages?cursor=<cursor>&limit=50
 
 - 권한: 대화 소유자
 - 정렬: `sequence ASC`
-- Assistant Message는 사용한 근거 ID와 모델 정보를 포함할 수 있다.
-- 근거 세부 형식은 TBD이다.
+- Assistant Message는 사용자에게 안전한 근거 유형, 표시용 `label` snapshot, 권한 검사를 거치는 상대 링크 `resource_url`과 모델 정보를 포함할 수 있다.
+- 분리된 Material 근거를 보존하면 `label` snapshot은 유지하고 `resource_url`은 `null`로 반환한다. 내부 chunk ID와 스토리지 키는 노출하지 않는다.
 
 ## 14. AI 작업 API
 
@@ -885,9 +908,9 @@ GET /api/v1/sessions/{session_id}/record
 
 - 권한: Course 멤버
 - 허용 Session 상태: `PROCESSING`, `COMPLETED`
-- 응답: Session, 자료 메타데이터, final Transcript, 최신 최종 요약, 질문·반응·클러스터·답변, 후처리 Job 상태
+- 응답: Session, 외부에서 연결된 자료 메타데이터, final Transcript, 최신 최종 요약, 질문·반응·클러스터·답변, 후처리 Job 상태
 - `jobs`에는 자료 처리·Session 후처리 같은 공용 Job만 포함하고 개인 요약·질문 초안·Chat Job은 포함하지 않는다.
-- 일부 AI 작업이 실패해도 저장된 PDF, Transcript와 Q&A는 반환한다.
+- 일부 AI 작업이 실패해도 연결된 PDF, Transcript와 Q&A는 반환한다. 분리된 자료는 즉시 제외한다.
 - 응답 크기가 커지면 통합 API는 요약만 반환하고 세부 리소스 API로 분리한다.
 
 ## 16. WebSocket과 음성 스트리밍
@@ -1206,7 +1229,7 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 | PRE-T-01              | Course 생성     | `POST /courses`                         | —                                 |
 | PRE-T-02              | 참여 코드 발급  | Course 생성·상세·참여 코드 회전         | —                                 |
 | PRE-T-03              | class 관리      | class 생성·제목 수정·삭제               | —                                 |
-| PRE-T-04              | PDF 업로드      | `POST /sessions/{id}/materials`         | `job.updated`                     |
+| PRE-T-04              | PDF 관리        | Material 목록·업로드·열람·분리 API      | `job.updated`                     |
 | PRE-T-05              | class 시작      | `POST /sessions/{id}/start`             | `session.updated`                 |
 | PRE-S-01              | 코드 참여       | `POST /courses/join`                    | —                                 |
 | PRE-S-02              | class 확인      | `GET /courses/{id}/sessions`            | —                                 |
@@ -1235,23 +1258,24 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 - AI 모델 입력에 학생의 실제 식별 정보를 포함하지 않는다.
 - 모든 Material, Transcript, Question, Answer, Summary, Chat과 Job 접근은 Course 멤버십을 검증한다.
 - 개인 요약·질문 초안·Chat 이벤트와 Job 상태는 Session 전체에 broadcast하지 않는다.
-- 스토리지 키와 서버 파일 경로는 외부 API에 노출하지 않는다.
+- 스토리지 키, 서버 파일 경로와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
 
 ## 19. 미정 사항
 
-| 항목               | 현재 상태                                         | 결정 시 영향                |
-| ------------------ | ------------------------------------------------- | --------------------------- |
-| ID 형식            | 불투명 string                                     | OpenAPI `format`, DB PK     |
-| class 자동 제목    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD | Session 생성·제목 수정 응답 |
-| active Course 삭제 | active Session 보유 시 삭제·보관 방식 TBD         | Course 삭제 응답·트랜잭션   |
-| PDF 카디널리티     | Session당 개수 TBD                                | 업로드 충돌 응답            |
-| 답변 형식          | MVP 텍스트 답변 여부 TBD                          | Answer 요청·응답            |
-| 개인 AI 데이터     | 교수자 LIVE 사용·보관·삭제 TBD                    | Summary·Chat 권한·수명      |
-| AI 응답 전송       | 폴링·SSE·WebSocket TBD                            | Chat·Summary 응답           |
-| 오디오 publisher   | 단일 연결 lease·교대 정책 TBD                     | 중복 탭·장치 충돌           |
-| 이벤트 재생        | event log 보존 여부 TBD                           | 재연결 프로토콜             |
-| 개인 AI 스트림     | streaming HTTP·SSE·target WS TBD                  | delta·재연결 계약           |
-| 레이트 리미트      | 임계치 TBD                                        | `429` 헤더·재시도           |
+| 항목               | 현재 상태                                                                                             | 결정 시 영향                |
+| ------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------- |
+| ID 형식            | 불투명 string                                                                                         | OpenAPI `format`, DB PK     |
+| class 자동 제목    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD                                                     | Session 생성·제목 수정 응답 |
+| active Course 삭제 | active Session 보유 시 삭제·보관 방식 TBD                                                             | Course 삭제 응답·트랜잭션   |
+| Material 표시명    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD             | 업로드·목록·다운로드 파일명 |
+| Material 분리 근거 | 안전한 label snapshot과 `resource_url=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD | Chat 근거·DB 삭제 정책      |
+| 답변 형식          | MVP 텍스트 답변 여부 TBD                                                                              | Answer 요청·응답            |
+| 개인 AI 데이터     | 교수자 LIVE 사용·보관·삭제 TBD                                                                        | Summary·Chat 권한·수명      |
+| AI 응답 전송       | 폴링·SSE·WebSocket TBD                                                                                | Chat·Summary 응답           |
+| 오디오 publisher   | 단일 연결 lease·교대 정책 TBD                                                                         | 중복 탭·장치 충돌           |
+| 이벤트 재생        | event log 보존 여부 TBD                                                                               | 재연결 프로토콜             |
+| 개인 AI 스트림     | streaming HTTP·SSE·target WS TBD                                                                      | delta·재연결 계약           |
+| 레이트 리미트      | 임계치 TBD                                                                                            | `429` 헤더·재시도           |
 
 ## 20. 검토 체크리스트
 
