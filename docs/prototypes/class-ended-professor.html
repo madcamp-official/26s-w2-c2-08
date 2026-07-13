@@ -598,10 +598,12 @@
                   class="record-question-list"
                   data-show-state="normal page-error"
                 >
-                  <li class="record-question" data-question-status="answered">
+                  <li class="record-question">
                     <div class="split">
                       <strong>음수 가중치가 있으면 왜 다시 봐야 하나요?</strong>
-                      <span class="badge">ANSWERED · 궁금해요 18</span>
+                      <span class="badge"
+                        >OPEN · 대표질문 Answer와 독립 · 궁금해요 18</span
+                      >
                     </div>
                   </li>
                   <li class="record-question">
@@ -1036,13 +1038,27 @@
                       class="record-evidence-link"
                       type="button"
                       data-evidence-link
+                      data-source-kind="STUDENT_QUESTION"
+                      data-public-link="/api/v1/questions/question_public"
+                    >
+                      학생 질문 · 음수 간선
+                    </button>
+                    <button
+                      class="record-evidence-link"
+                      type="button"
+                      data-evidence-link
                       data-evidence-state="error"
                       data-source-kind="ANSWER"
                       data-public-link="/api/v1/answers/answer_public"
                     >
                       교수자 Answer · 이동 재시도
                     </button>
-                    <button class="record-evidence-link" type="button" disabled>
+                    <button
+                      class="record-evidence-link"
+                      type="button"
+                      data-source-kind="AI_REPRESENTATIVE_QUESTION"
+                      disabled
+                    >
                       폐기된 AI 대표질문 · 이동할 수 없음
                     </button>
                   </div>
