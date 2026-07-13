@@ -106,7 +106,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 44px;
   padding: 8px 15px;
   border-radius: var(--radius-pill);
   color: var(--color-muted);
@@ -253,7 +253,7 @@
 .profile-popover button {
   display: flex;
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
   padding: 10px 12px;
   border-radius: 11px;
@@ -277,7 +277,7 @@
 
 .mobile-nav a {
   flex: 0 0 auto;
-  min-height: 38px;
+  min-height: 44px;
   padding: 10px 14px;
   border-radius: var(--radius-pill);
   color: var(--color-muted);
@@ -390,7 +390,7 @@
 .state-switcher button,
 .state-switcher a {
   display: inline-flex;
-  min-height: 36px;
+  min-height: 44px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -833,8 +833,10 @@
   background: var(--color-surface);
 }
 .record-toc a {
+  display: inline-flex;
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 44px;
+  align-items: center;
   padding: 8px 12px;
   border-radius: var(--radius-pill);
   font-size: 11px;
@@ -1705,7 +1707,7 @@
 
 .cluster-disclosure > button {
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   padding: 10px 0 0;
   color: var(--color-brand-dark);
   font-size: 11px;
@@ -3586,6 +3588,12 @@
   color: var(--color-muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.breadcrumb a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
 }
 
 .breadcrumb a:hover,

@@ -268,9 +268,15 @@ function initTranscriptRangeLinks() {
     });
     const first = target.querySelector(`[data-sequence="${start}"]`);
     if (first) {
+      const reduceMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
       first.tabIndex = -1;
       first.focus({ preventScroll: true });
-      first.scrollIntoView({ block: "center", behavior: "smooth" });
+      first.scrollIntoView({
+        block: "center",
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
     }
     showToast(
       `Transcript sequence ${start}~${end} 범위를 표시했습니다.`,
