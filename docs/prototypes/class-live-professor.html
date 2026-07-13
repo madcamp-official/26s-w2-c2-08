@@ -3,11 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="GOAL 교수자 실시간 class 정적 프로토타입"
-    />
-    <title>GOAL · 교수자 실시간 class</title>
+    <meta name="description" content="GOAL 교수자 LIVE class 정적 프로토타입" />
+    <title>GOAL · 교수자 LIVE class</title>
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
@@ -16,7 +13,8 @@
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
-      Static prototype · 마이크·WebSocket·REST를 실제로 사용하지 않습니다
+      Static prototype · 마이크·녹음·WebSocket·REST·AI를 실제로 사용하지
+      않습니다
     </div>
     <header class="site-header">
       <div class="container site-header__inner">
@@ -30,7 +28,7 @@
           <a href="dashboard.html">홈</a
           ><a href="course-professor.html">알고리즘</a
           ><a href="class-live-professor.html" aria-current="page"
-            >실시간 class</a
+            >LIVE class</a
           >
         </nav>
         <div class="header-actions">
@@ -38,6 +36,7 @@
             class="profile-button"
             type="button"
             data-profile-trigger
+            aria-label="김도현 계정 메뉴"
             aria-expanded="false"
             aria-controls="profilePopover"
           >
@@ -60,260 +59,369 @@
         </div>
       </div>
       <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
-        <a href="course-professor.html">Course</a
-        ><a href="#transcriptTitle" aria-current="page">Transcript</a
-        ><a href="#questionsTitle">질문</a>
+        <a href="#transcriptTitle">Transcript</a
+        ><a href="#questionsTitle">질문</a><a href="#materialsTitle">자료</a
+        ><a href="#liveAiTitle">개인 AI</a>
       </nav>
     </header>
 
     <main class="container page-main live-shell" id="mainContent">
-      <nav class="breadcrumb" aria-label="현재 위치">
-        <a href="course-professor.html">알고리즘</a
-        ><span aria-hidden="true">/</span
-        ><span aria-current="page">그래프 탐색과 최단 경로 · LIVE</span>
-      </nav>
-      <header class="live-header">
-        <div>
-          <p class="eyebrow">LIVE_CLASS_PAGE_PROF · LIVE-T-01~08</p>
-          <h1>그래프 탐색과 최단 경로</h1>
-          <p>
-            2026년 7월 12일 · 이 Course의 교수자 · 참여자 수는 현재 API 계약에
-            없어 표시하지 않습니다.
-          </p>
-        </div>
-        <div class="live-header__actions">
-          <span class="status-chip status-chip--live">LIVE</span
-          ><button class="button button--danger" type="button" data-end-open>
-            class 종료
-          </button>
-        </div>
-      </header>
-
       <div
         id="liveAnnouncement"
         class="sr-only"
+        data-live-announcer
         aria-live="polite"
         aria-atomic="true"
       ></div>
-      <div
-        class="state-switcher"
-        data-state-switcher
-        data-state-target="#liveView"
-        aria-label="전체 화면 상태 선택"
-      >
-        <button type="button" data-state="normal" aria-pressed="true">
-          정상</button
-        ><button type="button" data-state="loading" aria-pressed="false">
-          로딩</button
-        ><button type="button" data-state="error" aria-pressed="false">
-          오류</button
-        ><button type="button" data-state="forbidden" aria-pressed="false">
-          권한 없음</button
-        ><button type="button" data-state="expired" aria-pressed="false">
-          인증 만료</button
-        ><button type="button" data-state="wrong-state" aria-pressed="false">
-          상태 불일치
-        </button>
-      </div>
+
+      <details class="panel realtime-controls">
+        <summary><strong>프로토타입 상태 검토 도구</strong></summary>
+        <p class="text-muted text-small">
+          제품의 수동 제어가 아니라 독립 상태와 오류 조합을 검토하기 위한
+          도구입니다.
+        </p>
+        <div class="realtime-control-grid">
+          <div class="realtime-control">
+            <h2>전체 화면</h2>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#liveView"
+              aria-label="전체 화면 상태 선택"
+            >
+              <button type="button" data-state="normal" aria-pressed="true">
+                정상</button
+              ><button type="button" data-state="loading" aria-pressed="false">
+                로딩</button
+              ><button type="button" data-state="error" aria-pressed="false">
+                오류</button
+              ><button
+                type="button"
+                data-state="forbidden"
+                aria-pressed="false"
+              >
+                권한 없음</button
+              ><button type="button" data-state="expired" aria-pressed="false">
+                인증 만료</button
+              ><button
+                type="button"
+                data-state="wrong-state"
+                aria-pressed="false"
+              >
+                상태 불일치
+              </button>
+              <button
+                type="button"
+                data-state="processing"
+                data-live-processing
+                aria-pressed="false"
+              >
+                PROCESSING
+              </button>
+            </div>
+          </div>
+          <div class="realtime-control">
+            <h2>Publisher</h2>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#publisherState"
+              data-publisher-switcher
+              aria-label="publisher 상태 선택"
+            >
+              <button type="button" data-state="checking" aria-pressed="true">
+                확인</button
+              ><button type="button" data-state="active" aria-pressed="false">
+                active</button
+              ><button type="button" data-state="conflict" aria-pressed="false">
+                충돌</button
+              ><button
+                type="button"
+                data-state="reconnecting"
+                aria-pressed="false"
+              >
+                재연결</button
+              ><button type="button" data-state="resumed" aria-pressed="false">
+                resume
+              </button>
+            </div>
+          </div>
+          <div class="realtime-control">
+            <h2>Audio WS</h2>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#audioState"
+              aria-label="Audio WS 상태 선택"
+            >
+              <button type="button" data-state="permission" aria-pressed="true">
+                권한</button
+              ><button type="button" data-state="denied" aria-pressed="false">
+                거부</button
+              ><button
+                type="button"
+                data-state="unavailable"
+                aria-pressed="false"
+              >
+                장치 없음</button
+              ><button
+                type="button"
+                data-state="connecting"
+                aria-pressed="false"
+              >
+                연결</button
+              ><button
+                type="button"
+                data-state="listening"
+                aria-pressed="false"
+              >
+                전송</button
+              ><button
+                type="button"
+                data-state="reconnecting"
+                aria-pressed="false"
+              >
+                재연결</button
+              ><button type="button" data-state="error" aria-pressed="false">
+                오류
+              </button>
+            </div>
+          </div>
+          <div class="realtime-control">
+            <h2>로컬 녹음</h2>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#recordingState"
+              aria-label="로컬 녹음 상태 선택"
+            >
+              <button type="button" data-state="idle" aria-pressed="true">
+                대기</button
+              ><button
+                type="button"
+                data-state="recording"
+                aria-pressed="false"
+              >
+                녹음</button
+              ><button
+                type="button"
+                data-state="finalizing"
+                aria-pressed="false"
+              >
+                마감</button
+              ><button
+                type="button"
+                data-state="ready-upload"
+                aria-pressed="false"
+              >
+                인계</button
+              ><button type="button" data-state="failed" aria-pressed="false">
+                실패
+              </button>
+            </div>
+          </div>
+          <div class="realtime-control">
+            <h2>STT</h2>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#sttState"
+              aria-label="STT 상태 선택"
+            >
+              <button type="button" data-state="listening" aria-pressed="true">
+                수신</button
+              ><button
+                type="button"
+                data-state="finalizing"
+                aria-pressed="false"
+              >
+                마감</button
+              ><button
+                type="button"
+                data-state="finalized"
+                aria-pressed="false"
+              >
+                확정</button
+              ><button type="button" data-state="error" aria-pressed="false">
+                오류
+              </button>
+            </div>
+          </div>
+          <div class="realtime-control">
+            <h2>질문 클러스터링</h2>
+            <div
+              class="state-switcher"
+              data-state-switcher
+              data-state-target="#questionsPanel"
+              data-professor-question-switcher
+              aria-label="질문 클러스터링 상태 선택"
+            >
+              <button type="button" data-state="normal" aria-pressed="true">
+                적용</button
+              ><button
+                type="button"
+                data-state="clustering-pending"
+                aria-pressed="false"
+              >
+                pending</button
+              ><button
+                type="button"
+                data-state="clustering-running"
+                aria-pressed="false"
+              >
+                running</button
+              ><button
+                type="button"
+                data-state="clustering-retry-reserved"
+                aria-pressed="false"
+              >
+                retry 예약</button
+              ><button
+                type="button"
+                data-state="cluster-failed"
+                aria-pressed="false"
+              >
+                실패
+              </button>
+            </div>
+          </div>
+        </div>
+      </details>
 
       <section
         id="liveView"
         data-demo-state="normal"
         data-query-state="view"
         data-query-default="normal"
-        aria-live="polite"
       >
         <div data-show-state="normal">
-          <section
-            class="panel realtime-controls"
-            aria-labelledby="connectionReviewTitle"
-          >
-            <div class="section-heading">
-              <div>
-                <h2 id="connectionReviewTitle">독립 연결 상태 검토</h2>
-                <p>
-                  Session events, Audio 전송과 STT 처리 상태를 합치지 않습니다.
-                </p>
-              </div>
-            </div>
-            <div class="realtime-control-grid">
-              <div class="realtime-control">
-                <h2>Session event WS</h2>
-                <div
-                  class="state-switcher"
-                  data-state-switcher
-                  data-state-target="#eventState"
-                  data-event-state-switcher
-                  aria-label="Session event 상태 선택"
-                >
-                  <button
-                    type="button"
-                    data-state="connected"
-                    aria-pressed="true"
-                  >
-                    연결</button
-                  ><button
-                    type="button"
-                    data-state="reconnecting"
-                    aria-pressed="false"
-                  >
-                    재연결</button
-                  ><button
-                    type="button"
-                    data-state="resync"
-                    aria-pressed="false"
-                  >
-                    재동기화</button
-                  ><button
-                    type="button"
-                    data-state="stopped"
-                    aria-pressed="false"
-                  >
-                    종료
-                  </button>
-                </div>
-              </div>
-              <div class="realtime-control">
-                <h2>Audio WS</h2>
-                <div
-                  class="state-switcher"
-                  data-state-switcher
-                  data-state-target="#audioState"
-                  aria-label="Audio 상태 선택"
-                >
-                  <button
-                    type="button"
-                    data-state="permission"
-                    aria-pressed="true"
-                  >
-                    권한</button
-                  ><button
-                    type="button"
-                    data-state="denied"
-                    aria-pressed="false"
-                  >
-                    거부</button
-                  ><button
-                    type="button"
-                    data-state="unavailable"
-                    aria-pressed="false"
-                  >
-                    사용 불가</button
-                  ><button
-                    type="button"
-                    data-state="connecting"
-                    aria-pressed="false"
-                  >
-                    연결</button
-                  ><button
-                    type="button"
-                    data-state="listening"
-                    aria-pressed="false"
-                  >
-                    전송</button
-                  ><button
-                    type="button"
-                    data-state="degraded"
-                    aria-pressed="false"
-                  >
-                    지연</button
-                  ><button
-                    type="button"
-                    data-state="reconnecting"
-                    aria-pressed="false"
-                  >
-                    재연결</button
-                  ><button type="button" data-state="gap" aria-pressed="false">
-                    누락</button
-                  ><button
-                    type="button"
-                    data-state="finalizing"
-                    aria-pressed="false"
-                  >
-                    마감</button
-                  ><button
-                    type="button"
-                    data-state="stopped"
-                    aria-pressed="false"
-                  >
-                    종료
-                  </button>
-                </div>
-              </div>
-              <div class="realtime-control">
-                <h2>STT</h2>
-                <div
-                  class="state-switcher"
-                  data-state-switcher
-                  data-state-target="#sttState"
-                  aria-label="STT 상태 선택"
-                >
-                  <button
-                    type="button"
-                    data-state="listening"
-                    aria-pressed="true"
-                  >
-                    수신</button
-                  ><button
-                    type="button"
-                    data-state="degraded"
-                    aria-pressed="false"
-                  >
-                    지연</button
-                  ><button
-                    type="button"
-                    data-state="finalizing"
-                    aria-pressed="false"
-                  >
-                    마감</button
-                  ><button
-                    type="button"
-                    data-state="finalized"
-                    aria-pressed="false"
-                  >
-                    확정</button
-                  ><button
-                    type="button"
-                    data-state="stopped"
-                    aria-pressed="false"
-                  >
-                    중지
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+          <nav class="breadcrumb" aria-label="현재 위치">
+            <a href="course-professor.html">알고리즘</a
+            ><span aria-hidden="true">/</span
+            ><span aria-current="page">그래프 탐색과 최단 경로 · LIVE</span>
+          </nav>
 
-          <section class="realtime-status-grid" aria-label="실시간 연결 상태">
+          <header class="live-header">
+            <div>
+              <p class="eyebrow">LIVE_CLASS_PAGE_PROF · LIVE</p>
+              <div class="cluster">
+                <h1 id="classTitle">그래프 탐색과 최단 경로</h1>
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  data-dialog-open="titleDialog"
+                >
+                  제목 수정
+                </button>
+              </div>
+              <p>
+                2026년 7월 12일 14:00 시작 · 날짜와 시작 시각은 수정할 수
+                없습니다. 참여자 수는 현재 API 계약에 없어 표시하지 않습니다.
+              </p>
+            </div>
+            <div class="live-header__actions">
+              <span class="status-chip status-chip--live">LIVE</span
+              ><button
+                class="button button--danger"
+                type="button"
+                data-end-open
+              >
+                class 종료
+              </button>
+            </div>
+          </header>
+
+          <section class="live-axis-grid" aria-label="실시간 독립 상태">
             <article
-              class="realtime-status-card"
+              class="live-contract-axis"
               id="eventState"
               data-demo-state="connected"
               data-query-state="events"
               data-query-default="connected"
             >
-              <small>Session event WS</small
-              ><strong data-show-state="connected"
-                >연결됨 · 변경 알림 수신</strong
-              ><strong data-show-state="reconnecting" hidden
-                >재연결 중 · partial 제거</strong
-              ><strong data-show-state="resync" hidden
-                >REST 재동기화 필요</strong
-              ><strong data-show-state="stopped" hidden
+              <small>Session event WS</small>
+              <strong data-show-state="connected">연결됨 · 알림 수신</strong>
+              <div data-show-state="reconnecting" hidden>
+                <strong>재연결 중 · partial 제거</strong>
+                <p>저장된 final과 질문은 유지합니다.</p>
+              </div>
+              <div data-show-state="resync" hidden>
+                <strong>REST 재동기화 필요</strong>
+                <p>version-bound cursor로 canonical 상태를 다시 읽습니다.</p>
+              </div>
+              <strong data-show-state="stopped" hidden
                 >Session event 종료</strong
               >
+              <div class="cluster">
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  data-event-reconnect
+                >
+                  재연결 목 상태
+                </button>
+              </div>
             </article>
+
             <article
-              class="realtime-status-card"
+              class="live-contract-axis"
+              id="publisherState"
+              data-demo-state="checking"
+              data-query-state="publisher"
+              data-query-default="checking"
+            >
+              <small>Audio publisher</small>
+              <div data-show-state="checking">
+                <strong>첫 audio.start 확인 중</strong>
+                <button
+                  class="button button--primary"
+                  type="button"
+                  data-publisher-start
+                >
+                  이 탭에서 마이크 시작
+                </button>
+              </div>
+              <div data-show-state="starting" hidden>
+                <strong>마이크 권한 확인 중 · publisher 미선점</strong>
+                <p>서버가 첫 audio.start를 수락한 뒤에만 ACTIVE가 됩니다.</p>
+              </div>
+              <div data-show-state="active" hidden>
+                <strong>ACTIVE · 이 탭만 음성 전송</strong>
+                <p>client_stream_id: live-tab-a · 이탈 경고 활성</p>
+              </div>
+              <div
+                class="live-axis-alert"
+                data-show-state="conflict"
+                role="alert"
+                hidden
+              >
+                <strong>AUDIO_PUBLISHER_CONFLICT · 4409</strong>
+                <p>
+                  다른 탭이 전송 중입니다. 이 탭의 Transcript·질문·자료·개인 AI
+                  조회는 계속 사용할 수 있습니다.
+                </p>
+              </div>
+              <div data-show-state="reconnecting" hidden>
+                <strong>같은 client_stream_id로 재연결 중</strong>
+                <p>다른 탭 takeover는 제공하지 않습니다.</p>
+              </div>
+              <div data-show-state="resumed" hidden>
+                <strong>동일 publisher resume 완료</strong>
+                <p>재연결 사이 live partial은 REST final로 다시 맞춥니다.</p>
+              </div>
+            </article>
+
+            <article
+              class="live-contract-axis"
               id="audioState"
               data-demo-state="permission"
               data-query-state="audio"
               data-query-default="permission"
             >
-              <small>Audio WS</small>
+              <small>실시간 Audio WS</small>
               <div data-show-state="permission">
-                <strong>마이크 권한 필요</strong
-                ><button
+                <strong>마이크 권한 필요</strong>
+                <button
                   class="button button--secondary"
                   type="button"
                   data-mic-request
@@ -322,57 +430,108 @@
                 </button>
               </div>
               <div data-show-state="connecting" hidden>
-                <strong>권한 응답·Audio 연결 대기</strong>
+                <strong>Audio ticket 연결 대기</strong>
                 <div class="cluster">
                   <button
                     class="button button--secondary"
                     type="button"
                     data-mic-allow
                   >
-                    허용 목 응답</button
+                    허용</button
                   ><button
                     class="button button--ghost"
                     type="button"
                     data-mic-deny
                   >
-                    거부 목 응답
+                    거부
                   </button>
                 </div>
               </div>
               <strong data-show-state="denied" hidden
-                >권한 거부 · 질문은 사용 가능</strong
+                >권한 거부 · 조회 기능은 유지</strong
               ><strong data-show-state="unavailable" hidden
-                >장치 사용 불가</strong
-              ><strong data-show-state="listening" hidden
-                >audio chunk 전송 중</strong
-              ><strong data-show-state="degraded" hidden
-                >Audio 지연·backpressure</strong
-              ><strong data-show-state="reconnecting" hidden
-                >새 ticket으로 재연결</strong
-              ><strong data-show-state="gap" hidden>복구 불가 audio gap</strong
-              ><strong data-show-state="finalizing" hidden
-                >audio.stop · drain 중</strong
-              ><strong data-show-state="stopped" hidden>audio.stopped</strong>
+                >마이크 장치 사용 불가</strong
+              >
+              <div data-show-state="listening" hidden>
+                <strong>PCM chunk 전송 중</strong>
+                <p>PCM_S16LE · 16 kHz · mono · 500 ms</p>
+              </div>
+              <div data-show-state="reconnecting" hidden>
+                <strong>새 Audio ticket으로 재연결 중</strong>
+                <p>로컬 녹음은 독립적으로 계속될 수 있습니다.</p>
+              </div>
+              <div class="live-axis-alert" data-show-state="error" hidden>
+                <strong>실시간 전송 실패</strong>
+                <p>로컬 녹음·질문·저장된 final은 계속 사용할 수 있습니다.</p>
+              </div>
             </article>
+
             <article
-              class="realtime-status-card"
+              class="live-contract-axis"
+              id="recordingState"
+              data-demo-state="idle"
+              data-query-state="recording"
+              data-query-default="idle"
+            >
+              <small>브라우저 로컬 녹음</small>
+              <strong data-show-state="idle">publisher 시작 전 대기</strong>
+              <div data-show-state="recording" hidden>
+                <strong>RECORDING · 원본 복구 경로 확보</strong>
+                <p>저장 codec·container·local storage 방식은 미정입니다.</p>
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  data-leave-preview
+                >
+                  탭 이탈 경고 확인
+                </button>
+              </div>
+              <div data-show-state="finalizing" hidden>
+                <strong>로컬 녹음 파일 마감 중</strong>
+                <p>Session PROCESSING 전이와 독립적으로 진행합니다.</p>
+              </div>
+              <div data-show-state="ready-upload" hidden>
+                <strong>UPLOAD_PENDING으로 인계됨</strong>
+                <p>resumable upload 상세는 기록 정리 화면에서 표시합니다.</p>
+              </div>
+              <div
+                class="live-axis-alert"
+                data-show-state="failed"
+                role="alert"
+                hidden
+              >
+                <strong>로컬 녹음 실패</strong>
+                <p>
+                  실시간 Audio WS와 이미 저장된 final은 자동 실패하지 않습니다.
+                </p>
+              </div>
+            </article>
+
+            <article
+              class="live-contract-axis"
               id="sttState"
               data-demo-state="listening"
               data-query-state="stt"
               data-query-default="listening"
             >
-              <small>STT</small
-              ><strong data-show-state="listening"
-                >LISTENING · final 누적</strong
-              ><strong data-show-state="degraded" hidden
-                >DEGRADED · 질문은 사용 가능</strong
-              ><strong data-show-state="finalizing" hidden
-                >FINALIZING · 남은 final 대기</strong
-              ><strong data-show-state="finalized" hidden
-                >FINALIZED · 생성 완료</strong
-              ><strong data-show-state="stopped" hidden
-                >STOPPED · 인식 중지</strong
+              <small>실시간 STT</small>
+              <strong data-show-state="listening"
+                >LISTENING · live final 누적</strong
               >
+              <div data-show-state="finalizing" hidden>
+                <strong>남은 음성 처리 중</strong>
+                <p>이 상태는 Session PROCESSING 전이의 선행조건이 아닙니다.</p>
+              </div>
+              <div data-show-state="finalized" hidden>
+                <strong>현재 live final 마감</strong>
+                <p>수업 후 HQ STT canonical Transcript와는 별개입니다.</p>
+              </div>
+              <div class="live-axis-alert" data-show-state="error" hidden>
+                <strong>실시간 STT 오류</strong>
+                <p>
+                  로컬 녹음을 통한 후처리 복구 경로는 독립적으로 유지합니다.
+                </p>
+              </div>
             </article>
           </section>
 
@@ -388,21 +547,24 @@
               <header class="live-panel__header">
                 <div>
                   <h2 id="transcriptTitle">실시간 Transcript</h2>
-                  <p>final은 REST가 진실이며 partial은 저장되지 않습니다.</p>
+                  <p>
+                    final은 REST가 진실이고 partial은 저장·AI 근거에 포함하지
+                    않습니다.
+                  </p>
                 </div>
-                <div class="cluster">
+                <div class="cluster" aria-label="서버 event 목 상태">
                   <button
                     class="button button--ghost"
                     type="button"
                     data-partial-revision
                   >
-                    revision +1</button
+                    partial event</button
                   ><button
                     class="button button--secondary"
                     type="button"
                     data-partial-finalize
                   >
-                    DB commit 후 final
+                    final event
                   </button>
                 </div>
               </header>
@@ -410,6 +572,7 @@
                 <ol class="transcript-stream" id="transcriptStream">
                   <li
                     class="transcript-segment"
+                    id="segment-126"
                     data-transcript-kind="final"
                     data-sequence="126"
                   >
@@ -430,8 +593,8 @@
                     <time data-transcript-time datetime="PT10M27S">10:27</time>
                     <div>
                       <p>
-                        한 번 확정된 최단 거리는 음수 간선이 없다면 다시
-                        작아지지 않습니다.
+                        음수 간선이 없다면 확정한 최단 거리는 다시 작아지지
+                        않습니다.
                       </p>
                       <small>final · DB 저장 · sequence 127</small>
                     </div>
@@ -451,7 +614,7 @@
                       </p>
                       <small data-partial-meta
                         ><span data-partial-revision-label>revision 2</span> ·
-                        저장되지 않음 · 답변 후보 제외</small
+                        미저장 · 답변 후보 제외</small
                       >
                     </div>
                   </li>
@@ -464,56 +627,32 @@
                   새 문장으로 이동 ↓
                 </button>
               </div>
-              <div
-                class="state-panel"
-                data-show-state="loading"
-                hidden
-                aria-busy="true"
-              >
+              <div class="state-panel" data-show-state="loading" hidden>
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">…</span>
                   <h3>저장된 final을 불러오는 중입니다</h3>
-                  <p>partial 표시와 별개로 REST canonical 기록을 조회합니다.</p>
                 </div>
               </div>
               <div class="state-panel" data-show-state="empty" hidden>
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">○</span>
                   <h3>아직 저장된 final이 없습니다</h3>
-                  <p>STT가 첫 final을 commit하면 순서대로 표시됩니다.</p>
                 </div>
               </div>
               <div class="state-panel" data-show-state="resync" hidden>
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">↻</span>
-                  <h3>Transcript 재동기화가 필요합니다</h3>
+                  <h3>REST 재동기화가 필요합니다</h3>
                   <p>
-                    partial을 버리고 마지막 sequence 이후 final을 REST로 다시
-                    조회합니다.
+                    partial을 버리고 version-bound cursor로 다시 조회합니다.
                   </p>
                 </div>
               </div>
-              <div
-                class="state-panel"
-                data-show-state="error"
-                hidden
-                role="alert"
-              >
+              <div class="state-panel" data-show-state="error" hidden>
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">!</span>
                   <h3>Transcript를 불러오지 못했습니다</h3>
-                  <p>
-                    질문 조회와 답변 대상 선택은 별도로 계속 사용할 수 있습니다.
-                  </p>
-                  <button
-                    class="button button--secondary"
-                    type="button"
-                    data-state-action
-                    data-state-target="#transcriptPanel"
-                    data-state="normal"
-                  >
-                    이 영역만 다시 시도
-                  </button>
+                  <p>질문·자료·개인 AI의 저장 상태는 별도로 유지합니다.</p>
                 </div>
               </div>
             </section>
@@ -528,201 +667,429 @@
             >
               <header class="live-panel__header">
                 <div>
-                  <h2 id="questionsTitle">익명 질문</h2>
-                  <p>작성자 식별 없이 질문별 반응 수를 표시합니다.</p>
-                </div>
-                <div
-                  class="sort-toggle"
-                  data-pressed-group
-                  data-question-sort
-                  aria-label="질문 정렬"
-                >
-                  <button type="button" data-sort="popular" aria-pressed="true">
-                    인기순</button
-                  ><button
-                    type="button"
-                    data-sort="recent"
-                    aria-pressed="false"
-                  >
-                    최신순
-                  </button>
+                  <h2 id="questionsTitle">질문 마인드맵</h2>
+                  <p>질문 commit이 자동으로 다음 클러스터링을 예약합니다.</p>
                 </div>
               </header>
-              <div class="question-viewport" data-show-state="normal">
-                <ul class="question-list">
-                  <li class="question-cluster">
-                    <div class="question-cluster__meta">
+
+              <div
+                data-show-state="normal clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+              >
+                <section
+                  class="live-question-priority"
+                  data-question-priority
+                  data-question-sort="POPULAR"
+                  aria-labelledby="profQuestionPriorityTitle"
+                >
+                  <div class="live-question-priority__header">
+                    <div>
+                      <h3 id="profQuestionPriorityTitle">
+                        전체 질문 · 답변 우선순위
+                      </h3>
+                      <p data-question-sort-description>
+                        인기순 · reaction_count DESC, created_at DESC, id DESC
+                      </p>
+                    </div>
+                    <div
+                      class="state-switcher"
+                      role="group"
+                      aria-label="전체 질문 정렬"
+                    >
+                      <button
+                        type="button"
+                        data-question-sort="POPULAR"
+                        aria-pressed="true"
+                      >
+                        인기순</button
+                      ><button
+                        type="button"
+                        data-question-sort="RECENT"
+                        aria-pressed="false"
+                      >
+                        최신순
+                      </button>
+                    </div>
+                  </div>
+                  <p class="text-muted text-small">
+                    정렬은 독립 Question 목록에만 적용하며 아래 Cluster·child의
+                    membership 순서는 바꾸지 않습니다.
+                  </p>
+                  <ol data-question-priority-list>
+                    <li
+                      data-question-priority-item
+                      data-priority-question-id="question-103"
+                      data-question-id="question-103"
+                      data-reaction-count="9"
+                      data-created-order="1"
+                    >
                       <div>
-                        <span class="badge">유사 질문 묶음</span>
-                        <h3>음수 가중치와 다익스트라</h3>
+                        <strong
+                          >벨만-포드는 음수 간선을 어떻게 처리하나요?</strong
+                        >
+                        <small
+                          >궁금해요 9 ·
+                          <span data-priority-status-label>OPEN</span></small
+                        >
                       </div>
                       <button
                         class="button button--secondary"
                         type="button"
-                        data-answer-select="cluster"
+                        data-priority-answer="question-103"
                       >
-                        선택 질문 2개 답변
+                        이 질문 답변
                       </button>
-                    </div>
-                    <p>
-                      음수 간선에서 탐욕적 확정이 깨지는 이유에 관한 질문입니다.
-                      클러스터 합산 반응 수는 만들지 않습니다.
-                    </p>
-                    <div class="cluster-disclosure">
+                    </li>
+                    <li
+                      data-question-priority-item
+                      data-priority-question-id="question-104"
+                      data-question-id="question-104"
+                      data-reaction-count="5"
+                      data-created-order="2"
+                    >
+                      <div>
+                        <strong
+                          >우선순위 큐를 쓰면 시간 복잡도가 어떻게
+                          달라지나요?</strong
+                        >
+                        <small
+                          >궁금해요 5 ·
+                          <span data-priority-status-label>OPEN</span></small
+                        >
+                      </div>
                       <button
+                        class="button button--secondary"
                         type="button"
-                        data-disclosure-trigger
-                        aria-expanded="false"
-                        aria-controls="clusterQuestions"
+                        data-priority-answer="question-104"
                       >
-                        원본 질문 2개 펼치기
+                        이 질문 답변
                       </button>
-                      <ul
-                        class="cluster-questions"
-                        id="clusterQuestions"
+                    </li>
+                    <li
+                      data-question-priority-item
+                      data-question-fixture-unclustered
+                      data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                      data-priority-question-id="question-105"
+                      data-question-id="question-105"
+                      data-reaction-count="3"
+                      data-created-order="3"
+                      hidden
+                    >
+                      <div>
+                        <strong
+                          >음수 사이클은 어떤 조건에서 판별할 수 있나요?</strong
+                        >
+                        <small
+                          >궁금해요 3 · Cluster 미배치 ·
+                          <span data-priority-status-label>OPEN</span></small
+                        >
+                      </div>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-priority-answer="question-105"
+                      >
+                        이 질문 답변
+                      </button>
+                    </li>
+                    <li
+                      data-question-priority-item
+                      data-question-fixture-unclustered
+                      data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                      data-priority-question-id="question-106"
+                      data-question-id="question-106"
+                      data-reaction-count="1"
+                      data-created-order="4"
+                      hidden
+                    >
+                      <div>
+                        <strong
+                          >실패한 클러스터링 중에도 질문에 답할 수
+                          있나요?</strong
+                        >
+                        <small
+                          >궁금해요 1 · Cluster 미배치 ·
+                          <span data-priority-status-label>OPEN</span></small
+                        >
+                      </div>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-priority-answer="question-106"
+                      >
+                        이 질문 답변
+                      </button>
+                    </li>
+                  </ol>
+                </section>
+
+                <div class="live-clustering-status">
+                  <div class="live-clustering-status__header">
+                    <div>
+                      <h3 data-show-state="normal" data-normal-generation>
+                        generation 7 · revision 12
+                      </h3>
+                      <h3 data-show-state="clustering-pending" hidden>
+                        자동 실행 대기
+                      </h3>
+                      <h3 data-show-state="clustering-running" hidden>
+                        새 질문 배치 중
+                      </h3>
+                      <h3 data-show-state="clustering-retry-reserved" hidden>
+                        같은 Job 재시도 예약됨
+                      </h3>
+                      <h3 data-show-state="cluster-failed" hidden>
+                        클러스터링 실패 · 원본 질문 유지
+                      </h3>
+                      <p>
+                        current result · generation
+                        <span data-current-generation>7</span> · revision
+                        <span data-current-revision>12</span>
+                      </p>
+                      <p data-show-state="normal">
+                        requested sequence
+                        <span data-normal-requested-sequence>46</span> · applied
+                        sequence <span data-normal-applied-sequence>46</span> ·
+                        pending 0
+                      </p>
+                      <p
+                        data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
                         hidden
                       >
-                        <li
-                          class="question-card"
-                          data-question-id="q-cluster-1"
-                          data-question-status="open"
-                        >
-                          <div class="question-card__meta">
-                            <span
-                              class="status-chip status-chip--info"
-                              data-question-status-label
-                              >OPEN</span
-                            ><span class="reaction-count">궁금해요 18</span>
-                          </div>
-                          <p>
-                            음수 가중치가 있으면 왜 이미 방문한 정점을 다시 봐야
-                            하나요?
-                          </p>
-                        </li>
-                        <li
-                          class="question-card"
-                          data-question-id="q-cluster-2"
-                          data-question-status="open"
-                        >
-                          <div class="question-card__meta">
-                            <span
-                              class="status-chip status-chip--info"
-                              data-question-status-label
-                              >OPEN</span
-                            ><span class="reaction-count">궁금해요 9</span>
-                          </div>
-                          <p>
-                            벨만-포드는 음수 간선을 어떻게 처리하는지
-                            궁금합니다.
-                          </p>
-                        </li>
-                      </ul>
+                        requested sequence 48 · applied sequence 46 · pending 2
+                      </p>
                     </div>
-                  </li>
-                </ul>
-                <ul class="question-list" id="sortableQuestions">
-                  <li
-                    class="question-card"
-                    data-question-id="q-single-1"
-                    data-question-status="open"
-                    data-reactions="12"
-                    data-recent="1"
+                    <span class="status-chip status-chip--info"
+                      >LIVE_INCREMENTAL</span
+                    >
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-current-last-clustering-result
                   >
-                    <div class="question-card__meta">
-                      <span
-                        class="status-chip status-chip--info"
-                        data-question-status-label
-                        >OPEN</span
-                      ><span class="reaction-count">궁금해요 12</span>
-                    </div>
-                    <p>
-                      우선순위 큐를 사용하면 시간 복잡도가 어떻게 달라지나요?
-                    </p>
-                    <div class="question-card__actions">
-                      <small class="text-muted">익명 질문</small
-                      ><button
+                    <span
+                      >last applied job:
+                      <strong data-current-last-clustering-job
+                        >job-cluster-006</strong
+                      ></span
+                    ><span>SUCCEEDED</span
+                    ><span data-current-last-clustering-attempt>attempt 1</span
+                    ><span>mode LIVE_INCREMENTAL</span>
+                  </div>
+                  <div class="live-job-meta" data-show-state="normal">
+                    <span data-normal-clustering-job
+                      >last job: job-cluster-006</span
+                    ><span>SUCCEEDED</span
+                    ><span data-normal-clustering-attempt>attempt 1</span
+                    ><span>active_job_id: null</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="clustering-pending"
+                    hidden
+                  >
+                    <span>active job: job-cluster-007</span><span>PENDING</span
+                    ><span data-active-clustering-attempt>attempt 1</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="clustering-running"
+                    hidden
+                  >
+                    <span>active job: job-cluster-007</span><span>RUNNING</span
+                    ><span data-active-clustering-attempt>attempt 1</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="clustering-retry-reserved"
+                    hidden
+                  >
+                    <span>last job: job-cluster-007 · FAILED</span
+                    ><span>active_job_id: null</span
+                    ><span>retry job: same row · attempt 2 예약</span
+                    ><span>captured through sequence 48</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="cluster-failed"
+                    hidden
+                  >
+                    <span>last job: job-cluster-007</span><span>FAILED</span
+                    ><span>attempt 1</span><span>active_job_id: null</span>
+                  </div>
+                  <p data-show-state="clustering-retry-reserved" hidden>
+                    같은 행의 attempt + 1은 원래 captured through sequence 48만
+                    다시 처리합니다. sequence 48 이후 새 질문은 requested
+                    watermark에만 합치고 retry 성공 뒤 fresh Job에서 처리합니다.
+                  </p>
+                  <p data-show-state="cluster-failed" hidden role="alert">
+                    질문·반응·개별 Answer는 계속 사용할 수 있습니다. 사용자가
+                    클러스터링을 직접 실행하지 않습니다.
+                  </p>
+                </div>
+
+                <section
+                  class="live-unclustered-queue"
+                  data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                  aria-labelledby="profUnclusteredQuestionsTitle"
+                  hidden
+                >
+                  <h3 id="profUnclusteredQuestionsTitle">
+                    저장 완료 · Cluster 미배치 질문
+                  </h3>
+                  <p>
+                    기존 Cluster membership으로 보이지 않지만 원본 질문·반응과
+                    개별 Answer는 계속 사용할 수 있습니다.
+                  </p>
+                  <ul>
+                    <li
+                      class="live-mindmap__node"
+                      data-node-kind="student-question"
+                      data-answer-target
+                      data-answer-target-kind="question"
+                      data-answer-target-id="question-105"
+                      data-answer-target-status="open"
+                      data-question-id="question-105"
+                    >
+                      <div class="live-node-meta">
+                        <span>STUDENT_QUESTION · UNCLUSTERED</span
+                        ><span data-answer-status-label>OPEN</span
+                        ><span>궁금해요 3</span>
+                      </div>
+                      <p data-answer-target-text>
+                        음수 사이클은 어떤 조건에서 판별할 수 있나요?
+                      </p>
+                      <button
                         class="button button--secondary"
                         type="button"
-                        data-answer-select="question"
+                        data-answer-select
+                      >
+                        이 미배치 질문 답변
+                      </button>
+                    </li>
+                    <li
+                      class="live-mindmap__node"
+                      data-node-kind="student-question"
+                      data-answer-target
+                      data-answer-target-kind="question"
+                      data-answer-target-id="question-106"
+                      data-answer-target-status="open"
+                      data-question-id="question-106"
+                    >
+                      <div class="live-node-meta">
+                        <span>STUDENT_QUESTION · UNCLUSTERED</span
+                        ><span data-answer-status-label>OPEN</span
+                        ><span>궁금해요 1</span>
+                      </div>
+                      <p data-answer-target-text>
+                        실패한 클러스터링 중에도 질문에 답할 수 있나요?
+                      </p>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-answer-select
+                      >
+                        이 미배치 질문 답변
+                      </button>
+                    </li>
+                  </ul>
+                </section>
+
+                <div
+                  class="live-mindmap"
+                  role="group"
+                  aria-labelledby="questionsTitle"
+                >
+                  <article
+                    class="live-mindmap__center"
+                    data-answer-target
+                    data-answer-target-kind="representative"
+                    data-answer-target-id="rep-7-12"
+                    data-answer-target-status="open"
+                  >
+                    <small
+                      >AI 대표질문 · ACTIVE ·
+                      <span data-answer-status-label>OPEN</span></small
+                    >
+                    <p data-answer-target-text>
+                      다익스트라와 벨만-포드의 선택 기준은 무엇인가요?
+                    </p>
+                    <button
+                      class="button button--primary"
+                      type="button"
+                      data-answer-select
+                    >
+                      이 대표질문 답변
+                    </button>
+                  </article>
+                  <ul class="live-mindmap__branches">
+                    <li
+                      class="live-mindmap__node"
+                      data-node-kind="student-question"
+                      data-answer-target
+                      data-answer-target-kind="question"
+                      data-answer-target-id="question-103"
+                      data-answer-target-status="open"
+                    >
+                      <div class="live-node-meta">
+                        <span>STUDENT_QUESTION</span
+                        ><span data-answer-status-label>OPEN</span
+                        ><span>궁금해요 9</span>
+                      </div>
+                      <p data-answer-target-text>
+                        벨만-포드는 음수 간선을 어떻게 처리하나요?
+                      </p>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-answer-select
                       >
                         이 질문 답변
                       </button>
-                    </div>
-                  </li>
-                  <li
-                    class="question-card"
-                    data-question-id="q-single-2"
-                    data-question-status="open"
-                    data-reactions="4"
-                    data-recent="2"
-                  >
-                    <div class="question-card__meta">
-                      <span
-                        class="status-chip status-chip--info"
-                        data-question-status-label
-                        >OPEN</span
-                      ><span class="reaction-count">궁금해요 4</span>
-                    </div>
-                    <p>인접 리스트와 행렬 중 무엇을 쓰는 것이 좋나요?</p>
-                    <div class="question-card__actions">
-                      <small class="text-muted">익명 질문</small
-                      ><button
+                    </li>
+                    <li
+                      class="live-mindmap__node"
+                      data-node-kind="student-question"
+                      data-answer-target
+                      data-answer-target-kind="question"
+                      data-answer-target-id="question-104"
+                      data-answer-target-status="open"
+                    >
+                      <div class="live-node-meta">
+                        <span>STUDENT_QUESTION</span
+                        ><span data-answer-status-label>OPEN</span
+                        ><span>궁금해요 5</span>
+                      </div>
+                      <p data-answer-target-text>
+                        우선순위 큐를 쓰면 시간 복잡도가 어떻게 달라지나요?
+                      </p>
+                      <button
                         class="button button--secondary"
                         type="button"
-                        data-answer-select="question"
+                        data-answer-select
                       >
                         이 질문 답변
                       </button>
-                    </div>
-                  </li>
-                </ul>
+                    </li>
+                    <li
+                      class="live-mindmap__node"
+                      data-node-kind="representative-preserved"
+                      data-answer-target-status="answered"
+                    >
+                      <div class="live-node-meta">
+                        <span>REPRESENTATIVE_QUESTION · PRESERVED</span
+                        ><span>ANSWERED</span>
+                      </div>
+                      <p>음수 가중치가 있을 때 사용할 알고리즘은 무엇인가요?</p>
+                      <small class="text-muted"
+                        >답변 당시 문구 snapshot 보존 · 현재 child 질문과 상태
+                        독립</small
+                      >
+                    </li>
+                  </ul>
+                </div>
               </div>
-              <div
-                class="question-viewport"
-                data-show-state="unclustered"
-                hidden
-              >
-                <p class="notice notice--info">
-                  아직 클러스터에 포함되지 않은 질문입니다.
-                </p>
-                <ul class="question-list">
-                  <li class="question-card">
-                    <div class="question-card__meta">
-                      <span class="status-chip status-chip--info">OPEN</span
-                      ><span class="reaction-count">궁금해요 3</span>
-                    </div>
-                    <p>
-                      새로 들어온 질문은 클러스터링과 독립적으로 바로
-                      표시됩니다.
-                    </p>
-                  </li>
-                </ul>
-              </div>
-              <div
-                class="question-viewport"
-                data-show-state="cluster-failed"
-                hidden
-              >
-                <p class="notice notice--warning" role="alert">
-                  클러스터링에 실패했지만 원본 질문과 답변 기능은 계속 사용할 수
-                  있습니다.
-                </p>
-                <ul class="question-list">
-                  <li class="question-card">
-                    <div class="question-card__meta">
-                      <span class="status-chip status-chip--info">OPEN</span
-                      ><span class="reaction-count">궁금해요 7</span>
-                    </div>
-                    <p>원본 질문은 사라지지 않습니다.</p>
-                  </li>
-                </ul>
-              </div>
-              <div
-                class="state-panel"
-                data-show-state="loading"
-                hidden
-                aria-busy="true"
-              >
+
+              <div class="state-panel" data-show-state="loading" hidden>
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">…</span>
                   <h3>질문을 불러오는 중입니다</h3>
@@ -732,28 +1099,13 @@
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">?</span>
                   <h3>아직 질문이 없습니다</h3>
-                  <p>Transcript와 Audio 상태는 계속 확인할 수 있습니다.</p>
                 </div>
               </div>
-              <div
-                class="state-panel"
-                data-show-state="error"
-                hidden
-                role="alert"
-              >
+              <div class="state-panel" data-show-state="error" hidden>
                 <div class="state-panel__content">
                   <span class="state-panel__icon" aria-hidden="true">!</span>
                   <h3>질문을 불러오지 못했습니다</h3>
-                  <p>STT와 Transcript는 계속 동작합니다.</p>
-                  <button
-                    class="button button--secondary"
-                    type="button"
-                    data-state-action
-                    data-state-target="#questionsPanel"
-                    data-state="normal"
-                  >
-                    질문만 다시 시도
-                  </button>
+                  <p>Transcript와 녹음은 계속 동작합니다.</p>
                 </div>
               </div>
             </section>
@@ -769,20 +1121,17 @@
             >
               <div data-show-state="idle">
                 <p class="notice notice--info">
-                  질문 또는 클러스터를 선택하면 선택 이후의 final Transcript만
-                  답변 후보가 됩니다.
+                  학생 질문 또는 현재 AI 대표질문 하나를 선택하면 선택 이후의
+                  final Transcript만 답변 후보가 됩니다. Cluster 전체는 답변
+                  대상이 아닙니다.
                 </p>
               </div>
               <div class="answer-capture-bar" data-show-state="waiting" hidden>
                 <div>
-                  <h2>
-                    답변 캡처 중 · <span id="answerTargetCopy">선택 질문</span>
-                  </h2>
+                  <h2>답변 캡처 중 · final을 기다립니다</h2>
                   <p>
-                    <span id="answerBoundaryCopy"
-                      >선택 시점 이후 final부터 후보</span
-                    >
-                    · 아직 첫 final이 없어 기다리는 중입니다.
+                    snapshot: “<span data-answer-snapshot>선택 질문</span>” ·
+                    <span data-answer-boundary>sequence 127 이후</span>
                   </p>
                 </div>
                 <div class="answer-capture-bar__actions">
@@ -791,7 +1140,7 @@
                     type="button"
                     data-answer-cancel
                   >
-                    캡처 취소</button
+                    답변 취소</button
                   ><button
                     class="button button--primary"
                     type="button"
@@ -809,8 +1158,8 @@
                 <div>
                   <h2>답변 후보가 생겼습니다</h2>
                   <p>
-                    sequence 128 final만 후보입니다. partial은 포함되지
-                    않습니다.
+                    snapshot: “<span data-answer-snapshot>선택 질문</span>” ·
+                    sequence 128 final만 후보이며 partial은 포함하지 않습니다.
                   </p>
                 </div>
                 <div class="answer-capture-bar__actions">
@@ -819,13 +1168,13 @@
                     type="button"
                     data-answer-cancel
                   >
-                    캡처 취소</button
+                    답변 취소</button
                   ><button
                     class="button button--primary"
                     type="button"
                     data-answer-complete
                   >
-                    후보로 답변 완료
+                    이 target 하나만 완료
                   </button>
                 </div>
               </div>
@@ -835,11 +1184,8 @@
                 hidden
               >
                 <div>
-                  <h2>final Transcript를 더 기다립니다</h2>
-                  <p>
-                    `ANSWER_TRANSCRIPT_NOT_READY`이며 Answer는 CAPTURING을
-                    유지합니다.
-                  </p>
+                  <h2>ANSWER_TRANSCRIPT_NOT_READY</h2>
+                  <p>Answer는 CAPTURING을 유지하며 첫 새 final을 기다립니다.</p>
                 </div>
                 <div class="answer-capture-bar__actions">
                   <button
@@ -847,7 +1193,7 @@
                     type="button"
                     data-answer-cancel
                   >
-                    캡처 취소</button
+                    답변 취소</button
                   ><button
                     class="button button--primary"
                     type="button"
@@ -859,63 +1205,533 @@
               </div>
               <div data-show-state="completed" hidden>
                 <p class="notice notice--success">
-                  Answer가 COMPLETED되고 선택 질문이 ANSWERED로 변경되었습니다.
-                </p>
-              </div>
-              <div data-show-state="cancelled" hidden>
-                <p class="notice notice--warning">
-                  Answer가 CANCELLED되고 질문이 OPEN으로 돌아갔습니다. 최종 취소
-                  UX는 미정입니다.
+                  선택한 target 하나만 ANSWERED로 변경했습니다. 대표질문에
+                  답변해도 child 질문은 OPEN을 유지합니다.
                 </p>
               </div>
             </section>
           </div>
 
+          <section
+            class="panel live-materials"
+            id="materialsPanel"
+            data-demo-state="mixed"
+            data-query-state="materials"
+            data-query-default="mixed"
+            aria-labelledby="materialsTitle"
+          >
+            <div class="section-heading">
+              <div>
+                <h2 id="materialsTitle">LIVE 강의자료</h2>
+                <p>
+                  언제든 업로드·삭제할 수 있으며 READY 자료만 새 AI 답변의
+                  근거가 됩니다.
+                </p>
+              </div>
+              <strong><span data-material-count>3</span>/10</strong>
+            </div>
+            <form data-material-upload novalidate>
+              <div class="field">
+                <label for="liveMaterialInput">PDF 추가</label>
+                <input
+                  id="liveMaterialInput"
+                  type="file"
+                  multiple
+                  accept="application/pdf,.pdf"
+                  aria-describedby="liveMaterialHelp liveMaterialError"
+                />
+                <p class="field__help" id="liveMaterialHelp">
+                  PDF 한 개당 최대 100 MB(100,000,000 bytes) · 동일 내용 허용 ·
+                  같은 표시 이름은 (1), (2) suffix 적용
+                </p>
+                <p
+                  class="field__error"
+                  id="liveMaterialError"
+                  data-material-error
+                  role="alert"
+                  hidden
+                ></p>
+              </div>
+              <button class="button button--primary" type="submit">
+                선택 PDF 업로드
+              </button>
+            </form>
+            <div data-show-state="empty" hidden>
+              <p class="notice notice--info">
+                연결된 PDF가 없습니다. 수업·질문·AI 기능은 그대로 사용할 수
+                있습니다.
+              </p>
+            </div>
+            <div data-show-state="uploading" hidden>
+              <p class="notice notice--info" aria-busy="true">
+                새 PDF를 UPLOADED 행으로 저장하고 있습니다. 기존 자료와 LIVE
+                기능은 유지합니다.
+              </p>
+            </div>
+            <div data-show-state="processing" hidden>
+              <p class="notice notice--info">
+                자료를 처리 중입니다. 이 자료만 아직 AI 근거가 아니며 수업은
+                계속됩니다.
+              </p>
+            </div>
+            <div data-show-state="all-ready" hidden>
+              <p class="notice notice--success">
+                모든 연결 자료가 READY이며 새 AI 검색 근거로 사용할 수 있습니다.
+              </p>
+            </div>
+            <div data-show-state="failed" hidden>
+              <p class="notice notice--warning" role="alert">
+                실패한 자료는 원본 열기와 AI 검색에서 제외했습니다. 다른 LIVE
+                기능은 유지합니다.
+              </p>
+            </div>
+            <div data-show-state="full" hidden>
+              <p class="notice notice--warning" role="alert">
+                강의자료는 최대 10개까지 연결할 수 있습니다. 기존 자료를 삭제한
+                뒤 다시 시도해 주세요.
+              </p>
+            </div>
+            <div data-show-state="size-error" hidden>
+              <p class="notice notice--danger" role="alert">
+                PDF 한 개는 100 MB(100,000,000 bytes) 이하여야 합니다.
+              </p>
+            </div>
+            <div data-show-state="mime-error" hidden>
+              <p class="notice notice--danger" role="alert">
+                내용과 형식이 유효한 PDF 파일만 업로드할 수 있습니다.
+              </p>
+            </div>
+            <div data-show-state="delete-conflict" hidden>
+              <p class="notice notice--warning" role="alert">
+                다른 변경과 겹쳐 삭제하지 못했습니다. 최신 목록을 다시
+                불러왔습니다.
+              </p>
+            </div>
+            <div data-show-state="delete-missing" hidden>
+              <p class="notice notice--info">
+                이미 삭제되었거나 접근할 수 없는 자료여서 목록에서 제거했습니다.
+              </p>
+            </div>
+            <div data-show-state="load-error" hidden>
+              <p class="notice notice--danger" role="alert">
+                강의자료 목록을 불러오지 못했습니다. Transcript·질문·개인 AI는
+                계속 사용할 수 있습니다.
+              </p>
+            </div>
+            <ul class="live-material-list" data-material-list>
+              <li
+                class="live-material-row"
+                data-material-row
+                data-material-name="그래프 탐색 자료.pdf"
+                data-material-status="ready"
+              >
+                <div>
+                  <strong>그래프 탐색 자료.pdf</strong>
+                  <small>READY · 새 AI 검색 근거로 사용 · 18.4 MB</small>
+                </div>
+                <div class="cluster">
+                  <a
+                    class="button button--ghost"
+                    href="/api/v1/materials/material-graph/content"
+                    aria-label="그래프 탐색 자료.pdf 원본 열기"
+                    >원본 열기</a
+                  ><button
+                    class="button button--danger"
+                    type="button"
+                    data-material-delete
+                  >
+                    그래프 탐색 자료.pdf 삭제
+                  </button>
+                </div>
+              </li>
+              <li
+                class="live-material-row"
+                data-material-row
+                data-material-name="그래프 탐색 자료 (1).pdf"
+                data-material-status="processing"
+              >
+                <div>
+                  <strong>그래프 탐색 자료 (1).pdf</strong>
+                  <small
+                    >PROCESSING · 아직 AI 근거 아님 · LIVE 기능 차단 없음</small
+                  >
+                </div>
+                <div class="cluster">
+                  <a
+                    class="button button--ghost"
+                    href="/api/v1/materials/material-processing/content"
+                    aria-label="그래프 탐색 자료 (1).pdf 원본 열기"
+                    >원본 열기</a
+                  ><button
+                    class="button button--danger"
+                    type="button"
+                    data-material-delete
+                  >
+                    그래프 탐색 자료 (1).pdf 삭제
+                  </button>
+                </div>
+              </li>
+              <li
+                class="live-material-row"
+                data-material-row
+                data-material-name="깨진 파일.pdf"
+                data-material-status="failed"
+              >
+                <div>
+                  <strong>깨진 파일.pdf</strong>
+                  <small
+                    >FAILED · 업로드되지 않음 · 원본 열기·AI 검색 불가</small
+                  >
+                </div>
+                <div class="cluster">
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-material-retry
+                  >
+                    같은 Material 재시도 · attempt 2</button
+                  ><button
+                    class="button button--danger"
+                    type="button"
+                    data-material-delete
+                  >
+                    깨진 파일.pdf 삭제
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+
+          <section
+            class="live-private-ai"
+            data-live-ai
+            aria-labelledby="liveAiTitle"
+          >
+            <div class="section-heading">
+              <div>
+                <h2 id="liveAiTitle">나만의 LIVE AI</h2>
+                <p>
+                  두 역할에 같은 UI를 제공합니다. 202 Job polling과 저장 결과
+                  조회만 사용하며 Session WS에 개인 결과를 보내지 않습니다.
+                </p>
+              </div>
+            </div>
+            <div class="live-ai-grid" data-live-private-content>
+              <article class="panel live-ai-card">
+                <div class="section-heading">
+                  <div>
+                    <h2>현재까지 개인 Summary</h2>
+                    <p>요청 시점의 마지막 live final까지 고정합니다.</p>
+                  </div>
+                  <div
+                    class="state-switcher"
+                    data-state-switcher
+                    data-state-target="#profSummaryState"
+                    aria-label="Summary 목 응답 상태"
+                  >
+                    <button
+                      type="button"
+                      data-state="not-ready"
+                      data-live-summary-action="not-ready"
+                      aria-pressed="false"
+                    >
+                      0 final</button
+                    ><button
+                      type="button"
+                      data-state="running"
+                      data-live-summary-action="running"
+                      aria-pressed="false"
+                    >
+                      running</button
+                    ><button
+                      type="button"
+                      data-state="complete"
+                      data-live-summary-action="complete"
+                      aria-pressed="false"
+                    >
+                      성공</button
+                    ><button
+                      type="button"
+                      data-state="error"
+                      data-live-summary-action="error"
+                      aria-pressed="false"
+                    >
+                      실패
+                    </button>
+                  </div>
+                </div>
+                <div
+                  class="live-ai-result"
+                  id="profSummaryState"
+                  data-live-summary-state
+                  data-demo-state="idle"
+                  data-query-state="summary"
+                  data-query-default="idle"
+                  aria-live="polite"
+                >
+                  <div data-show-state="idle">
+                    <button
+                      class="button button--primary"
+                      type="button"
+                      data-live-summary-action="pending"
+                    >
+                      현재까지 요약 요청
+                    </button>
+                  </div>
+                  <div data-show-state="not-ready" hidden role="alert">
+                    <p class="notice notice--warning">
+                      아직 확정된 강의 내용이 없습니다. 잠시 후 다시 시도해
+                      주세요.
+                    </p>
+                    <small>409 SUMMARY_TRANSCRIPT_NOT_READY · Job 없음</small>
+                  </div>
+                  <div data-show-state="pending" hidden>
+                    <p class="notice notice--info">Job PENDING · polling 중</p>
+                    <div class="live-job-meta">
+                      <span>requester only</span
+                      ><span data-live-summary-attempt data-attempt="1"
+                        >attempt 1</span
+                      >
+                    </div>
+                  </div>
+                  <div data-show-state="running" hidden>
+                    <p class="notice notice--info">Job RUNNING · polling 중</p>
+                  </div>
+                  <div data-show-state="complete" hidden>
+                    <div class="live-ai-result__body">
+                      다익스트라는 음수 간선이 없는 그래프에서 가장 가까운
+                      정점을 반복 확정합니다.
+                    </div>
+                    <small>SUCCEEDED 저장 결과를 REST로 조회했습니다.</small>
+                  </div>
+                  <div data-show-state="error retry" hidden role="alert">
+                    <p class="notice notice--danger">
+                      Summary를 만들지 못했습니다. Transcript와 질문은 계속
+                      사용할 수 있습니다.
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-live-summary-action="retry"
+                    >
+                      같은 Job 재시도
+                    </button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel live-ai-card">
+                <div class="section-heading">
+                  <div>
+                    <h2>수업 중 개인 Chat</h2>
+                    <p>
+                      USER Message는 요청 때 저장하고, ASSISTANT는 성공한 최종
+                      Message·Evidence만 저장합니다.
+                    </p>
+                  </div>
+                  <div
+                    class="state-switcher"
+                    data-state-switcher
+                    data-state-target="#profChatState"
+                    aria-label="Chat 목 응답 상태"
+                  >
+                    <button
+                      type="button"
+                      data-state="evidence"
+                      data-live-chat-action="evidence"
+                      aria-pressed="false"
+                    >
+                      근거 있음</button
+                    ><button
+                      type="button"
+                      data-state="no-evidence"
+                      data-live-chat-action="no-evidence"
+                      aria-pressed="false"
+                    >
+                      근거 없음</button
+                    ><button
+                      type="button"
+                      data-state="error"
+                      data-live-chat-action="error"
+                      aria-pressed="false"
+                    >
+                      실패
+                    </button>
+                  </div>
+                </div>
+                <div
+                  class="live-ai-result"
+                  id="profChatState"
+                  data-live-chat-state
+                  data-demo-state="idle"
+                  data-query-state="chat"
+                  data-query-default="idle"
+                  aria-live="polite"
+                >
+                  <p data-show-state="idle" class="text-muted">
+                    partial을 제외한 live final과 READY PDF만 참고합니다.
+                  </p>
+                  <div data-show-state="pending" hidden>
+                    <p class="notice notice--info">
+                      USER Message와 Job 저장 완료 · polling 중
+                    </p>
+                    <div class="live-job-meta">
+                      <span data-live-chat-attempt data-attempt="1"
+                        >attempt 1</span
+                      ><span>동일 입력 snapshot 유지</span>
+                    </div>
+                    <p>“<span data-live-chat-snapshot>저장된 입력</span>”</p>
+                  </div>
+                  <div data-show-state="evidence" hidden>
+                    <div class="live-chat-turn live-chat-turn--user">
+                      <small>USER</small>
+                      <p data-live-chat-snapshot>
+                        다익스트라와 벨만-포드의 차이는 무엇인가요?
+                      </p>
+                    </div>
+                    <small>ASSISTANT</small>
+                    <div class="live-ai-result__body">
+                      벨만-포드는 간선 완화를 반복해 음수 간선을 처리합니다.
+                    </div>
+                    <ul class="live-evidence-list">
+                      <li>
+                        <a
+                          class="live-evidence-link"
+                          href="/api/v1/transcript-segments/segment-live-126"
+                        >
+                          <strong>LIVE Transcript · 10:12–10:27</strong>
+                          <small
+                            >source_kind: TRANSCRIPT_SEGMENT · 안정적인 Segment
+                            이동</small
+                          >
+                        </a>
+                      </li>
+                      <li>
+                        <a
+                          class="live-evidence-link"
+                          data-evidence-material-name="그래프 탐색 자료.pdf"
+                          href="/api/v1/materials/material-graph/content#page=12"
+                        >
+                          <strong>그래프 탐색 자료.pdf · 12쪽</strong>
+                          <small
+                            >source_kind: MATERIAL · 권한 재검사 link</small
+                          >
+                        </a>
+                      </li>
+                      <li>
+                        <span class="live-evidence-link" aria-disabled="true">
+                          <strong>이전 참고자료 · 접근 해제됨</strong>
+                          <small
+                            >source_kind: MATERIAL · label snapshot 유지 · link:
+                            null</small
+                          >
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div data-show-state="no-evidence" hidden>
+                    <div class="live-chat-turn live-chat-turn--user">
+                      <small>USER</small>
+                      <p data-live-chat-snapshot>
+                        현재 근거만으로 비교할 수 있나요?
+                      </p>
+                    </div>
+                    <small>ASSISTANT</small>
+                    <div class="live-ai-result__body">
+                      현재 저장된 근거에서 직접 확인하기 어려운 질문입니다.
+                    </div>
+                    <small>근거 없음도 SUCCEEDED 저장 결과입니다.</small>
+                  </div>
+                  <div data-show-state="error retry" hidden role="alert">
+                    <p class="notice notice--danger">
+                      답변 생성에 실패했습니다. 동일 USER Message로 재시도할 수
+                      있습니다.
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-live-chat-action="retry"
+                    >
+                      같은 Job 재시도
+                    </button>
+                  </div>
+                </div>
+                <form data-live-chat-form novalidate>
+                  <div class="field">
+                    <label for="profChatInput">현재 수업 내용 질문</label>
+                    <textarea
+                      id="profChatInput"
+                      rows="3"
+                      data-live-chat-input
+                      data-live-limit="2000"
+                      aria-describedby="profChatHelp profChatError profChatCount"
+                    ></textarea>
+                    <div class="live-char-row">
+                      <p class="field__help" id="profChatHelp">
+                        trim → Unicode NFC → code point 기준 1~2,000자
+                      </p>
+                      <span
+                        class="live-char-count"
+                        id="profChatCount"
+                        data-count-for="profChatInput"
+                        >0 / 2000</span
+                      >
+                    </div>
+                    <p
+                      class="field__error"
+                      id="profChatError"
+                      data-limit-error-for="profChatInput"
+                      role="alert"
+                      hidden
+                    ></p>
+                  </div>
+                  <button class="button button--primary" type="submit">
+                    개인 AI에 질문
+                  </button>
+                </form>
+              </article>
+            </div>
+            <div data-live-private-purged hidden>
+              <p class="notice notice--info">
+                Session이 PROCESSING으로 전환되어 개인 LIVE
+                Summary·Chat·Message·Evidence·Job을 삭제했습니다. 이전 ID의
+                404는 재시도하지 않습니다.
+              </p>
+            </div>
+          </section>
+
           <section class="live-support-grid">
             <article class="panel">
-              <h2>REST가 최종 진실입니다</h2>
+              <h2>영구 상태 복구</h2>
               <ul class="live-mapping">
                 <li>
-                  <code
-                    >GET /sessions/{id} · /transcript · /questions ·
-                    /answers</code
-                  ><small>재접속·resync 시 canonical 상태 복구</small>
+                  <code>GET Session · Transcript · Questions · Answers</code
+                  ><small>WS는 알림, REST가 canonical 진실</small>
                 </li>
                 <li>
-                  <code>POST /sessions/{id}/answers</code
-                  ><small
-                    >question_ids와 capture_started_after_sequence가 선택 결과의
-                    진실</small
-                  >
+                  <code>SESSION_EVENTS_READ · SESSION_AUDIO_WRITE</code
+                  ><small>서로 다른 scope의 1회용 ticket</small>
                 </li>
                 <li>
-                  <code>POST /answers/{id}/complete · /cancel</code
-                  ><small>final 범위 확정 또는 CAPTURING 취소</small>
-                </li>
-                <li>
-                  <code>POST /sessions/{id}/end</code
-                  ><small>audio drain 뒤 멱등 종료</small>
+                  <code>Answer target + target_text_snapshot</code
+                  ><small>학생 질문 또는 대표질문 정확히 하나</small>
                 </li>
               </ul>
             </article>
             <article class="panel">
-              <h2>두 개의 1회용 ticket</h2>
+              <h2>아직 정하지 않은 것</h2>
               <ul class="live-mapping">
                 <li>
-                  <code>SESSION_EVENTS_READ</code
-                  ><small>Session event WS와 resume cursor 전용</small>
+                  <code>publisher lease · takeover</code
+                  ><small>이 화면은 다른 탭 takeover를 제공하지 않음</small>
                 </li>
                 <li>
-                  <code>SESSION_AUDIO_WRITE</code
-                  ><small>교수자 Audio WS 전용, LIVE 권한 재검증</small>
+                  <code>recording codec · container · local storage</code
+                  ><small>실시간 PCM 규격에서 추정하지 않음</small>
                 </li>
                 <li>
-                  <code>transcript.partial / final / status</code
-                  ><small>partial은 미저장, final은 DB commit 뒤 전파</small>
-                </li>
-                <li>
-                  <code>question.* / reaction.updated / answer.updated</code
-                  ><small>질문·반응·Answer 변경 알림</small>
+                  <code>DEGRADED · stop timeout · replay window · live gap</code
+                  ><small>임계값과 강제 종료를 UI가 만들지 않음</small>
                 </li>
               </ul>
             </article>
@@ -926,46 +1742,29 @@
           class="panel course-page-loading"
           data-show-state="loading"
           hidden
-          aria-busy="true"
         >
           <div class="skeleton skeleton--title"></div>
           <div class="skeleton skeleton--line"></div>
-          <span class="sr-only"
-            >실시간 class 초기 상태를 불러오는 중입니다.</span
-          >
+          <span class="sr-only">LIVE class를 불러오는 중입니다.</span>
         </section>
         <section
           class="state-panel auth-expired"
           data-show-state="error"
           hidden
-          role="alert"
         >
           <div class="state-panel__content">
-            <span class="state-panel__icon">!</span>
-            <h2>실시간 class를 불러오지 못했습니다</h2>
-            <p>
-              이전 Transcript·질문 목 데이터를 숨기고 전체 초기화를 다시
-              시도합니다.
-            </p>
-            <button
-              class="button button--secondary"
-              type="button"
-              data-state-action
-              data-state-target="#liveView"
-              data-state="normal"
-            >
-              다시 시도
-            </button>
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <h2>LIVE class를 불러오지 못했습니다</h2>
+            <p>이전 수업 데이터를 숨기고 Session 상태부터 다시 확인합니다.</p>
           </div>
         </section>
         <section
           class="state-panel auth-expired"
           data-show-state="forbidden"
           hidden
-          role="alert"
         >
           <div class="state-panel__content">
-            <span class="state-panel__icon">!</span>
+            <span class="state-panel__icon" aria-hidden="true">!</span>
             <h2>이 Course의 교수자 권한이 없습니다</h2>
             <p>Audio ticket과 수업 데이터를 제공하지 않습니다.</p>
             <a class="button button--primary" href="dashboard.html"
@@ -977,12 +1776,11 @@
           class="state-panel auth-expired"
           data-show-state="expired"
           hidden
-          role="alert"
         >
           <div class="state-panel__content">
-            <span class="state-panel__icon">!</span>
+            <span class="state-panel__icon" aria-hidden="true">!</span>
             <h2>로그인이 만료되었습니다</h2>
-            <p>모든 실시간 데이터를 숨기고 다시 인증합니다.</p>
+            <p>모든 LIVE 데이터를 숨기고 다시 인증합니다.</p>
             <a class="button button--primary" href="main.html?auth=default"
               >로그인 화면으로 이동</a
             >
@@ -994,19 +1792,147 @@
           hidden
         >
           <div class="state-panel__content">
-            <span class="state-panel__icon">↗</span>
+            <span class="state-panel__icon" aria-hidden="true">↗</span>
             <h2>LIVE 상태가 아닌 class입니다</h2>
-            <p>
-              READY, PROCESSING 또는 COMPLETED 상태에 맞는 화면으로 이동해야
-              합니다.
-            </p>
+            <p>서버 Session 상태에 맞는 화면으로 이동합니다.</p>
             <a class="button button--primary" href="course-professor.html"
               >Course에서 상태 확인</a
             >
           </div>
         </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="processing"
+          hidden
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">…</span>
+            <h2>class 기록을 정리하고 있습니다</h2>
+            <p>
+              개인 LIVE AI와 새 입력을 삭제·차단했습니다. 이전 LIVE 화면으로
+              돌아가지 않습니다. 로컬 녹음 upload가 안전하게 인계됐다고 판단할
+              이탈 경고 해제 조건은 아직 미정입니다.
+            </p>
+            <a
+              class="button button--primary"
+              href="class-processing.html?role=professor"
+              >기록 정리 상태 보기</a
+            >
+          </div>
+        </section>
       </section>
     </main>
+
+    <div class="dialog-backdrop" id="titleDialog" role="presentation" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titleDialogTitle"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="titleDialogTitle">class 제목 수정</h2>
+            <p>빈 제목을 저장하면 서버 자동 제목으로 되돌립니다.</p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="제목 수정 창 닫기"
+          >
+            ×
+          </button>
+        </header>
+        <form data-title-form>
+          <div class="field">
+            <label for="classTitleInput">class 제목 · 선택</label>
+            <input
+              id="classTitleInput"
+              type="text"
+              value="그래프 탐색과 최단 경로"
+            />
+          </div>
+          <div class="dialog__actions">
+            <button
+              class="button button--ghost"
+              type="button"
+              data-dialog-close
+            >
+              취소</button
+            ><button class="button button--primary" type="submit">저장</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="dialog-backdrop" id="materialDialog" role="presentation" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="materialDialogTitle"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="materialDialogTitle">강의자료를 삭제할까요?</h2>
+            <p>
+              <strong data-material-delete-name>선택 자료</strong>의
+              목록·열람·새 AI 검색 링크를 즉시 해제합니다. 물리 정리는
+              백그라운드에서 진행합니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="자료 삭제 창 닫기"
+          >
+            ×
+          </button>
+        </header>
+        <div class="dialog__actions">
+          <button class="button button--ghost" type="button" data-dialog-close>
+            유지</button
+          ><button
+            class="button button--danger"
+            type="button"
+            data-material-delete-confirm
+          >
+            링크 즉시 해제
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div class="dialog-backdrop" id="leaveDialog" role="presentation" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="leaveDialogTitle"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="leaveDialogTitle">active publisher 탭을 떠날까요?</h2>
+            <p>
+              탭을 닫거나 이동하면 실시간 음성 전송과 브라우저 로컬 녹음이
+              중단될 수 있습니다. 실제 브라우저 경고 문구는 브라우저가
+              결정합니다.
+            </p>
+          </div>
+        </header>
+        <div class="dialog__actions">
+          <button
+            class="button button--primary"
+            type="button"
+            data-dialog-close
+          >
+            이 탭에 머물기
+          </button>
+        </div>
+      </section>
+    </div>
 
     <div class="dialog-backdrop" id="endDialog" role="presentation" hidden>
       <section
@@ -1019,6 +1945,7 @@
         <div
           id="endFlow"
           data-demo-state="confirm"
+          data-query-state="end"
           data-query-default="confirm"
           aria-live="polite"
         >
@@ -1027,26 +1954,26 @@
               <div>
                 <h2 id="endDialogTitle">class를 종료할까요?</h2>
                 <p id="endDialogDescription">
-                  활성 Answer가 없을 때만 Audio와 STT를 안전하게 마감합니다.
+                  확인 즉시 서버 Session을 PROCESSING으로 전환하고 새 LIVE
+                  입력을 중단합니다.
                 </p>
               </div>
               <button
                 class="icon-button"
                 type="button"
                 data-dialog-close
-                aria-label="종료 창 닫기"
+                aria-label="class 종료 창 닫기"
               >
                 ×
               </button>
             </header>
             <ol class="end-flow-steps">
+              <li><span>1</span>멱등 종료 API로 즉시 PROCESSING 전환</li>
               <li>
-                <span>1</span>audio.stop을 보내고 Audio WS drain을 기다립니다.
+                <span>2</span>개인 LIVE AI 삭제·새 입력·LIVE clustering 차단
               </li>
-              <li><span>2</span>audio.stopped와 STT FINALIZED를 확인합니다.</li>
               <li>
-                <span>3</span>멱등 키로 종료 API를 호출해 PROCESSING으로
-                전환합니다.
+                <span>3</span>로컬 녹음을 별도로 마감해 UPLOAD_PENDING 인계
               </li>
             </ol>
             <div class="dialog__actions">
@@ -1060,55 +1987,44 @@
                 class="button button--danger"
                 type="button"
                 data-end-confirm
+                data-live-processing
               >
-                Audio 마감 시작
+                즉시 종료하고 정리 시작
               </button>
             </div>
           </div>
-          <div data-show-state="stopping" hidden>
+          <div data-show-state="submitting" hidden>
             <header class="dialog__header">
               <div>
-                <h2>남은 음성을 마감하고 있습니다</h2>
-                <p>새 chunk를 보내지 않고 받은 구간의 final만 기다립니다.</p>
+                <h2>서버 Session 상태를 확인하고 있습니다</h2>
+                <p>Audio drain이나 Job 개수로 전이를 추정하지 않습니다.</p>
               </div>
             </header>
-            <p class="notice notice--warning">
-              audio.stop → drain → audio.stopped · STT FINALIZED 순서입니다.
-            </p>
-            <div class="dialog__actions">
-              <button
-                class="button button--primary"
-                type="button"
-                data-end-drain
-              >
-                drain 완료 목 응답
-              </button>
-            </div>
           </div>
           <div data-show-state="processing" hidden>
             <header class="dialog__header">
               <div>
-                <h2>class가 정리 중으로 전환됐습니다</h2>
-                <p>종료 API가 수락되어 Session 상태는 PROCESSING입니다.</p>
+                <h2>class가 기록 정리 중으로 전환됐습니다</h2>
+                <p>새 LIVE 입력은 끝났고 로컬 녹음은 upload 인계 상태입니다.</p>
               </div>
             </header>
             <p class="notice notice--success">
-              class-processing.html 연결은 PR 6에서 추가합니다.
+              개인 LIVE AI는 삭제했고 실행 중 LIVE clustering의 늦은 결과는
+              적용하지 않습니다.
             </p>
             <div class="dialog__actions">
               <a
                 class="button button--primary"
                 href="class-processing.html?role=professor"
-                data-end-done
               >
-                후속 화면 계약 확인
+                기록 정리 상태 보기
               </a>
             </div>
           </div>
           <div data-show-state="error" hidden role="alert">
             <p class="notice notice--danger">
-              종료 요청을 완료하지 못했습니다. 확정된 final과 Session 상태를
-              REST로 다시 확인합니다.
+              종료 요청 상태를 확인하지 못했습니다. Session을 REST로 다시
+              조회합니다.
             </p>
             <div class="dialog__actions">
               <button
@@ -1118,13 +2034,14 @@
                 data-state-target="#endFlow"
                 data-state="confirm"
               >
-                다시 시도
+                다시 확인
               </button>
             </div>
           </div>
         </div>
       </section>
     </div>
+
     <div
       class="toast-region"
       data-toast-region

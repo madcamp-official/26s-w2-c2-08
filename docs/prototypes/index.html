@@ -82,12 +82,12 @@
           <a class="screen-index__card" href="class-live-professor.html">
             <small>LIVE_CLASS_PAGE_PROF</small>
             <strong>교수자 실시간 class</strong>
-            <span>확인 가능 · STT·질문·답변·종료 포함</span>
+            <span>publisher·녹음·자료·답변·종료 포함</span>
           </a>
           <a class="screen-index__card" href="class-live-student.html">
             <small>LIVE_CLASS_PAGE_STUD</small>
             <strong>학생 실시간 class</strong>
-            <span>확인 가능 · 익명 질문·개인 AI 포함</span>
+            <span>typed 마인드맵·익명 질문·개인 AI 포함</span>
           </a>
           <a
             class="screen-index__card"
@@ -157,6 +157,62 @@
             <small>READY · PROCESSING PDF</small>
             <strong>class 시작 차단</strong>
             <span>완료·실패 대기 또는 Material 삭제</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="flow" aria-labelledby="liveContractFlowTitle">
+        <h2 id="liveContractFlowTitle">
+          5. LIVE 독립 실패와 자동 처리 빠른 검토
+        </h2>
+        <div class="screen-index">
+          <a
+            class="screen-index__card"
+            href="class-live-professor.html?publisher=conflict&amp;audio=error&amp;recording=idle"
+          >
+            <small>PUBLISHER CONFLICT</small>
+            <strong>두 번째 Audio만 거부</strong>
+            <span>Transcript·질문·개인 AI 조회 유지</span>
+          </a>
+          <a
+            class="screen-index__card"
+            href="class-live-professor.html?audio=listening&amp;recording=failed&amp;materials=processing"
+          >
+            <small>INDEPENDENT FAILURE</small>
+            <strong>실시간 전송과 로컬 저장 분리</strong>
+            <span>PROCESSING PDF도 LIVE 자체는 차단하지 않음</span>
+          </a>
+          <a
+            class="screen-index__card"
+            href="class-live-professor.html?answer=candidate&amp;questions=clustering-retry-reserved"
+          >
+            <small>ANSWER · CLUSTERING</small>
+            <strong>단일 target과 같은 Job 재시도</strong>
+            <span>snapshot·attempt 증가·새 질문 coalescing</span>
+          </a>
+          <a
+            class="screen-index__card"
+            href="class-live-student.html?questions=clustering-pending&amp;chat=evidence"
+          >
+            <small>STUDENT PARITY</small>
+            <strong>미배치 질문과 개인 AI</strong>
+            <span>중앙 대표질문·typed child·안전한 Evidence</span>
+          </a>
+          <a
+            class="screen-index__card"
+            href="class-live-student.html?transcript=empty&amp;summary=complete"
+          >
+            <small>SUMMARY 409</small>
+            <strong>final 0건은 Job 없음</strong>
+            <span>SUMMARY_TRANSCRIPT_NOT_READY로 정규화</span>
+          </a>
+          <a
+            class="screen-index__card"
+            href="class-live-professor.html?view=processing"
+          >
+            <small>LIVE → PROCESSING</small>
+            <strong>개인 LIVE 데이터 삭제</strong>
+            <span>과거 LIVE Header와 control 재노출 금지</span>
           </a>
         </div>
       </section>

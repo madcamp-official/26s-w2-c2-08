@@ -727,9 +727,10 @@ paths:
         해당 Course의 PROFESSOR만 실행할 수 있다. LIVE에서 PROCESSING으로 전이하고
         새 audio 입력과 resume을 즉시 차단한다. 첫 audio.start에서 생성된 Recording은
         UPLOAD_PENDING으로 전이한다. 같은 요청의 반복 호출은 새 작업을 중복 생성하지 않고
-        기존 Session, Recording과 작업을 반환해야 한다. 정상 흐름은 audio.stop과
-        audio.stopped 이후 호출하며, 먼저 호출되면 수신분만 drain한다. CAPTURING Answer가
-        있으면 409로 거부한다. Recording upload complete 전에는 HQ STT를 시작하지 않는다.
+        기존 Session, Recording과 작업을 반환해야 한다. 정상 흐름도 종료 확인 즉시 이 API를
+        호출하며 audio.stop 전송과 로컬 녹음 마감은 best-effort로 병행한다. audio.stopped와
+        drain 완료는 이 API의 선행조건이 아니고 서버는 수신분만 별도로 drain한다. CAPTURING
+        Answer가 있으면 409로 거부한다. Recording upload complete 전에는 HQ STT를 시작하지 않는다.
         active·retry-reserved LIVE clustering Job은 FAILED/retryable=false/SESSION_ENDED로
         종료하고 느린 결과 commit을 fence하며 LIVE 재실행을 막는다.
         종료 transaction은 SHARED·blocking SESSION_POSTPROCESSING coordinator를 PENDING으로
