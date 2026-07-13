@@ -98,6 +98,57 @@ function clearPrivateResultCache(section) {
     .forEach((item) => item.replaceChildren());
 }
 
+function sortQuestionPriority(section, sort) {
+  const list = section.querySelector("[data-question-priority-list]");
+  if (!list) return;
+  const items = [...list.querySelectorAll("[data-question-priority-item]")];
+  items.sort((left, right) => {
+    const recentDelta =
+      Number(right.dataset.createdOrder) - Number(left.dataset.createdOrder);
+    const idDelta = (right.dataset.questionId || "").localeCompare(
+      left.dataset.questionId || "",
+    );
+    if (sort === "RECENT") return recentDelta || idDelta;
+    const reactionDelta =
+      Number(right.dataset.reactionCount) - Number(left.dataset.reactionCount);
+    return reactionDelta || recentDelta || idDelta;
+  });
+  items.forEach((item) => list.append(item));
+  section.dataset.questionSort = sort;
+  section.querySelectorAll("[data-question-sort]").forEach((button) => {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.questionSort === sort),
+    );
+  });
+  const description = section.querySelector("[data-question-sort-description]");
+  if (description) {
+    description.textContent =
+      sort === "POPULAR"
+        ? "인기순 · reaction_count DESC, created_at DESC, id DESC"
+        : "최신순 · created_at DESC, id DESC";
+  }
+}
+
+export function refreshQuestionPriority(root = document) {
+  root.querySelectorAll("[data-question-priority]").forEach((section) => {
+    sortQuestionPriority(section, section.dataset.questionSort || "POPULAR");
+  });
+}
+
+function initQuestionPriority(root, announce) {
+  refreshQuestionPriority(root);
+  root.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-question-sort]");
+    if (!action) return;
+    const section = action.closest("[data-question-priority]");
+    sortQuestionPriority(section, action.dataset.questionSort);
+    announce(
+      `${action.dataset.questionSort} 정렬을 전체 질문 목록에만 적용했습니다. Cluster membership 순서는 바꾸지 않습니다.`,
+    );
+  });
+}
+
 function initLiveAi(root, announce) {
   const summary = root.querySelector("[data-live-summary-state]");
   const chat = root.querySelector("[data-live-chat-state]");
@@ -238,6 +289,7 @@ export function initLiveCommon({
   };
 
   initLimitedFields(root);
+  initQuestionPriority(root, announce);
   root
     .querySelectorAll("[data-live-ai]")
     .forEach((section) => initLiveAi(section, announce));

@@ -209,12 +209,6 @@
                 적용</button
               ><button
                 type="button"
-                data-state="unclustered"
-                aria-pressed="false"
-              >
-                미배치</button
-              ><button
-                type="button"
                 data-state="clustering-pending"
                 aria-pressed="false"
               >
@@ -647,16 +641,151 @@
                   </div>
                 </div>
                 <div
-                  data-show-state="normal unclustered clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                  data-show-state="normal clustering-pending clustering-running clustering-retry-reserved cluster-failed"
                 >
+                  <section
+                    class="live-question-priority"
+                    data-question-priority
+                    data-question-sort="POPULAR"
+                    aria-labelledby="studentQuestionPriorityTitle"
+                  >
+                    <div class="live-question-priority__header">
+                      <div>
+                        <h3 id="studentQuestionPriorityTitle">
+                          전체 질문 목록
+                        </h3>
+                        <p data-question-sort-description>
+                          인기순 · reaction_count DESC, created_at DESC, id DESC
+                        </p>
+                      </div>
+                      <div
+                        class="state-switcher"
+                        role="group"
+                        aria-label="전체 질문 정렬"
+                      >
+                        <button
+                          type="button"
+                          data-question-sort="POPULAR"
+                          aria-pressed="true"
+                        >
+                          인기순</button
+                        ><button
+                          type="button"
+                          data-question-sort="RECENT"
+                          aria-pressed="false"
+                        >
+                          최신순
+                        </button>
+                      </div>
+                    </div>
+                    <p class="text-muted text-small">
+                      정렬은 독립 Question 목록에만 적용하며 아래
+                      Cluster·child의 membership 순서는 바꾸지 않습니다.
+                    </p>
+                    <ol data-question-priority-list>
+                      <li
+                        data-question-priority-item
+                        data-question-id="question-103"
+                        data-reaction-count="9"
+                        data-created-order="1"
+                      >
+                        <div>
+                          <strong
+                            >벨만-포드는 음수 간선을 어떻게 처리하나요?</strong
+                          >
+                          <small>OPEN · 익명 질문</small>
+                        </div>
+                        <button
+                          class="reaction-button"
+                          type="button"
+                          data-reaction
+                          aria-pressed="false"
+                        >
+                          궁금해요 <span data-reaction-count>9</span>
+                        </button>
+                      </li>
+                      <li
+                        data-question-priority-item
+                        data-question-id="question-104"
+                        data-reaction-count="5"
+                        data-created-order="2"
+                      >
+                        <div>
+                          <strong
+                            >우선순위 큐를 쓰면 시간 복잡도가 어떻게
+                            달라지나요?</strong
+                          >
+                          <small>OPEN · 익명 질문</small>
+                        </div>
+                        <button
+                          class="reaction-button"
+                          type="button"
+                          data-reaction
+                          aria-pressed="true"
+                        >
+                          궁금해요 <span data-reaction-count>5</span>
+                        </button>
+                      </li>
+                      <li
+                        data-question-priority-item
+                        data-question-fixture-unclustered
+                        data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                        data-priority-question-id="question-105"
+                        data-question-id="question-105"
+                        data-reaction-count="3"
+                        data-created-order="3"
+                        hidden
+                      >
+                        <div>
+                          <strong
+                            >음수 사이클은 어떤 조건에서 판별할 수
+                            있나요?</strong
+                          >
+                          <small>OPEN · Cluster 미배치 · 익명 질문</small>
+                        </div>
+                        <button
+                          class="reaction-button"
+                          type="button"
+                          data-reaction
+                          aria-pressed="false"
+                        >
+                          궁금해요 <span data-reaction-count>3</span>
+                        </button>
+                      </li>
+                      <li
+                        data-question-priority-item
+                        data-question-fixture-unclustered
+                        data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                        data-priority-question-id="question-106"
+                        data-question-id="question-106"
+                        data-reaction-count="1"
+                        data-created-order="4"
+                        hidden
+                      >
+                        <div>
+                          <strong
+                            >실패한 클러스터링 중에도 질문에 답할 수
+                            있나요?</strong
+                          >
+                          <small>OPEN · Cluster 미배치 · 익명 질문</small>
+                        </div>
+                        <button
+                          class="reaction-button"
+                          type="button"
+                          data-reaction
+                          aria-pressed="false"
+                        >
+                          궁금해요 <span data-reaction-count>1</span>
+                        </button>
+                      </li>
+                    </ol>
+                  </section>
+
                   <div class="live-clustering-status">
                     <div class="live-clustering-status__header">
                       <div>
-                        <h3 data-show-state="normal">
+                        <h3 data-show-state="normal" data-normal-generation>
                           generation 7 · revision 12
-                        </h3>
-                        <h3 data-show-state="unclustered" hidden>
-                          새 질문 2개 미배치
                         </h3>
                         <h3 data-show-state="clustering-pending" hidden>
                           자동 실행 대기
@@ -670,16 +799,26 @@
                         <h3 data-show-state="cluster-failed" hidden>
                           클러스터링 실패 · 원본 질문 유지
                         </h3>
-                        <p data-show-state="normal">
-                          requested sequence 46 · applied 46 · pending 0
+                        <p>
+                          current result · generation
+                          <span data-current-generation>7</span> · revision
+                          <span data-current-revision>12</span>
+                        </p>
+                        <p data-show-state="normal" data-normal-watermark>
+                          requested sequence
+                          <span data-normal-requested-sequence>46</span>
+                          · applied
+                          <span data-normal-applied-sequence>46</span>
+                          · pending 0
                         </p>
                         <p
-                          data-show-state="unclustered clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                          data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
                           hidden
                         >
                           requested sequence
                           <span data-requested-sequence>48</span>
-                          · applied 46 · pending
+                          · applied <span data-applied-sequence>46</span> ·
+                          pending
                           <span data-pending-count>2</span>
                         </p>
                       </div>
@@ -687,34 +826,46 @@
                         >LIVE_INCREMENTAL</span
                       >
                     </div>
-                    <div class="live-job-meta" data-show-state="normal">
-                      <span>last job: job-cluster-006</span
-                      ><span>SUCCEEDED</span><span>attempt 1</span
-                      ><span>active_job_id: null</span>
-                    </div>
                     <div
                       class="live-job-meta"
-                      data-show-state="unclustered"
-                      hidden
+                      data-current-last-clustering-result
                     >
-                      <span>last job: job-cluster-006</span
-                      ><span>SUCCEEDED</span><span>새 질문은 아직 미배치</span>
+                      <span
+                        >last applied job:
+                        <strong data-current-last-clustering-job
+                          >job-cluster-006</strong
+                        ></span
+                      ><span>SUCCEEDED</span
+                      ><span data-current-last-clustering-attempt
+                        >attempt 1</span
+                      ><span>mode LIVE_INCREMENTAL</span>
+                    </div>
+                    <div class="live-job-meta" data-show-state="normal">
+                      <span data-normal-clustering-job
+                        >last job: job-cluster-006</span
+                      ><span>SUCCEEDED</span
+                      ><span data-normal-clustering-attempt>attempt 1</span
+                      ><span>active_job_id: null</span>
                     </div>
                     <div
                       class="live-job-meta"
                       data-show-state="clustering-pending"
                       hidden
                     >
-                      <span>active job: job-cluster-007</span
-                      ><span>PENDING</span><span>attempt 1</span>
+                      <span data-active-clustering-job
+                        >active job: job-cluster-007</span
+                      ><span>PENDING</span
+                      ><span data-active-clustering-attempt>attempt 1</span>
                     </div>
                     <div
                       class="live-job-meta"
                       data-show-state="clustering-running"
                       hidden
                     >
-                      <span>active job: job-cluster-007</span
-                      ><span>RUNNING</span><span>attempt 1</span>
+                      <span data-active-clustering-job
+                        >active job: job-cluster-007</span
+                      ><span>RUNNING</span
+                      ><span data-active-clustering-attempt>attempt 1</span>
                     </div>
                     <div
                       class="live-job-meta"
@@ -723,7 +874,8 @@
                     >
                       <span>last job: job-cluster-007 · FAILED</span
                       ><span>active_job_id: null</span
-                      ><span>retry job: same row · attempt 2 예약</span>
+                      ><span>retry job: same row · attempt 2 예약</span
+                      ><span>captured through sequence 48</span>
                     </div>
                     <div
                       class="live-job-meta"
@@ -734,8 +886,10 @@
                       ><span>attempt 1</span><span>active_job_id: null</span>
                     </div>
                     <p data-show-state="clustering-retry-reserved" hidden>
-                      retry_job_id가 있어 새 Job을 만들지 않고 새 질문을 다음
-                      실행에 합칩니다.
+                      같은 행의 attempt + 1은 원래 captured through sequence
+                      48만 다시 처리합니다. sequence 48 이후 새 질문은
+                      watermark에만 합치고 retry 성공 뒤 fresh Job에서
+                      처리합니다.
                     </p>
                     <p data-show-state="cluster-failed" hidden role="alert">
                       클러스터링 실패와 관계없이 원본 질문과 반응을 사용합니다.
@@ -744,7 +898,7 @@
 
                   <section
                     class="live-unclustered-queue"
-                    data-show-state="unclustered clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                    data-show-state="clustering-pending clustering-running clustering-retry-reserved cluster-failed"
                     aria-labelledby="unclusteredQuestionsTitle"
                     hidden
                   >
@@ -759,22 +913,42 @@
                       <li
                         class="live-mindmap__node"
                         data-node-kind="student-question"
+                        data-question-id="question-105"
+                        data-question-fixture-unclustered
                       >
                         <div class="live-node-meta">
                           <span>STUDENT_QUESTION</span
                           ><span>OPEN · 클러스터 미배치</span>
                         </div>
-                        <p>음수 사이클은 어떻게 확인하나요?</p>
+                        <p>음수 사이클은 어떤 조건에서 판별할 수 있나요?</p>
+                        <button
+                          class="reaction-button"
+                          type="button"
+                          data-reaction
+                          aria-pressed="false"
+                        >
+                          궁금해요 <span data-reaction-count>3</span>
+                        </button>
                       </li>
                       <li
                         class="live-mindmap__node"
                         data-node-kind="student-question"
+                        data-question-id="question-106"
+                        data-question-fixture-unclustered
                       >
                         <div class="live-node-meta">
                           <span>STUDENT_QUESTION</span
                           ><span>OPEN · 클러스터 미배치</span>
                         </div>
-                        <p>새 질문은 기존 Cluster 중 어디로 들어가나요?</p>
+                        <p>실패한 클러스터링 중에도 질문에 답할 수 있나요?</p>
+                        <button
+                          class="reaction-button"
+                          type="button"
+                          data-reaction
+                          aria-pressed="false"
+                        >
+                          궁금해요 <span data-reaction-count>1</span>
+                        </button>
                       </li>
                     </ul>
                   </section>
@@ -784,7 +958,11 @@
                     role="group"
                     aria-labelledby="questionsTitle"
                   >
-                    <article class="live-mindmap__center">
+                    <article
+                      class="live-mindmap__center"
+                      data-current-representative
+                      data-representative-id="rep-7-12"
+                    >
                       <small>AI 대표질문 · ACTIVE</small>
                       <p>다익스트라와 벨만-포드의 선택 기준은 무엇인가요?</p>
                       <span class="status-chip status-chip--info">OPEN</span>
@@ -793,6 +971,7 @@
                       <li
                         class="live-mindmap__node"
                         data-node-kind="student-question"
+                        data-question-id="question-103"
                       >
                         <div class="live-node-meta">
                           <span>STUDENT_QUESTION</span><span>OPEN</span>
@@ -810,6 +989,7 @@
                       <li
                         class="live-mindmap__node"
                         data-node-kind="student-question"
+                        data-question-id="question-104"
                       >
                         <div class="live-node-meta">
                           <span>STUDENT_QUESTION</span><span>OPEN</span>
@@ -1001,7 +1181,10 @@
                 <div class="section-heading">
                   <div>
                     <h2>수업 중 개인 Chat</h2>
-                    <p>성공한 최종 Message와 Evidence만 저장합니다.</p>
+                    <p>
+                      USER Message는 요청 때 저장하고, ASSISTANT는 성공한 최종
+                      Message·Evidence만 저장합니다.
+                    </p>
                   </div>
                   <div
                     class="state-switcher"

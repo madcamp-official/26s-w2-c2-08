@@ -4,7 +4,11 @@ import {
   setDemoState,
   showToast,
 } from "./prototype.js";
-import { initLiveCommon, normalizeLiveInput } from "./live-common.js";
+import {
+  initLiveCommon,
+  normalizeLiveInput,
+  refreshQuestionPriority,
+} from "./live-common.js";
 
 const eventState = document.querySelector("#eventState");
 const publisherState = document.querySelector("#publisherState");
@@ -25,14 +29,33 @@ const materialCount = document.querySelector("[data-material-count]");
 const announcement = document.querySelector("#liveAnnouncement");
 const transcriptStream = document.querySelector("#transcriptStream");
 const liveView = document.querySelector("#liveView");
+const questionPriorityList = document.querySelector(
+  "[data-question-priority-list]",
+);
+const unclusteredQuestionList = document.querySelector(
+  "#profUnclusteredQuestionsTitle + p + ul",
+);
+const questionBranches = document.querySelector(".live-mindmap__branches");
 
 const { announce } = initLiveCommon({ announcer: announcement });
+
+if (questionsPanel?.dataset.demoState === "unclustered") {
+  setDemoState(questionsPanel, "clustering-pending");
+}
 
 let activeAnswer = null;
 let partialRevision = 2;
 let pendingMaterialRow = null;
 let endingSession = false;
 let materialSequence = 0;
+let observedQuestionState = questionsPanel?.dataset.demoState;
+let retryInFlight = observedQuestionState === "clustering-retry-reserved";
+
+function setActiveClusteringAttempt(attempt) {
+  document
+    .querySelectorAll("[data-active-clustering-attempt]")
+    .forEach((label) => (label.textContent = `attempt ${attempt}`));
+}
 
 function getActivePartial() {
   return document.querySelector('[data-transcript-kind="partial"]');
@@ -50,6 +73,13 @@ function setAnswerControlsDisabled(disabled) {
     const answered = target?.dataset.answerTargetStatus === "answered";
     button.disabled = disabled || answered;
   });
+  document.querySelectorAll("[data-priority-answer]").forEach((button) => {
+    const target = document.querySelector(
+      `[data-answer-target-id="${button.dataset.priorityAnswer}"]`,
+    );
+    const answered = target?.dataset.answerTargetStatus === "answered";
+    button.disabled = disabled || answered;
+  });
 }
 
 function updateTargetStatus(target, status) {
@@ -57,6 +87,156 @@ function updateTargetStatus(target, status) {
   target.dataset.answerTargetStatus = status;
   const label = target.querySelector("[data-answer-status-label]");
   if (label) label.textContent = status.toUpperCase();
+  const targetId = target.dataset.answerTargetId;
+  if (!targetId) return;
+  document
+    .querySelectorAll(
+      `[data-question-priority-item][data-question-id="${targetId}"] [data-priority-status-label]`,
+    )
+    .forEach((item) => (item.textContent = status.toUpperCase()));
+}
+
+function replaceProfessorRepresentative() {
+  const central = questionsPanel.querySelector(
+    ".live-mindmap__center[data-answer-target]",
+  );
+  if (!central) return;
+  const previousStatus = central.dataset.answerTargetStatus;
+  const previousId = central.dataset.answerTargetId;
+  const previousText = normalizeLiveInput(
+    central.querySelector("[data-answer-target-text]")?.textContent || "",
+  );
+
+  if (["selected", "answered"].includes(previousStatus)) {
+    const preserved = document.createElement("li");
+    preserved.className = "live-mindmap__node";
+    preserved.dataset.nodeKind = "representative-preserved";
+    preserved.dataset.answerTarget = "";
+    preserved.dataset.answerTargetKind = "representative";
+    preserved.dataset.answerTargetId = previousId;
+    preserved.dataset.answerTargetStatus = previousStatus;
+
+    const meta = document.createElement("div");
+    meta.className = "live-node-meta";
+    const kind = document.createElement("span");
+    kind.textContent = "REPRESENTATIVE_QUESTION · PRESERVED";
+    const status = document.createElement("span");
+    status.dataset.answerStatusLabel = "";
+    status.textContent = previousStatus.toUpperCase();
+    meta.append(kind, status);
+
+    const copy = document.createElement("p");
+    copy.dataset.answerTargetText = "";
+    copy.textContent = previousText;
+    const answer = document.createElement("button");
+    answer.className = "button button--secondary";
+    answer.type = "button";
+    answer.dataset.answerSelect = "";
+    answer.textContent = "이 보존 대표질문 답변";
+    answer.disabled = true;
+    preserved.append(meta, copy, answer);
+    questionBranches?.append(preserved);
+    if (activeAnswer?.target === central) activeAnswer.target = preserved;
+  }
+
+  central.dataset.answerTargetId = "rep-8-13";
+  central.dataset.answerTargetStatus = "open";
+  const status = document.createElement("span");
+  status.dataset.answerStatusLabel = "";
+  status.textContent = "OPEN";
+  central
+    .querySelector("small")
+    ?.replaceChildren("AI 대표질문 · ACTIVE · ", status);
+  const copy = central.querySelector("[data-answer-target-text]");
+  if (copy) {
+    copy.textContent =
+      "음수 간선과 음수 사이클을 고려한 최단 경로 선택 기준은 무엇인가요?";
+  }
+  setAnswerControlsDisabled(isCapturing());
+}
+
+function applyProfessorPendingQuestions() {
+  const pending = [...(unclusteredQuestionList?.children || [])];
+  pending.reverse().forEach((item) => {
+    item.removeAttribute("data-question-fixture-unclustered");
+    const kind = item.querySelector(".live-node-meta span:first-child");
+    if (kind) kind.textContent = "STUDENT_QUESTION";
+    const questionId = item.dataset.questionId;
+    const priorityItem = questionPriorityList?.querySelector(
+      `[data-question-priority-item][data-question-id="${questionId}"]`,
+    );
+    if (priorityItem) {
+      priorityItem.removeAttribute("data-question-fixture-unclustered");
+      priorityItem.removeAttribute("data-show-state");
+      priorityItem.hidden = false;
+      const priorityMeta = priorityItem.querySelector("small");
+      const priorityStatus = priorityItem.querySelector(
+        "[data-priority-status-label]",
+      );
+      if (priorityMeta && priorityStatus) {
+        priorityMeta.replaceChildren(
+          `궁금해요 ${priorityItem.dataset.reactionCount} · Cluster 배치 완료 · `,
+          priorityStatus,
+        );
+      }
+    }
+    questionBranches?.prepend(item);
+  });
+  if (pending.length > 0) {
+    replaceProfessorRepresentative();
+    const requested = document.querySelector(
+      '.live-clustering-status__header p[data-show-state~="clustering-pending"]',
+    );
+    const requestedSequence =
+      requested?.textContent.match(/requested sequence (\d+)/)?.[1] || "48";
+    const normalRequested = document.querySelector(
+      "[data-normal-requested-sequence]",
+    );
+    const normalApplied = document.querySelector(
+      "[data-normal-applied-sequence]",
+    );
+    const normalGeneration = document.querySelector("[data-normal-generation]");
+    const normalJob = document.querySelector("[data-normal-clustering-job]");
+    const normalAttempt = document.querySelector(
+      "[data-normal-clustering-attempt]",
+    );
+    const currentLastJob = document.querySelector(
+      "[data-current-last-clustering-job]",
+    );
+    const currentLastAttempt = document.querySelector(
+      "[data-current-last-clustering-attempt]",
+    );
+    const resultJobId =
+      observedQuestionState === "cluster-failed" && !retryInFlight
+        ? "job-cluster-008"
+        : "job-cluster-007";
+    const resultAttempt = retryInFlight ? 2 : 1;
+    if (normalRequested) normalRequested.textContent = requestedSequence;
+    if (normalApplied) normalApplied.textContent = requestedSequence;
+    if (normalGeneration)
+      normalGeneration.textContent = "generation 8 · revision 13";
+    const currentGeneration = document.querySelector(
+      "[data-current-generation]",
+    );
+    const currentRevision = document.querySelector("[data-current-revision]");
+    if (currentGeneration) currentGeneration.textContent = "8";
+    if (currentRevision) currentRevision.textContent = "13";
+    if (normalJob) normalJob.textContent = `last job: ${resultJobId}`;
+    if (normalAttempt) {
+      normalAttempt.textContent = `attempt ${resultAttempt}`;
+    }
+    if (currentLastJob) currentLastJob.textContent = resultJobId;
+    if (currentLastAttempt) {
+      currentLastAttempt.textContent = `attempt ${resultAttempt}`;
+    }
+    retryInFlight = false;
+    setActiveClusteringAttempt(1);
+    questionsPanel.dataset.fixtureApplied = "true";
+    refreshQuestionPriority();
+    announce(
+      "클러스터링 성공 결과를 적용해 미배치 질문을 대표질문의 branch에 배치했습니다.",
+    );
+  }
 }
 
 function latestFinalSequence() {
@@ -68,7 +248,7 @@ function latestFinalSequence() {
   );
 }
 
-function startAnswer(button) {
+function startAnswer(button, returnButton = button) {
   if (isCapturing()) return;
   const target = button.closest("[data-answer-target]");
   if (!target || target.dataset.answerTargetStatus === "answered") return;
@@ -83,6 +263,7 @@ function startAnswer(button) {
     targetKind: target.dataset.answerTargetKind,
     snapshot,
     captureStartedAfterSequence: sequence,
+    returnButton,
   };
 
   document.querySelectorAll("[data-answer-snapshot]").forEach((item) => {
@@ -106,15 +287,19 @@ function cancelAnswer() {
     setAnswerControlsDisabled(false);
     return;
   }
-  const { target } = activeAnswer;
-  updateTargetStatus(target, "open");
+  const { target, returnButton } = activeAnswer;
+  if (target.dataset.nodeKind === "representative-preserved") {
+    target.remove();
+  } else {
+    updateTargetStatus(target, "open");
+  }
   document
     .querySelectorAll('[data-transcript-kind="candidate"]')
     .forEach((item) => (item.dataset.transcriptKind = "final"));
   activeAnswer = null;
   setDemoState(answerState, "idle");
   setAnswerControlsDisabled(false);
-  target.querySelector("[data-answer-select]")?.focus();
+  returnButton?.focus();
   announce(
     "CAPTURING Answer를 hard delete했습니다. CANCELLED 기록은 남기지 않습니다.",
   );
@@ -150,11 +335,19 @@ function removePartial(reason) {
 }
 
 function shouldWarnBeforeLeave() {
-  return !endingSession && publisherState?.dataset.demoState === "active";
+  const recordingAtRisk = ["recording", "finalizing", "ready-upload"].includes(
+    recordingState?.dataset.demoState,
+  );
+  const publisherAtRisk = ["active", "reconnecting", "resumed"].includes(
+    publisherState?.dataset.demoState,
+  );
+  return recordingAtRisk || (!endingSession && publisherAtRisk);
 }
 
 function lockLiveControls() {
   endingSession = true;
+  liveView.dataset.terminalLocked = "true";
+  liveView.dataset.terminalState = "processing";
   liveView
     ?.querySelectorAll(
       "[data-show-state='normal'] input, [data-show-state='normal'] textarea, [data-show-state='normal'] button",
@@ -301,7 +494,7 @@ function applyMaterialFixture() {
 
 function initializeAnswerFixture() {
   const state = answerState?.dataset.demoState;
-  const target = document.querySelector("[data-answer-target]");
+  const target = document.querySelector('[data-answer-target-id="rep-7-12"]');
   if (!target) return;
   if (state === "completed") {
     updateTargetStatus(target, "answered");
@@ -319,6 +512,7 @@ function initializeAnswerFixture() {
     targetKind: target.dataset.answerTargetKind,
     snapshot,
     captureStartedAfterSequence: sequence,
+    returnButton: target.querySelector("[data-answer-select]"),
   };
   document.querySelectorAll("[data-answer-snapshot]").forEach((item) => {
     item.textContent = snapshot;
@@ -330,13 +524,12 @@ function initializeAnswerFixture() {
   if (state === "candidate") {
     const partial = getActivePartial();
     if (partial) {
-      const candidate = partial.cloneNode(true);
-      candidate.removeAttribute("id");
-      candidate.dataset.transcriptKind = "candidate";
-      candidate.dataset.sequence = String(sequence + 1);
-      const time = candidate.querySelector("[data-transcript-time]");
-      const text = candidate.querySelector("[data-partial-text]");
-      const meta = candidate.querySelector("[data-partial-meta]");
+      partial.removeAttribute("id");
+      partial.dataset.transcriptKind = "candidate";
+      partial.dataset.sequence = String(sequence + 1);
+      const time = partial.querySelector("[data-transcript-time]");
+      const text = partial.querySelector("[data-partial-text]");
+      const meta = partial.querySelector("[data-partial-meta]");
       if (time) time.textContent = "10:34";
       if (text) {
         text.textContent =
@@ -345,7 +538,6 @@ function initializeAnswerFixture() {
       if (meta) {
         meta.textContent = `final · DB commit · sequence ${sequence + 1}`;
       }
-      partial.before(candidate);
     }
   }
   setAnswerControlsDisabled(true);
@@ -360,6 +552,7 @@ document.addEventListener("click", (event) => {
   const revision = event.target.closest("[data-partial-revision]");
   const finalize = event.target.closest("[data-partial-finalize]");
   const answerSelect = event.target.closest("[data-answer-select]");
+  const priorityAnswer = event.target.closest("[data-priority-answer]");
   const answerComplete = event.target.closest("[data-answer-complete]");
   const answerCancel = event.target.closest("[data-answer-cancel]");
   const materialDelete = event.target.closest("[data-material-delete]");
@@ -367,6 +560,9 @@ document.addEventListener("click", (event) => {
     "[data-material-delete-confirm]",
   );
   const materialRetry = event.target.closest("[data-material-retry]");
+  const materialOpen = event.target.closest(
+    '.live-material-row a[href^="/api/v1/materials/"]',
+  );
   const leavePreview = event.target.closest("[data-leave-preview]");
   const endOpen = event.target.closest("[data-end-open]");
   const endConfirm = event.target.closest("[data-end-confirm]");
@@ -377,6 +573,18 @@ document.addEventListener("click", (event) => {
   if (viewProcessing) {
     lockLiveControls();
     removePartial("PROCESSING 상태에서는 저장되지 않은 partial을 숨깁니다.");
+  }
+
+  const viewStateAction = event.target
+    .closest("[data-state]")
+    ?.closest('[data-state-switcher][data-state-target="#liveView"]');
+  if (
+    viewStateAction &&
+    liveView.dataset.terminalLocked === "true" &&
+    event.target.closest("[data-state]")?.dataset.state !== "processing"
+  ) {
+    setDemoState(liveView, "processing");
+    showToast("종료된 LIVE 화면으로 돌아갈 수 없습니다.", "info");
   }
 
   if (publisherStart) {
@@ -465,6 +673,13 @@ document.addEventListener("click", (event) => {
     }
   }
   if (answerSelect) startAnswer(answerSelect);
+  if (priorityAnswer) {
+    const target = document.querySelector(
+      `[data-answer-target-id="${priorityAnswer.dataset.priorityAnswer}"]`,
+    );
+    const canonicalAnswer = target?.querySelector("[data-answer-select]");
+    if (canonicalAnswer) startAnswer(canonicalAnswer, priorityAnswer);
+  }
   if (answerComplete) completeAnswer();
   if (answerCancel) cancelAnswer();
 
@@ -498,6 +713,13 @@ document.addEventListener("click", (event) => {
     ensureMaterialOpenAction(row);
     showToast("같은 Material 행의 attempt를 증가해 재시도합니다.", "success");
   }
+  if (materialOpen) {
+    event.preventDefault();
+    showToast(
+      "정적 Prototype에서는 Material 권한 재검사와 원본 열기만 모의합니다.",
+      "info",
+    );
+  }
   if (leavePreview) openDialog(leaveDialog, leavePreview);
 
   if (endOpen) {
@@ -513,12 +735,21 @@ document.addEventListener("click", (event) => {
     }
   }
   if (endConfirm) {
+    closeDialog(endDialog);
     lockLiveControls();
+    removePartial("종료 시 저장되지 않은 live partial을 제거했습니다.");
     setDemoState(endFlow, "processing");
     setDemoState(eventState, "stopped");
     setDemoState(recordingState, "finalizing");
     questionsPanel.dataset.clusteringFenced = "true";
     setDemoState(liveView, "processing");
+    const processingHeading = liveView.querySelector(
+      '[data-show-state="processing"] h2',
+    );
+    if (processingHeading) {
+      processingHeading.tabIndex = -1;
+      processingHeading.focus();
+    }
     window.setTimeout(() => {
       setDemoState(recordingState, "ready-upload");
     }, 300);
@@ -538,6 +769,46 @@ document
         "두 번째 publisher의 Audio만 거부했습니다. 조회 기능은 그대로 유지합니다.",
       );
     }
+  });
+
+document
+  .querySelector("[data-professor-question-switcher]")
+  ?.addEventListener("click", (event) => {
+    const nextState = event.target.closest("[data-state]")?.dataset.state;
+    if (
+      questionsPanel.dataset.fixtureApplied === "true" &&
+      nextState !== "normal"
+    ) {
+      event.stopPropagation();
+      setDemoState(questionsPanel, "normal");
+      event.currentTarget
+        .querySelectorAll("[data-state]")
+        .forEach((button) =>
+          button.setAttribute(
+            "aria-pressed",
+            String(button.dataset.state === "normal"),
+          ),
+        );
+      observedQuestionState = "normal";
+      showToast(
+        "적용된 질문을 이전 fixture로 되돌릴 수 없습니다. 다른 상태는 새로고침해 확인해 주세요.",
+        "info",
+      );
+      return;
+    }
+    if (nextState === "normal" && observedQuestionState !== "normal") {
+      applyProfessorPendingQuestions();
+      return;
+    }
+    if (nextState === "clustering-retry-reserved") {
+      retryInFlight = true;
+    } else if (nextState === "cluster-failed") {
+      retryInFlight = false;
+    }
+    if (["clustering-pending", "clustering-running"].includes(nextState)) {
+      setActiveClusteringAttempt(retryInFlight ? 2 : 1);
+    }
+    if (nextState) observedQuestionState = nextState;
   });
 
 document
@@ -592,9 +863,7 @@ document
   ?.addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#classTitleInput");
-    const title =
-      normalizeLiveInput(input.value) ||
-      "2026년 7월 12일 14:00의 알고리즘 class";
+    const title = normalizeLiveInput(input.value) || "서버 자동 제목 응답";
     document.querySelector("#classTitle").textContent = title;
     input.value = title;
     closeDialog(document.querySelector("#titleDialog"));

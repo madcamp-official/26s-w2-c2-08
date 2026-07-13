@@ -67,7 +67,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 
 | 검토 항목                        | 대표 경로                                                                                                                                                                                                                                                                        |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 두 번째 publisher의 Audio만 거부 | [`publisher=conflict&audio=error&recording=recording`](class-live-professor.html?publisher=conflict&audio=error&recording=recording)                                                                                                                                             |
+| 두 번째 publisher의 Audio만 거부 | [`publisher=conflict&audio=error&recording=idle`](class-live-professor.html?publisher=conflict&audio=error&recording=idle)                                                                                                                                                       |
 | Audio·로컬 녹음 독립 실패        | [`audio=error&recording=recording`](class-live-professor.html?audio=error&recording=recording), [`audio=listening&recording=failed`](class-live-professor.html?audio=listening&recording=failed)                                                                                 |
 | LIVE Material 제한·독립 처리     | [`materials=full`](class-live-professor.html?materials=full), [`materials=processing`](class-live-professor.html?materials=processing), [`materials=all-ready`](class-live-professor.html?materials=all-ready), [`materials=failed`](class-live-professor.html?materials=failed) |
 | 자동 클러스터링 재시도·실패      | [`questions=clustering-retry-reserved`](class-live-professor.html?questions=clustering-retry-reserved), [`questions=cluster-failed`](class-live-professor.html?questions=cluster-failed)                                                                                         |
@@ -82,7 +82,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 LIVE Prototype은 다음 불변식을 유지한다.
 
 - 첫 성공 `audio.start`만 publisher를 선점하며 충돌 탭의 저장 조회는 유지한다.
-- 새 질문은 저장 직후 미배치 대기열에 있고 clustering 성공 뒤에만 대표질문의 branch로 들어간다. active·retry 예약 중 질문은 다음 실행에 합친다.
+- 모든 질문은 별도 `POPULAR|RECENT` 목록에 즉시 나타나고, 새 질문은 clustering 성공 뒤에만 대표질문의 branch로 들어간다. active Job 중 질문은 다음 실행에 합친다. retry 예약 중 질문은 watermark만 높이며 같은 행의 원래 captured 범위 재시도가 성공한 뒤 fresh Job에서 처리한다.
 - 개인 Summary·Chat은 requester-only `AIJob` polling과 저장된 최종 결과만 사용한다. `PROCESSING`·`COMPLETED` 전환 시 Message·Evidence·Job 식별자를 포함해 LIVE 개인 데이터를 삭제한다.
 - Evidence는 배열 위치나 cursor가 아닌 안정적인 공개 link를 사용하며 정적 Prototype에서는 실제 API로 이동하지 않고 권한 재검사 동작만 모의한다.
 - `CAPTURING` Answer가 있으면 종료할 수 없다. 종료 수락 뒤에는 즉시 `PROCESSING`만 표시하고 과거 LIVE control을 다시 활성화하지 않는다.
