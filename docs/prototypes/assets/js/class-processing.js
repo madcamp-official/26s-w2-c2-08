@@ -1,60 +1,131 @@
+import { initRecordCommon } from "./record-common.js";
 import { setDemoState, showToast } from "./prototype.js";
+
 const params = new URLSearchParams(location.search);
-const role = params.get("role") || "professor";
-const access = params.get("access") || "normal";
-if (access !== "normal") {
-  const copy = {
-    loading: ["정리 상태를 불러오는 중입니다", "잠시 기다려주세요."],
-    error: [
-      "정리 상태를 불러오지 못했습니다",
-      "보호된 이전 기록은 표시하지 않습니다.",
-    ],
-    "not-found": [
-      "class를 찾을 수 없습니다",
-      "Course에서 class 상태를 다시 확인해주세요.",
-    ],
-    expired: ["로그인이 만료되었습니다", "다시 로그인해주세요."],
-    forbidden: [
-      "Course 접근 권한이 없습니다",
-      "보호된 수업 기록을 표시하지 않습니다.",
-    ],
-  }[access] || ["화면을 표시할 수 없습니다", "Course로 돌아가주세요."];
-  document.querySelector("main").innerHTML =
-    `<section class="state-panel auth-expired" role="alert"><div class="state-panel__content"><h1>${copy[0]}</h1><p>${copy[1]}</p><a class="button button--primary" href="dashboard.html">대시보드</a></div></section>`;
-}
+const role = params.get("role") === "student" ? "student" : "professor";
+const scenario = params.get("scenario") || "transcribing";
+
+const scenarios = {
+  uploading: {
+    label: "원본 녹음 업로드 중",
+    upload: "in-progress",
+    transcript: "awaiting-upload",
+    coordinator: "pending",
+    summary: "waiting",
+    cluster: "running",
+    answer: "waiting",
+  },
+  "upload-interrupted": {
+    label: "원본 녹음 업로드 중단",
+    upload: "interrupted",
+    transcript: "awaiting-upload",
+    coordinator: "pending",
+    summary: "waiting",
+    cluster: "running",
+    answer: "waiting",
+  },
+  "upload-resuming": {
+    label: "원본 녹음 업로드 재개 중",
+    upload: "resuming",
+    transcript: "awaiting-upload",
+    coordinator: "pending",
+    summary: "waiting",
+    cluster: "running",
+    answer: "waiting",
+  },
+  transcribing: {
+    label: "HQ STT 실행 중",
+    upload: "completed",
+    transcript: "finalizing",
+    coordinator: "pending",
+    summary: "waiting",
+    cluster: "succeeded",
+    answer: "waiting",
+  },
+  organizing: {
+    label: "Answer·Summary 정리 중",
+    upload: "completed",
+    transcript: "finalized",
+    coordinator: "succeeded",
+    summary: "running",
+    cluster: "succeeded",
+    answer: "running",
+  },
+  "hq-failed": {
+    label: "HQ STT 실패 · fallback 정리 중",
+    upload: "completed",
+    transcript: "failed",
+    coordinator: "running",
+    summary: "source-unavailable",
+    cluster: "succeeded",
+    answer: "running",
+  },
+  "finishing-with-failure": {
+    label: "일부 실패 · 남은 Answer 정리 중",
+    upload: "completed",
+    transcript: "finalized",
+    coordinator: "failed",
+    summary: "available",
+    cluster: "failed",
+    answer: "running",
+  },
+};
+
+const config = scenarios[scenario] || scenarios.transcribing;
 document.body.dataset.role = role;
-document.querySelectorAll("[data-professor-only]").forEach((e) => {
-  if (role !== "professor") e.hidden = true;
+document.querySelectorAll("[data-professor-only]").forEach((element) => {
+  element.hidden = role !== "professor";
 });
-document.querySelectorAll("[data-student-only]").forEach((e) => {
-  if (role !== "student") e.hidden = true;
+document.querySelectorAll("[data-student-only]").forEach((element) => {
+  element.hidden = role !== "student";
 });
-const roleLabel = document.querySelector("[data-role-label]");
-const completeLabel = document.querySelector("[data-complete-label]");
-if (roleLabel) roleLabel.textContent = role === "professor" ? "교수자" : "학생";
-if (completeLabel)
-  completeLabel.textContent =
-    role === "professor" ? "교수자 완료 기록 준비됨" : "학생 복습 기록 준비됨";
-document.addEventListener("click", (e) => {
-  const retry = e.target.closest("[data-job-retry]");
-  if (retry) {
-    const target = document.querySelector(retry.dataset.stateTarget);
-    target.querySelector("[data-attempt]").textContent = "attempt 2";
-    setDemoState(target, "pending");
+document.querySelector("[data-role-label]").textContent =
+  role === "professor" ? "교수자" : "학생";
+document.querySelector("[data-scenario-label]").textContent = config.label;
+
+setDemoState(document.querySelector("#recordingUpload"), config.upload);
+setDemoState(document.querySelector("#hqTranscript"), config.transcript);
+setDemoState(document.querySelector("#coordinatorJob"), config.coordinator);
+setDemoState(document.querySelector("#finalSummaryState"), config.summary);
+setDemoState(document.querySelector("#finalClusterJob"), config.cluster);
+setDemoState(document.querySelector("#answerProcessing"), config.answer);
+
+if (scenario === "completed" || scenario === "completed-with-failures") {
+  setDemoState(document.querySelector("#processingView"), "completed");
+  if (scenario === "completed-with-failures") {
+    document.querySelector("[data-complete-copy]").textContent =
+      "서버가 completed_at을 기록했습니다. HQ STT 또는 AI 작업 일부가 실패했지만 저장된 PDF·LIVE Transcript·질문·Answer와 성공 결과는 열 수 있습니다.";
+  }
+  window.setTimeout(
+    () => document.querySelector("#processingCompleteTitle")?.focus(),
+    0,
+  );
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-upload-resume]")) {
+    setDemoState(document.querySelector("#recordingUpload"), "resuming");
+    showToast("서버가 확인한 offset부터 업로드 재개를 준비합니다.");
+  }
+  if (event.target.closest("[data-manifest-refresh]")) {
     showToast(
-      `${retry.dataset.jobRetry} 같은 Job을 attempt 2로 재시도합니다.`,
+      "최신 Session·상태·count·조회 경로를 다시 받았습니다.",
       "success",
     );
   }
-  if (e.target.closest("[data-finalize-transcript]")) {
-    document.querySelector("#lateFinal").hidden = false;
-    setDemoState(document.querySelector("#transcriptJob"), "finalized");
-    showToast("추가 final 저장 후 FINALIZED가 되었습니다.", "success");
+  if (event.target.closest("[data-title-edit]")) {
+    const title = window.prompt(
+      "class 제목",
+      document.querySelector("#processingTitle").textContent,
+    );
+    if (title?.trim()) {
+      document.querySelector("#processingTitle").textContent = title.trim();
+      showToast(
+        "제목만 수정했습니다. 시작·종료 시각은 바뀌지 않습니다.",
+        "success",
+      );
+    }
   }
-  if (e.target.closest("[data-server-complete]")) {
-    setDemoState(document.querySelector("#sessionState"), "completed");
-    showToast("server session.updated=COMPLETED 목 상태입니다.", "success");
-  }
-  if (e.target.closest("[data-record-open]"))
-    showToast("PROCESSING부터 GET /record 저장 데이터를 열람합니다.", "info");
 });
+
+initRecordCommon();

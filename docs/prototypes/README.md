@@ -87,6 +87,21 @@ LIVE Prototype은 다음 불변식을 유지한다.
 - Evidence는 배열 위치나 cursor가 아닌 안정적인 공개 link를 사용하며 정적 Prototype에서는 실제 API로 이동하지 않고 권한 재검사 동작만 모의한다.
 - `CAPTURING` Answer가 있으면 종료할 수 없다. 종료 수락 뒤에는 즉시 `PROCESSING`만 표시하고 과거 LIVE control을 다시 활성화하지 않는다.
 
+## PROCESSING 정책 검토 경로
+
+독립 query 상태를 임의로 섞지 않고 실제로 가능한 처리 순서와 부분 실패 조합을 scenario preset으로 검토한다. Final clustering은 LIVE→PROCESSING 종료 transaction에서 자동 생성되어 HQ Transcript와 독립 실행하며, Summary와 Answer organization은 source gate를 따른다.
+
+| 검토 항목                                   | 대표 경로                                                                                                                                                                          |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| publisher 원본 녹음 upload                  | [`scenario=uploading`](class-processing.html?role=professor&scenario=uploading), [`scenario=upload-interrupted`](class-processing.html?role=professor&scenario=upload-interrupted) |
+| RECORDING version HQ STT·canonical 전환     | [`scenario=transcribing`](class-processing.html?role=professor&scenario=transcribing), [`scenario=hq-failed`](class-processing.html?role=professor&scenario=hq-failed)             |
+| Answer mapping·AI 정리·FINAL Summary        | [`scenario=organizing`](class-processing.html?role=professor&scenario=organizing)                                                                                                  |
+| Final clustering 실패·기존 기록 유지        | [`scenario=finishing-with-failure`](class-processing.html?role=professor&scenario=finishing-with-failure)                                                                          |
+| 학생 읽기 전용 상태                         | [`role=student&scenario=transcribing`](class-processing.html?role=student&scenario=transcribing)                                                                                   |
+| 서버 COMPLETED·부분 실패 완료 기록으로 이동 | [`scenario=completed-with-failures`](class-processing.html?role=professor&scenario=completed-with-failures)                                                                        |
+
+PROCESSING Prototype은 `/record` 본문에 큰 배열을 embed하지 않고 count·상태·공개 조회 경로만 받은 뒤 자료·Transcript timeline·질문·Cluster·Answer·공유 Job을 독립 조회하는 경계를 보여 준다. worker heartbeat·lease·Job·Session timeout은 브라우저가 자체 판정하지 않고 서버가 반환한 terminal 상태만 표시한다. PROCESSING에서는 개인 REVIEW Chat과 Final clustering retry를 제공하지 않는다.
+
 ## 프로토타입과 실제 구현의 경계
 
 - 버튼과 입력은 화면 흐름 확인을 위한 로컬 상태만 변경한다.
