@@ -46,6 +46,8 @@ tags:
     description: WebSocket 연결용 단기·1회용 티켓
   - name: Records
     description: 정리 중·완료 수업 기록
+  - name: Recordings
+    description: Session 녹음 aggregate, resumable upload와 권한 재검증 playback
 security:
   - sessionCookieAuth: []
 
@@ -721,16 +723,18 @@ paths:
       summary: class 종료와 후처리 시작
       description: |
         해당 Course의 PROFESSOR만 실행할 수 있다. LIVE에서 PROCESSING으로 전이하고
-        Transcript 확정과 종료 후처리 작업을 생성한다. 같은 요청의 반복 호출은 새 작업을
-        중복 생성하지 않고 기존 Session과 작업을 반환해야 한다. 정상 흐름은 audio.stop과
-        audio.stopped 이후 호출하며, 먼저 호출되면 새 audio frame을 차단하고 수신분만 drain한다.
-        CAPTURING Answer가 있으면 409로 거부한다. 종료 시 생성한 공용 Job이 모두 SUCCEEDED
-        또는 FAILED에 도달하면 일부 실패가 있어도 COMPLETED로 전환한다.
+        새 audio 입력과 resume을 즉시 차단한다. 첫 audio.start에서 생성된 Recording은
+        UPLOAD_PENDING으로 전이한다. 같은 요청의 반복 호출은 새 작업을 중복 생성하지 않고
+        기존 Session, Recording과 작업을 반환해야 한다. 정상 흐름은 audio.stop과
+        audio.stopped 이후 호출하며, 먼저 호출되면 수신분만 drain한다. CAPTURING Answer가
+        있으면 409로 거부한다. Recording upload complete 전에는 HQ STT를 시작하지 않는다.
+        HQ STT Job type·상태, Transcript generation·canonical·timeout과 Answer 재매핑은 PR4에서
+        확정한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
         "202":
-          description: 종료 요청이 수락되어 후처리가 시작됨
+          description: Session이 PROCESSING으로 전환되고 Recording upload를 기다림
           headers:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
@@ -1736,9 +1740,9 @@ paths:
       operationId: listSessionSharedJobs
       summary: Session 공용 AI 작업 목록 조회
       description: |
-        Course 멤버가 자료 처리, 질문 클러스터링과 Session 후처리처럼 참여자가 알아야 할
-        공용 Job만 조회한다. 개인 LIVE 요약, 질문 초안과 Chat Job은 절대 포함하지 않는다.
-        재시도는 별도 Job API의 권한 규칙을 따른다.
+        Course 멤버가 자료 처리, 질문 클러스터링, 녹음 전사와 Session 후처리처럼 참여자가
+        알아야 할 공용 Job만 조회한다. 개인 LIVE 요약, 질문 초안과 Chat Job은 절대
+        포함하지 않는다. 재시도는 별도 Job API의 권한 규칙을 따른다.
       parameters:
         - name: job_type
           in: query
@@ -1780,7 +1784,7 @@ paths:
       operationId: getSessionRecord
       summary: 수업 기록 통합 조회
       description: |
-        PROCESSING 또는 COMPLETED Session에서 연결된 강의자료, final Transcript,
+        PROCESSING 또는 COMPLETED Session에서 안전한 Recording 메타데이터, 연결된 강의자료, final Transcript,
         최종 요약, 익명 질문·답변과 Job 상태를 반환한다. 일부 AI 작업이 실패해도
         이미 저장된 핵심 데이터는 조회 가능해야 한다. 응답이 커지면 세부 목록 API로
         분리하고 이 응답은 가용성 요약으로 축소할 수 있다. 분리된 자료는 즉시 제외한다.
@@ -1802,6 +1806,267 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/v1/sessions/{session_id}/recording:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Recordings]
+      operationId: getSessionRecording
+      summary: Session 녹음 메타데이터 조회
+      description: |
+        첫 성공 audio.start가 만든 논리 SessionRecording aggregate를 반환한다. 물리 저장물이
+        파일 하나인지 여러 fragment와 manifest인지는 공개하지 않는다. 현재 인증과 Course
+        접근 권한을 매번 다시 확인하며 동의와 역할별 세부 접근 범위는 아직 미정이다.
+        storage key, 서버 경로, fragment key와 manifest는 반환하지 않는다.
+      responses:
+        "200":
+          description: 안전한 Session 녹음 메타데이터
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingNotFound"
+
+  /api/v1/sessions/{session_id}/recording/uploads:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Recordings]
+      operationId: createRecordingUpload
+      summary: 녹음 resumable upload 초기화
+      x-contract-status: provisional
+      description: |
+        첫 publisher와 같은 client_stream_id를 사용하는 Course PROFESSOR가 PROCESSING
+        Session의 UPLOAD_PENDING Recording에 active upload를 하나 만든다. codec·container,
+        허용 content_type, 브라우저 로컬 저장 방식, 최대 크기와 정확한 expiry 값은 TBD이다.
+      parameters:
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordingUploadCreateRequest"
+      responses:
+        "201":
+          description: Recording upload가 초기화됨
+          headers:
+            Location:
+              description: 생성된 RecordingUpload의 상대 경로
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingUpload"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingNotFound"
+        "409":
+          $ref: "#/components/responses/RecordingUploadConflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedRecordingFormat"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/recording-uploads/{upload_id}:
+    parameters:
+      - $ref: "#/components/parameters/RecordingUploadId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Recordings]
+      operationId: getRecordingUploadOffset
+      summary: 녹음 upload offset 조회 초안
+      x-contract-status: provisional
+      description: |
+        현재 upload 상태와 offset_bytes를 조회하는 비규범적 placeholder다. 최종 protocol에서
+        GET과 HEAD 중 무엇을 사용할지, offset header와 응답 status는 TBD이다.
+      responses:
+        "200":
+          description: 현재 RecordingUpload 상태와 byte offset
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingUpload"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingUploadNotFound"
+        "410":
+          $ref: "#/components/responses/RecordingUploadExpired"
+    patch:
+      tags: [Recordings]
+      operationId: uploadRecordingChunk
+      summary: 녹음 binary chunk 전송 초안
+      x-contract-status: provisional
+      description: |
+        현재 서버 byte offset부터 녹음 chunk를 이어 쓰는 비규범적 placeholder다. PATCH 사용
+        여부, offset 전달 header, request Content-Type, chunk 크기와 성공 status·응답 offset
+        전달 방식은 TBD이다. 아래 application/octet-stream과 200 응답은 최종 wire 계약이 아니다.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: 실제 media type과 chunk 크기는 resumable upload protocol에서 확정
+      responses:
+        "200":
+          description: chunk가 수락된 뒤의 임시 RecordingUpload 표현
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingUpload"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingUploadNotFound"
+        "409":
+          $ref: "#/components/responses/RecordingUploadChunkConflict"
+        "410":
+          $ref: "#/components/responses/RecordingUploadExpired"
+        "415":
+          $ref: "#/components/responses/UnsupportedRecordingFormat"
+
+  /api/v1/recording-uploads/{upload_id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/RecordingUploadId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Recordings]
+      operationId: completeRecordingUpload
+      summary: 녹음 upload 완료와 HQ STT 시작 gate
+      x-contract-status: provisional
+      description: |
+        전체 byte 수와 향후 확정할 checksum 규칙을 검증해 Recording을 UPLOADED로 확정한 뒤
+        HQ STT 시작을 요청한다. 구체 Job type·응답·상태, Transcript generation·canonical·timeout과
+        Answer 재매핑은 PR4 범위다.
+      parameters:
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
+      x-checksum-mismatch-response:
+        status: TBD
+        code: RECORDING_CHECKSUM_MISMATCH
+        message: 녹음 무결성 검증에 실패했습니다.
+      responses:
+        "202":
+          description: upload가 완결되고 HQ STT 시작 요청이 수락됨
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordingUploadCompletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingUploadNotFound"
+        "409":
+          $ref: "#/components/responses/RecordingUploadCompleteConflict"
+        "410":
+          $ref: "#/components/responses/RecordingUploadExpired"
+
+  /api/v1/recordings/{recording_id}/playback:
+    parameters:
+      - $ref: "#/components/parameters/RecordingId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Recordings]
+      operationId: playSessionRecording
+      summary: 권한 재검증 녹음 playback
+      description: |
+        UPLOADED인 논리 Recording을 전체 또는 HTTP byte Range로 재생한다. 요청마다 현재 인증과
+        Course 접근을 다시 확인한다. proxy streaming과 권한 확인 뒤 opaque signed delivery
+        URL로 redirect하는 방식, codec·container와 실제 응답 MIME은 TBD이다. 어느 방식도
+        내부 storage key, 서버 경로, fragment key나 manifest를 공개하지 않는다.
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          description: RFC byte range. 실제 전달 방식이 Range를 보존해야 함
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 전체 녹음 binary. 실제 MIME은 codec·container 확정 후 결정
+          headers:
+            Accept-Ranges:
+              description: byte Range 지원
+              schema:
+                type: string
+                const: bytes
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: 요청한 byte Range의 녹음 binary
+          headers:
+            Accept-Ranges:
+              description: byte Range 지원
+              schema:
+                type: string
+                const: bytes
+            Content-Range:
+              description: 반환한 byte 범위와 전체 길이
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "307":
+          description: opaque signed delivery URL 방식을 선택할 때의 임시 redirect 초안
+          headers:
+            Location:
+              description: 내부 storage key나 서버 경로를 노출하지 않는 짧은 수명 URL
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingNotFound"
+        "409":
+          $ref: "#/components/responses/RecordingNotReady"
+        "416":
+          $ref: "#/components/responses/RangeNotSatisfiable"
 
 components:
   securitySchemes:
@@ -1846,6 +2111,20 @@ components:
       in: path
       required: true
       description: 불투명 LectureMaterial ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    RecordingId:
+      name: recording_id
+      in: path
+      required: true
+      description: 물리 파일·fragment 구성을 숨기는 불투명 SessionRecording ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
+    RecordingUploadId:
+      name: upload_id
+      in: path
+      required: true
+      description: 불투명 RecordingUpload ID
       schema:
         $ref: "#/components/schemas/ResourceId"
     QuestionId:
@@ -2010,6 +2289,193 @@ components:
             error:
               code: MATERIAL_NOT_FOUND
               message: 요청한 강의자료를 찾을 수 없습니다.
+              request_id: req_01HXYZ
+              details: null
+    RecordingNotFound:
+      description: Session 녹음이 없거나 현재 사용자에게 존재를 공개하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RECORDING_NOT_FOUND
+              message: 요청한 녹음을 찾을 수 없습니다.
+              request_id: req_01HXYZ
+              details: null
+    RecordingUploadNotFound:
+      description: 녹음 upload가 없거나 현재 사용자에게 존재를 공개하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RECORDING_UPLOAD_NOT_FOUND
+              message: 요청한 녹음 upload를 찾을 수 없습니다.
+              request_id: req_01HXYZ
+              details: null
+    RecordingUploadConflict:
+      description: Recording 상태, active upload 또는 멱등성 키 충돌로 upload를 초기화할 수 없음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            recordingState:
+              value:
+                error:
+                  code: RECORDING_STATE_CONFLICT
+                  message: 현재 녹음 상태에서는 upload를 시작할 수 없습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    current_status: CAPTURING
+                    required_status: UPLOAD_PENDING
+            activeUpload:
+              value:
+                error:
+                  code: RECORDING_UPLOAD_CONFLICT
+                  message: 이미 진행 중인 녹음 upload가 있습니다.
+                  request_id: req_01HXYZ
+                  details: null
+            idempotencyKeyReused:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_REUSED
+                  message: 같은 멱등 키가 다른 요청에 사용되었습니다.
+                  request_id: req_01HXYZ
+                  details: null
+    RecordingUploadChunkConflict:
+      description: upload 상태 또는 byte offset이 현재 서버 상태와 일치하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            offsetMismatch:
+              value:
+                error:
+                  code: UPLOAD_OFFSET_MISMATCH
+                  message: 서버가 확인한 byte offset부터 다시 전송해 주세요.
+                  request_id: req_01HXYZ
+                  details:
+                    current_offset_bytes: 1048576
+            uploadState:
+              value:
+                error:
+                  code: RECORDING_STATE_CONFLICT
+                  message: 현재 녹음 upload 상태에서는 chunk를 받을 수 없습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    current_status: COMPLETED
+                    required_status: ACTIVE
+    RecordingUploadCompleteConflict:
+      description: upload·Recording 상태, byte 수 또는 멱등성 키 충돌로 완료할 수 없음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            recordingState:
+              value:
+                error:
+                  code: RECORDING_STATE_CONFLICT
+                  message: 현재 녹음 상태에서는 upload를 완료할 수 없습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    current_status: FAILED
+                    required_status: UPLOADING
+            incompleteUpload:
+              value:
+                error:
+                  code: UPLOAD_OFFSET_MISMATCH
+                  message: 전체 녹음이 아직 전송되지 않았습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    current_offset_bytes: 1048576
+                    total_bytes: 2097152
+            idempotencyKeyReused:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_REUSED
+                  message: 같은 멱등 키가 다른 요청에 사용되었습니다.
+                  request_id: req_01HXYZ
+                  details: null
+    RecordingNotReady:
+      description: 녹음이 아직 playback 가능한 UPLOADED 상태가 아님
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RECORDING_NOT_READY
+              message: 녹음이 아직 재생 준비 중입니다.
+              request_id: req_01HXYZ
+              details:
+                current_status: UPLOADING
+                required_status: UPLOADED
+    RecordingUploadExpired:
+      description: 녹음 upload가 만료됨. 정확한 expiry 값은 TBD
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RECORDING_UPLOAD_EXPIRED
+              message: 녹음 upload가 만료되었습니다.
+              request_id: req_01HXYZ
+              details: null
+    UnsupportedRecordingFormat:
+      description: 지원하지 않는 녹음 codec·container 또는 Content-Type. 지원 목록은 TBD
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: UNSUPPORTED_RECORDING_FORMAT
+              message: 지원하지 않는 녹음 형식입니다.
+              request_id: req_01HXYZ
+              details: null
+    RangeNotSatisfiable:
+      description: 요청한 playback byte Range를 반환할 수 없음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RANGE_NOT_SATISFIABLE
+              message: 요청한 녹음 범위를 재생할 수 없습니다.
               request_id: req_01HXYZ
               details: null
     Conflict:
@@ -2384,9 +2850,26 @@ components:
       type: string
       enum: [READY, LIVE, PROCESSING, COMPLETED]
       description: |
-        PROCESSING은 종료 시 공용 Job 중 하나 이상이 PENDING/RUNNING인 상태다.
-        모두 SUCCEEDED/FAILED에 도달하면 실패 유무와 관계없이 COMPLETED가 된다.
+        PROCESSING은 종료 후 공용 Job 또는 Recording upload를 기다리는 상태다. Recording이
+        있으면 UPLOADED/FAILED가 PR3 저장 gate의 terminal 상태다. HQ STT Job·Transcript 상태,
+        upload 미완료 timeout과 최종 Session 완료 조건은 PR4에서 확정한다.
         한 Course에는 READY, LIVE, PROCESSING 중 하나인 active Session이 합계 최대 1개다.
+
+    SessionRecordingStatus:
+      type: string
+      enum: [CAPTURING, UPLOAD_PENDING, UPLOADING, UPLOADED, FAILED]
+      description: |
+        CAPTURING은 첫 audio publisher가 live PCM과 브라우저 로컬 녹음을 생성하는 상태다.
+        Session 종료 시 UPLOAD_PENDING, resumable upload 시작 시 UPLOADING, upload 완결 시
+        playback과 HQ STT 시작이 가능한 UPLOADED가 된다. FAILED는 capture·upload·storage
+        검증 실패의 terminal 공개 상태다. HQ STT·Transcript 처리 상태는 PR4 책임이다.
+
+    RecordingUploadStatus:
+      type: string
+      enum: [ACTIVE, COMPLETED, EXPIRED, FAILED]
+      description: |
+        resumable upload resource의 공개 상태. 정확한 expiry 값과 만료·실패 후 Recording
+        전이 및 재시작 정책은 구현 전에 확정해야 한다.
 
     MaterialProcessingStatus:
       type: string
@@ -2741,15 +3224,146 @@ components:
     SessionEndAcceptedResponse:
       type: object
       additionalProperties: false
-      required: [session, jobs]
+      required: [session, recording, jobs]
       properties:
         session:
           $ref: "#/components/schemas/LectureSession"
+        recording:
+          oneOf:
+            - $ref: "#/components/schemas/SessionRecording"
+            - type: "null"
+          description: 첫 audio.start가 없었던 Session이면 null. 있으면 UPLOAD_PENDING Recording
         jobs:
           type: array
-          description: SESSION_POSTPROCESSING, FINAL_SUMMARY와 필요한 마지막 QUESTION_CLUSTERING Job
+          description: |
+            종료 시점에 생성할 수 있는 upload 비의존 공용 Job. HQ STT의 구체 Job type과
+            응답은 PR4에서 정의하며 Recording upload complete 전에는 시작하지 않는다.
           items:
             $ref: "#/components/schemas/AIJob"
+
+    SessionRecording:
+      type: object
+      additionalProperties: false
+      description: |
+        Session의 논리 녹음 aggregate를 나타내는 안전한 외부 표현이다. 물리 저장물이 단일
+        파일인지 fragment와 manifest인지, storage key와 서버 경로가 무엇인지는 노출하지 않는다.
+      required:
+        - id
+        - session_id
+        - status
+        - version
+        - content_type
+        - byte_size
+        - duration_ms
+        - playback_url
+        - created_at
+        - updated_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        session_id:
+          $ref: "#/components/schemas/ResourceId"
+        status:
+          $ref: "#/components/schemas/SessionRecordingStatus"
+        version:
+          type: integer
+          minimum: 1
+          description: recording.updated의 오래된 갱신을 거르기 위한 리소스 버전
+        content_type:
+          type: [string, "null"]
+          description: upload format 확정 전 또는 아직 upload되지 않았으면 null
+        byte_size:
+          type: [integer, "null"]
+          minimum: 1
+          description: upload 완결 전에는 null
+        duration_ms:
+          type: [integer, "null"]
+          minimum: 0
+          description: 브라우저가 보고하고 서버가 검증한 재생 길이. 검증 전에는 null
+        playback_url:
+          type: [string, "null"]
+          description: |
+            현재 권한으로 UPLOADED 녹음을 조회할 상대 API 경로. 준비 전이거나 접근 정책상
+            재생할 수 없으면 null이며 내부 storage URL을 반환하지 않는다.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecordingUploadCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [client_stream_id, content_type, total_bytes, duration_ms]
+      properties:
+        client_stream_id:
+          type: string
+          minLength: 1
+          description: 첫 audio.start에서 publisher를 claim한 동일한 client stream ID
+        content_type:
+          type: string
+          minLength: 1
+          description: 허용 codec·container와 MIME 목록은 TBD
+        total_bytes:
+          type: integer
+          minimum: 1
+          description: 최대 녹음 크기는 TBD
+        duration_ms:
+          type: integer
+          minimum: 0
+          description: 브라우저 로컬 녹음이 보고한 전체 재생 길이
+
+    RecordingUpload:
+      type: object
+      additionalProperties: false
+      description: |
+        resumable upload의 안전한 공개 상태다. 임시 storage 경로, storage key, fragment와
+        manifest는 포함하지 않는다. offset 전달 header와 wire protocol은 아직 미정이다.
+      required:
+        - id
+        - recording_id
+        - status
+        - offset_bytes
+        - total_bytes
+        - expires_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        recording_id:
+          $ref: "#/components/schemas/ResourceId"
+        status:
+          $ref: "#/components/schemas/RecordingUploadStatus"
+        offset_bytes:
+          type: integer
+          minimum: 0
+          description: 서버가 연속적으로 확인한 다음 write 위치
+        total_bytes:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+          description: 정확한 upload 유효 기간은 TBD
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecordingUploadCompletedResponse:
+      type: object
+      additionalProperties: false
+      required: [recording]
+      properties:
+        recording:
+          $ref: "#/components/schemas/SessionRecording"
+          description: |
+            upload 완결 뒤 UPLOADED로 전이된 Recording. HQ STT의 구체 Job·Transcript 응답은
+            PR4에서 추가한다.
 
     LectureMaterial:
       type: object
@@ -3517,6 +4131,7 @@ components:
       additionalProperties: false
       required:
         - session
+        - recording
         - materials
         - transcript
         - summary
@@ -3526,6 +4141,13 @@ components:
       properties:
         session:
           $ref: "#/components/schemas/LectureSession"
+        recording:
+          oneOf:
+            - $ref: "#/components/schemas/SessionRecording"
+            - type: "null"
+          description: |
+            첫 audio.start가 없거나 현재 사용자의 녹음 접근 정책이 허용하지 않으면 null.
+            storage key, 서버 경로와 물리 fragment 구성은 포함하지 않는다.
         materials:
           type: array
           description: 외부에서 연결된 자료만 포함하며 분리된 자료는 즉시 제외
@@ -3567,6 +4189,7 @@ components:
         - reaction.updated
         - answer.updated
         - session.updated
+        - recording.updated
         - job.updated
 
     ConnectionReadyPayload:
@@ -3606,7 +4229,7 @@ components:
           uniqueItems: true
           items:
             type: string
-            enum: [SESSION, TRANSCRIPT, QUESTIONS, ANSWERS, JOBS]
+            enum: [SESSION, RECORDING, TRANSCRIPT, QUESTIONS, ANSWERS, JOBS]
 
     TranscriptStatusPayload:
       type: object
@@ -3766,12 +4389,21 @@ components:
           type: integer
           const: 1
 
+    AudioPublisherStatus:
+      type: string
+      enum: [CLAIMED, RESUMED]
+      description: |
+        CLAIMED는 Session의 첫 성공 audio.start가 publisher를 점유했음을, RESUMED는 같은
+        client_stream_id가 기존 publisher와 Recording을 재사용해 연결했음을 뜻한다.
+
     AudioReadyControl:
       type: object
       additionalProperties: false
       required:
         - type
         - stream_id
+        - recording_id
+        - publisher_status
         - accepted_format
         - max_chunk_bytes
         - max_in_flight
@@ -3783,6 +4415,10 @@ components:
           const: audio.ready
         stream_id:
           $ref: "#/components/schemas/ResourceId"
+        recording_id:
+          $ref: "#/components/schemas/ResourceId"
+        publisher_status:
+          $ref: "#/components/schemas/AudioPublisherStatus"
         accepted_format:
           $ref: "#/components/schemas/AudioFormat"
         max_chunk_bytes:
@@ -3897,6 +4533,46 @@ components:
         request_id:
           type: [string, "null"]
 
+x-recording-contract:
+  status: draft-with-explicit-tbd
+  live_capture:
+    source: same browser microphone source
+    branches:
+      - PCM_S16LE 16000 Hz mono fixed 500 ms frames over the audio WebSocket for live STT
+      - browser-local binary recording finalized at Session end and sent by HTTP resumable upload
+    channel_separation: Session event WebSocket and audio WebSocket use separate connections and tickets
+    publisher: first successful audio.start client_stream_id atomically claims the Session publisher
+    reconnect: the same client_stream_id reuses the publisher claim and Recording
+    conflict: a different client_stream_id receives AUDIO_PUBLISHER_CONFLICT and close code 4409
+    tab_exit_warning: UI responsibility during capture or upload; release condition is TBD, not a WebSocket control message
+  recording:
+    public_cardinality: zero before audio.start and exactly one logical SessionRecording after the first successful start
+    physical_storage: TBD whether one object or multiple fragments, rows and a manifest; public cardinality does not decide DB or object-store cardinality
+    safe_metadata: storage keys, server paths, fragment keys and manifests are never exposed
+  upload:
+    lifecycle: init, offset lookup, binary chunk transfer, complete
+    provisional_operations:
+      - GET /api/v1/recording-uploads/{upload_id}
+      - PATCH /api/v1/recording-uploads/{upload_id}
+    checksum_error_code: RECORDING_CHECKSUM_MISMATCH
+    hq_stt_gate: HQ STT starts only after successful upload complete; concrete Job and Transcript contracts belong to PR4
+  playback:
+    endpoint: GET /api/v1/recordings/{recording_id}/playback
+    authorization: revalidated on every request
+    range: supports full response and byte Range when UPLOADED
+  tbd:
+    - resumable offset lookup GET versus HEAD
+    - chunk method, offset header, request media type, chunk size and success status
+    - checksum algorithm, transport location, verification point and mismatch HTTP status
+    - exact upload expiry duration and cleanup behavior
+    - recording codec, container, accepted content types, browser-local storage and maximum size
+    - physical single object versus fragments and manifest
+    - publisher disconnect lease, reacquisition and explicit takeover
+    - transcript DEGRADED threshold, audio stop timeout and event replay window
+    - recording consent, role-based access, retention and deletion
+    - permission-checked proxy playback versus opaque short-lived signed delivery URL
+    - HQ STT Job type and response, Transcript generation, canonical replacement, timeout, Answer remap and Segment recording offsets in PR4
+
 x-websocket-channels:
   status: draft
   standard: non-standard-extension
@@ -3937,6 +4613,9 @@ x-websocket-channels:
           $ref: "#/components/schemas/Answer"
         session.updated:
           $ref: "#/components/schemas/LectureSession"
+        recording.updated:
+          description: 현재 녹음 접근 정책이 허용한 사용자에게만 전달하는 안전한 메타데이터
+          $ref: "#/components/schemas/SessionRecording"
         job.updated:
           description: Session 공용 작업에만 사용. 개인 AI 작업은 요청자에게만 전달
           $ref: "#/components/schemas/AIJob"
@@ -3949,7 +4628,12 @@ x-websocket-channels:
       authorization: Course PROFESSOR and LIVE Session required
       authentication: POST /api/v1/realtime-tickets의 60초 만료·1회용 SESSION_AUDIO_WRITE ticket
       handshakeQuery: ticket
-      concurrency: 한 Session당 active publisher 한 명 권장
+      separation: Session event WebSocket과 별도 연결·티켓·책임을 사용
+      concurrency: |
+        한 Session의 첫 성공 audio.start client_stream_id가 publisher를 원자적으로 claim하고
+        Recording을 CAPTURING으로 만든다. 같은 client_stream_id는 reconnect·resume할 수 있다.
+        다른 client_stream_id는 AUDIO_PUBLISHER_CONFLICT를 받은 뒤 4409로 종료된다. 비정상
+        단절의 lease 만료, 재획득과 명시적 takeover 정책은 TBD이다.
       clientTextMessages:
         - $ref: "#/components/schemas/AudioStartControl"
         - $ref: "#/components/schemas/AudioStopControl"
@@ -3967,8 +4651,10 @@ x-websocket-channels:
           version(1), byte 1은 flags(MVP v1은 0), byte 2..5는 uint32 chunk_sequence, byte 6..13은 uint64
           captured_offset_ms, 나머지는 PCM_S16LE 16000 Hz mono payload다. sequence는
           client_stream_id별 0부터 1씩 증가하고 offset은 stream 시작 기준이다. 기본 chunk는
-          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. 원본 오디오는
-          영구 저장하지 않는다.
+          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. 이 frame은 live STT
+          전송용이다. 클라이언트는 같은 microphone source를 이 PCM 경로와 브라우저 로컬
+          binary 녹음 경로로 동시에 분기하고, 로컬 녹음은 Session 종료 뒤 HTTP resumable
+          upload로 영구 저장한다. codec·container와 로컬 저장 방식은 TBD이다.
   personal-ai-stream:
     status: TBD
     visibility: requester-only
