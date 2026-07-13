@@ -43,6 +43,24 @@ python3 -m http.server 4173 --directory docs/prototypes
 | 수업 기록   | 교수자 완료 class       | `ENDED_CLASS_PAGE_PROF`  | `class-ended-professor.html` | 확인 가능 |
 | 수업 기록   | 학생 완료 class·복습 AI | `ENDED_CLASS_PAGE_STUD`  | `class-ended-student.html`   | 확인 가능 |
 
+## 인증·Course·READY class 정책 검토 경로
+
+아래 링크는 query 조합으로도 서로 모순되지 않아야 하는 대표 상태다.
+
+| 검토 항목                         | 대표 경로                                                                                                                                                      |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ----------- |
+| 인증 공통 대시보드 빈 목록        | [`dashboard.html?owned=empty&joined=empty`](dashboard.html?owned=empty&joined=empty)                                                                           |
+| Course 생성·무기한 참여 코드      | [`course-create.html?state=success`](course-create.html?state=success)                                                                                         |
+| 참여 코드 공통 실패               | [`course-join.html?state=invalid`](course-join.html?state=invalid)                                                                                             |
+| owner 코드 회전·active class 없음 | [`course-professor.html?session=none`](course-professor.html?session=none)                                                                                     |
+| 학생 READY 수동 대기              | [`course-student.html?session=ready`](course-student.html?session=ready)                                                                                       |
+| PDF 없이 class 시작 가능          | [`class-create.html?stage=ready&materials=empty&start=idle`](class-create.html?stage=ready&materials=empty&start=idle)                                         |
+| PROCESSING PDF로 시작 차단        | [`class-create.html?stage=ready&materials=processing&start=material-processing`](class-create.html?stage=ready&materials=processing&start=material-processing) |
+| PDF 10개·용량·형식 오류           | `materials=full                                                                                                                                                | size-error      | mime-error` |
+| Material 삭제 경합·이미 삭제      | `materials=delete-conflict                                                                                                                                     | delete-missing` |
+
+참여 코드는 trim·대문자화 뒤 `[A-Z]{6}`이며 자동 만료되지 않는다. READY Material은 active `N/10`, 파일당 100 MB(100,000,000 bytes), 동일 이름 suffix, 권한 확인 원본 열기와 즉시 detach 목 상태를 제공한다. `PROCESSING` Material만 class 시작을 막고 PDF가 없거나 `UPLOADED`, `READY`, `FAILED`만 있으면 시작 가능하다.
+
 ## 프로토타입과 실제 구현의 경계
 
 - 버튼과 입력은 화면 흐름 확인을 위한 로컬 상태만 변경한다.
