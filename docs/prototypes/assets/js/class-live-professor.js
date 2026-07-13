@@ -103,6 +103,7 @@ function replaceProfessorRepresentative() {
   if (!central) return;
   const previousStatus = central.dataset.answerTargetStatus;
   const previousId = central.dataset.answerTargetId;
+  const previousGeneration = central.dataset.createdInGeneration || "7";
   const previousText = normalizeLiveInput(
     central.querySelector("[data-answer-target-text]")?.textContent || "",
   );
@@ -119,7 +120,7 @@ function replaceProfessorRepresentative() {
     const meta = document.createElement("div");
     meta.className = "live-node-meta";
     const kind = document.createElement("span");
-    kind.textContent = "REPRESENTATIVE_QUESTION · PRESERVED";
+    kind.textContent = `source_kind=AI_REPRESENTATIVE · created_in_generation=${previousGeneration} · PRESERVED`;
     const status = document.createElement("span");
     status.dataset.answerStatusLabel = "";
     status.textContent = previousStatus.toUpperCase();
@@ -141,12 +142,16 @@ function replaceProfessorRepresentative() {
 
   central.dataset.answerTargetId = "rep-8-13";
   central.dataset.answerTargetStatus = "open";
+  central.dataset.createdInGeneration = String(Number(previousGeneration) + 1);
   const status = document.createElement("span");
   status.dataset.answerStatusLabel = "";
   status.textContent = "OPEN";
   central
     .querySelector("small")
-    ?.replaceChildren("AI 대표질문 · ACTIVE · ", status);
+    ?.replaceChildren(
+      `AI 대표질문 · ACTIVE · created_in_generation=${central.dataset.createdInGeneration} · `,
+      status,
+    );
   const copy = central.querySelector("[data-answer-target-text]");
   if (copy) {
     copy.textContent =

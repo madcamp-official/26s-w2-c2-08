@@ -232,6 +232,11 @@ function advanceGeneration() {
   );
   if (representative) {
     representative.dataset.representativeId = `rep-${generation}-${revision}`;
+    representative.dataset.createdInGeneration = String(generation);
+    const meta = representative.querySelector("small");
+    if (meta) {
+      meta.textContent = `AI 대표질문 · ACTIVE · created_in_generation=${generation}`;
+    }
     const copy = representative.querySelector("p");
     if (copy) {
       copy.textContent =
