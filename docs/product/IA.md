@@ -47,10 +47,10 @@ ROOT(0)
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| 한 학기 Course 만들기 버튼 | `COURSE_CREATE_BUTTON` | 2 | 기능 | `MAIN_PAGE_AUTH` | 교수자 | MVP 필수 | 과목명과 학기를 입력하는 Course 생성 페이지로 이동 | 로그인 후 메인 화면에서 Course 만들기 선택 |
-| 한 학기 Course 만들기 페이지 | `COURSE_CREATE_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 교수자 | MVP 필수 | 과목명과 학기를 입력해 Course와 고유 참여 코드를 생성 | 로그인 후 메인 화면에서 Course 만들기 선택 |
-| 한 학기 Course 참여하기 버튼 | `COURSE_JOIN_BUTTON` | 2 | 기능 | `MAIN_PAGE_AUTH` | 학생 | MVP 필수 | 참여 코드를 입력하는 Course 참여 페이지로 이동 | 로그인 후 메인 화면에서 Course 참여하기 선택 |
-| 한 학기 Course 참여하기 | `COURSE_JOIN_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 학생 | MVP 필수 | 교수자에게 받은 참여 코드를 검증해 학생으로 Course에 참여 | 로그인 후 메인 화면에서 Course 참여하기 선택 |
+| 한 학기 Course 만들기 버튼 | `COURSE_CREATE_BUTTON` | 2 | 기능 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 과목명과 학기를 입력하는 Course 생성 페이지로 이동 | 로그인 후 메인 화면에서 Course 만들기 선택 |
+| 한 학기 Course 만들기 페이지 | `COURSE_CREATE_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 과목명과 학기를 입력해 Course를 만들고 해당 Course의 유일한 교수자 owner가 됨 | 로그인 후 메인 화면에서 Course 만들기 선택 |
+| 한 학기 Course 참여하기 버튼 | `COURSE_JOIN_BUTTON` | 2 | 기능 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 참여 코드를 입력하는 Course 참여 페이지로 이동 | 로그인 후 메인 화면에서 Course 참여하기 선택 |
+| 한 학기 Course 참여하기 | `COURSE_JOIN_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 참여 코드를 검증해 해당 Course의 학생이 됨 | 로그인 후 메인 화면에서 Course 참여하기 선택 |
 | 로그인 버튼 | `LOGIN_BUTTON_AREA` | 2 | 기능 | `MAIN_PAGE` | 비로그인 | MVP 필수 | Google 로그인 페이지로 이동하고 성공 시 로그인 후 메인 화면으로 전환 | 비로그인 사용자가 로그인 버튼 선택 |
 | 로그인 페이지 | `LOGIN_PAGE` | 2 | 페이지 | `MAIN_PAGE` | 비로그인 | MVP 필수 | Google 계정으로 인증하며 역할은 계정이 아니라 Course별로 결정 | 메인 화면에서 로그인 버튼 선택 |
 | 내가 참여 중인 Course 목록 | `MY_COURSE_LIST` | 2 | 영역 | `MAIN_PAGE_AUTH` | 공통 | MVP 필수 | 학생으로 참여한 Course 카드와 진입 기능을 표시하고 빈 목록에서는 코드 참여를 안내 | 로그인 후 메인 화면에 항상 표시 |

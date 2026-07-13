@@ -302,11 +302,14 @@ ticket 소비는 `UPDATE ... SET used_at = now() WHERE ticket_hash = :hash AND u
 제약·인덱스:
 
 - PK `(course_id, user_id)`가 한 Course에서 역할 하나만 허용한다.
+- `UNIQUE INDEX course_members_one_professor_per_course_uq (course_id) WHERE role = 'PROFESSOR'`; Course당 교수자를 최대 한 명으로 제한한다.
 - `INDEX course_members_user_role_idx (user_id, role, course_id)`
 - `course_id ON DELETE CASCADE`
 - `user_id ON DELETE RESTRICT`; 탈퇴는 User 익명화를 우선한다.
-- Course 생성 트랜잭션은 생성자를 `PROFESSOR`로 함께 삽입한다.
-- 코드 참여는 기존 `PROFESSOR`를 `STUDENT`로 덮어쓰지 않는다.
+- Course 생성 트랜잭션은 생성자를 유일한 `PROFESSOR`로 함께 삽입한다.
+- deferrable constraint trigger는 transaction 종료 시 삭제되지 않은 모든 Course에 `PROFESSOR` membership이 정확히 하나이고 그 `user_id`가 `courses.created_by_user_id`와 같은지 검증한다. Course aggregate 삭제에서는 부모 행이 없으면 검사를 건너뛴다.
+- owner membership 삭제·역할 변경과 다른 교수자 추가는 금지하며 owner 이전은 제공하지 않는다.
+- 코드 참여는 항상 `STUDENT` membership만 만들고 기존 owner를 `STUDENT`로 덮어쓰지 않는다.
 
 ### 6.3 `lecture_sessions`
 

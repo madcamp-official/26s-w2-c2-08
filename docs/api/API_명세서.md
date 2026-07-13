@@ -210,6 +210,10 @@ POST /api/v1/auth/logout
 
 같은 사용자가 Course별로 다른 역할을 가질 수 있다.
 
+- 계정 전역 역할은 없으며 모든 인증 사용자가 Course를 생성하거나 참여 코드로 참여할 수 있다.
+- Course 생성자는 해당 Course의 유일한 `PROFESSOR`가 되며, Course에는 정확히 한 명의 교수자만 존재한다.
+- MVP API는 교수자 추가·교체·탈퇴를 제공하지 않는다.
+
 ### 4.2 LectureSession
 
 ```text

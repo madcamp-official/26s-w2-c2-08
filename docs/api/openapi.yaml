@@ -330,7 +330,9 @@ paths:
       tags: [Courses]
       operationId: createCourse
       summary: Course 생성
-      description: Course를 생성하고 요청 사용자를 해당 Course의 PROFESSOR로 등록한다.
+      description: |
+        모든 인증 사용자가 Course를 생성할 수 있다. Course와 생성자의 PROFESSOR 멤버십을
+        원자적으로 만들며, 생성자는 해당 Course의 정확히 한 명인 교수자가 된다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
