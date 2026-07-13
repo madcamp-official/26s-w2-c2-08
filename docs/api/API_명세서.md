@@ -138,8 +138,11 @@ POST /api/v1/auth/logout
 
 - `PUT` 반응 추가와 `DELETE` 반응 취소는 멱등적이다.
 - class 종료, AI 작업 생성과 중복 제출 위험이 있는 `POST`는 `Idempotency-Key` 헤더를 지원한다.
-- 같은 사용자·같은 경로·같은 키의 재요청은 같은 결과를 반환해야 한다.
-- 키 보관 기간과 충돌 판정 방식은 TBD이다.
+- 서버는 정규화한 HTTP method·path·body로 `request_hash`를 계산한다.
+- 같은 사용자·같은 경로·같은 키와 같은 `request_hash`의 재요청은 최초 응답의 HTTP status와 body를 그대로 반환한다.
+- 동일 요청이 처리 중이면 중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 저장된 응답을 재사용한다.
+- 같은 키로 다른 `request_hash`를 보내면 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
+- terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
 
 ### 2.7 요청 ID
 
@@ -160,19 +163,19 @@ POST /api/v1/auth/logout
 }
 ```
 
-|  HTTP | 의미                       | 주요 코드                                       |
-| ----: | -------------------------- | ----------------------------------------------- |
-| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`             |
-| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`    |
-| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`         |
-| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`                            |
-| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `MEMBERSHIP_CONFLICT` |
-| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                |
-| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                        |
-| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                              |
-| `429` | 요청 한도 초과             | `RATE_LIMITED`                                  |
-| `500` | 서버 오류                  | `INTERNAL_ERROR`                                |
-| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                        |
+|  HTTP | 의미                       | 주요 코드                                                                                                                                           |
+| ----: | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                 |
+| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                        |
+| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                             |
+| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`                                                                                                                                |
+| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE` |
+| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                    |
+| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                                                                                                                            |
+| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                  |
+| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                      |
+| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                    |
+| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                            |
 
 ### 3.2 AI 작업 수락 응답
 
@@ -180,15 +183,26 @@ POST /api/v1/auth/logout
 {
   "job": {
     "id": "job_01HXYZ",
+    "session_id": "session_01HXYZ",
     "job_type": "LIVE_SUMMARY",
+    "visibility": "REQUESTER_ONLY",
     "status": "PENDING",
+    "attempt": 1,
+    "version": 1,
+    "progress": null,
+    "retryable": false,
+    "blocks_session_completion": false,
+    "error": null,
     "target": {
       "resource_type": "SUMMARY",
       "resource_id": null,
       "resource_url": "/api/v1/sessions/session_01HXYZ/summaries"
     },
     "result": null,
-    "created_at": "2026-07-11T01:30:00Z"
+    "created_at": "2026-07-11T01:30:00Z",
+    "updated_at": "2026-07-11T01:30:00Z",
+    "started_at": null,
+    "finished_at": null
   }
 }
 ```
@@ -210,6 +224,10 @@ POST /api/v1/auth/logout
 
 같은 사용자가 Course별로 다른 역할을 가질 수 있다.
 
+- 계정 전역 역할은 없으며 모든 인증 사용자가 Course를 생성하거나 참여 코드로 참여할 수 있다.
+- Course 생성자는 해당 Course의 유일한 `PROFESSOR`가 되며, Course에는 정확히 한 명의 교수자만 존재한다.
+- MVP API는 교수자 추가·교체·탈퇴를 제공하지 않는다.
+
 ### 4.2 LectureSession
 
 ```text
@@ -223,12 +241,15 @@ READY → LIVE → PROCESSING → COMPLETED
 | 후처리 완료 | `PROCESSING` | `COMPLETED`  |
 
 - 다른 상태에서의 전이는 `409 SESSION_STATE_CONFLICT`로 거부한다.
+- 한 Course에는 `READY`, `LIVE`, `PROCESSING` 중 하나인 active Session이 합계 최대 1개만 존재한다.
+- active Session이 이미 있을 때 class 생성은 `409 ACTIVE_SESSION_EXISTS`로 거부한다.
 - `PROCESSING`과 `COMPLETED`에서는 새 음성, 질문과 반응을 받지 않는다.
 - 종료 시 생성한 공용 Job 집합은 `SESSION_POSTPROCESSING`, `FINAL_SUMMARY`와 필요 시 마지막 `QUESTION_CLUSTERING`이다.
 - 이 공용 Job이 모두 terminal 상태인 `SUCCEEDED` 또는 `FAILED`에 도달하면 Session을 `COMPLETED`로 전환한다. 모든 Job의 성공을 요구하지 않는다.
 - `SESSION_POSTPROCESSING`의 성공은 drain과 child Job 상태 수집이 끝났다는 뜻이며 `FINAL_SUMMARY`·`QUESTION_CLUSTERING`의 성공까지 의미하지 않는다.
 - `FAILED` Job은 기록 화면에 오류와 재시도 상태를 표시하고, 재시도 중에도 Session은 `COMPLETED`를 유지한다.
 - worker 장애로 `RUNNING`에 남은 Job은 watchdog이 timeout 후 `FAILED`로 바꿔 Session이 `PROCESSING`에 영구 정체되지 않게 한다.
+- Session이 `COMPLETED`로 전환된 시각을 `completed_at`으로 공개한다. 그 전에는 `null`이다.
 
 ### 4.3 Question
 
@@ -247,7 +268,12 @@ PENDING → RUNNING → SUCCEEDED
 ```
 
 - 실패한 작업만 재시도할 수 있다.
-- 재시도는 기존 작업을 갱신할지 새 작업을 만들지 TBD이다.
+- `visibility`는 `SHARED` 또는 `REQUESTER_ONLY`이며 `blocks_session_completion=true`인 Job은 반드시 `SHARED`이다.
+- `job_type`을 작업의 공개 purpose로 사용하고 `progress.stage`에는 `QUEUED`, `EXTRACTING`, `GENERATING`, `FINALIZING` 등 사용자에게 공개해도 안전한 phase만 반환한다.
+- provider 내부 단계, 프롬프트·응답 원문과 민감한 오류 정보는 공개하지 않는다.
+- 재시도는 같은 Job 행의 `attempt`를 1 증가시키고 `PENDING`으로 되돌린다. `version`도 1 증가한다.
+- 재시도 시 현재 실행 상태인 progress, error, `started_at`, `finished_at`을 `null`로 초기화하고 `retryable=false`로 되돌린다.
+- worker 결과는 현재 Job의 `id`, `attempt`, 실행 token과 `RUNNING` 상태가 모두 일치할 때만 반영한다. 이전 attempt의 늦은 결과는 폐기한다.
 
 ## 5. 사용자 API
 
@@ -289,8 +315,8 @@ POST /api/v1/courses
 
 - 권한: 인증 사용자
 - 성공: `201 Created`
-- 생성자는 해당 Course의 `PROFESSOR`가 된다.
-- 서버가 고유한 `join_code`를 생성한다.
+- 생성자는 해당 Course의 유일한 `PROFESSOR`가 되며 Course 생성과 교수자 멤버십 생성을 원자적으로 처리한다.
+- 서버가 영문 대문자 6자인 고유한 `join_code`를 생성한다.
 - 참여 코드는 교수자 권한 응답에만 포함한다.
 
 ### 6.3 Course 참여
@@ -301,11 +327,13 @@ POST /api/v1/courses/join
 
 ```json
 {
-  "join_code": "A7K9Q2"
+  "join_code": "ABCXYZ"
 }
 ```
 
 - 권한: 인증 사용자
+- 입력 앞뒤 공백을 제거하고 영문자를 대문자로 정규화한 뒤 `[A-Z]{6}`인지 검증한다. 구분자는 허용하지 않는다.
+- 참여 코드는 만료되지 않는다. 회전된 이전 코드는 즉시 무효가 된다.
 - 새 멤버십: `201 Created`
 - 기존 학생 멤버십에 대한 재요청: `200 OK`
 - 기존 교수자 멤버십을 학생으로 덮어쓰지 않는다.
@@ -319,8 +347,35 @@ GET /api/v1/courses/{course_id}
 
 - 권한: Course 멤버
 - 응답: Course 정보, 현재 사용자 역할과 현재 class 요약
+- `current_session`은 `READY`, `LIVE`, `PROCESSING` 중 하나인 유일한 active Session이며 없으면 `null`이다.
 - 완료 class 목록은 `GET /courses/{course_id}/sessions?status=COMPLETED`로 조회한다.
 - `join_code`는 `PROFESSOR`에게만 반환한다.
+
+### 6.5 Course 참여 코드 회전
+
+```http
+POST /api/v1/courses/{course_id}/join-code/rotate
+Idempotency-Key: <key>
+```
+
+- 권한: 해당 Course를 처음 생성한 `PROFESSOR`만 가능하다.
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- 성공: `200 OK`, 새 `join_code`를 포함한 Course를 반환한다.
+- 새 코드는 영문 대문자 6자이며 이전 코드는 새 코드가 저장되는 즉시 무효가 된다.
+
+### 6.6 Course 삭제
+
+```http
+DELETE /api/v1/courses/{course_id}
+Idempotency-Key: <key>
+```
+
+- 권한: Course `PROFESSOR`
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- Course에는 종료 상태나 종료 API가 없으며 삭제만 제공한다.
+- active Session이 있는 Course의 삭제 허용 여부와 삭제·보관 방식은 미정이다. 이 정책을 확정하기 전에는 구현 계약을 추가로 정해야 한다.
+- 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 `204`를 반환한다.
+- 삭제가 허용되는 Course의 성공 응답은 `204 No Content`이다.
 
 ## 7. Lecture Session API
 
@@ -331,7 +386,8 @@ GET /api/v1/courses/{course_id}/sessions?status=<status>&cursor=<cursor>&limit=2
 ```
 
 - 권한: Course 멤버
-- 기본 정렬: `lecture_date DESC, id DESC`
+- 기본 정렬과 완료 목록 정렬은 `lecture_date DESC, started_at DESC NULLS FIRST, id DESC`이다. 같은 날짜의 완료 class는 실제 시작 시각으로 구분한다.
+- 페이지 커서는 이 정렬 tuple 전체를 보존한다.
 - `status`는 선택적이다.
 
 ### 7.2 class 생성
@@ -349,7 +405,10 @@ POST /api/v1/courses/{course_id}/sessions
 
 - 권한: Course `PROFESSOR`
 - 성공: `201 Created`, 상태 `READY`
-- 같은 날짜에 여러 class를 허용할지는 TBD이다.
+- `title`은 선택적이다. 생략하거나 앞뒤 공백을 제거한 값이 빈 문자열이면 서버가 Course 제목·class 날짜·시각을 포함한 자동 제목을 생성한다.
+- 자동 제목의 정확한 문자열 형식, `READY`에서 사용할 시각 원장과 timezone은 미정이다.
+- 같은 날짜에 여러 class를 허용한다.
+- 같은 Course에 `READY`, `LIVE`, `PROCESSING` Session이 이미 있으면 `409 ACTIVE_SESSION_EXISTS`를 반환한다.
 
 ### 7.3 class 상세
 
@@ -358,10 +417,41 @@ GET /api/v1/sessions/{session_id}
 ```
 
 - 권한: Course 멤버
-- 응답: 세션 상태, 날짜와 시작·종료 시각
+- 응답: 세션 상태, 날짜와 시작·종료·완료 시각
 - 자료, final Transcript, 질문·답변과 공용 AI 작업은 각 Session 하위 목록 API로 조회한다.
 
-### 7.4 class 시작
+### 7.4 class 제목 수정
+
+```http
+PATCH /api/v1/sessions/{session_id}
+```
+
+```json
+{
+  "title": "그래프 탐색"
+}
+```
+
+- 권한: Course `PROFESSOR`
+- 모든 Session 상태에서 제목만 수정할 수 있다. `lecture_date`와 시작·종료·완료 시각은 수정할 수 없다.
+- 앞뒤 공백을 제거한 제목이 빈 문자열이면 class 생성과 같은 자동 제목으로 되돌린다.
+- 성공: `200 OK`, `version`이 증가한 Session을 반환한다. 별도 `If-Match` 계약은 도입하지 않는다.
+
+### 7.5 class 삭제
+
+```http
+DELETE /api/v1/sessions/{session_id}
+Idempotency-Key: <key>
+```
+
+- 권한: Course `PROFESSOR`
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- `READY`, `COMPLETED`에서만 삭제할 수 있다.
+- `LIVE`, `PROCESSING`에서는 `409 SESSION_STATE_CONFLICT`를 반환한다.
+- 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Session이 사라진 뒤의 재요청도 기존 `204`를 반환한다.
+- 성공: `204 No Content`
+
+### 7.6 class 시작
 
 ```http
 POST /api/v1/sessions/{session_id}/start
@@ -371,9 +461,9 @@ POST /api/v1/sessions/{session_id}/start
 - 성공: `200 OK`, 상태 `LIVE`
 - `READY`에서만 시작한다.
 - 강의자료 없이 시작을 허용할지는 TBD이다.
-- 한 Course의 동시 `LIVE` class 개수 제한은 TBD이다.
+- Course의 유일한 active Session이 이 Session이므로 같은 Course의 다른 `READY`, `LIVE`, `PROCESSING` Session과 공존할 수 없다.
 
-### 7.5 class 종료
+### 7.7 class 종료
 
 ```http
 POST /api/v1/sessions/{session_id}/end
@@ -454,6 +544,7 @@ GET /api/v1/sessions/{session_id}/questions?status=OPEN&sort=POPULAR&cursor=<cur
 - 권한: Course 멤버
 - `sort`: `POPULAR`, `RECENT`
 - 응답은 익명 질문, 반응 수, 답변 상태와 선택적 클러스터 요약을 포함한다.
+- 클러스터 요약은 같은 클러스터링 결과를 식별하는 `generation`, 그 결과 안의 안정적 순서인 `ordinal`, 최종본 여부 `is_final`, 최종 확정 시각 `finalized_at`과 생성 provenance인 `created_by_job_id`, `created_by_job_attempt`를 포함한다.
 - 현재 사용자의 반응 여부는 `reacted_by_me`로 표현한다.
 - 교수자와 다른 학생에게 `author_id`, 이름, 이메일을 절대 반환하지 않는다.
 
@@ -560,6 +651,7 @@ GET /api/v1/answers/{answer_id}
 
 - 권한: Course 멤버
 - 답변 상태, 대상 질문 snapshot과 Transcript 범위를 반환한다.
+- 클러스터에서 시작한 Answer는 `source_cluster_id`와 선택 당시 대표 질문 문장을 그대로 보존한 `source_cluster_title_snapshot`을 반환한다. 직접 질문을 선택한 Answer에서는 두 필드가 모두 `null`이다.
 
 ### 11.3 답변 캡처 시작
 
@@ -592,7 +684,7 @@ Idempotency-Key: <key>
 
 - 권한: Course `PROFESSOR`
 - Session이 `LIVE`일 때만 허용한다.
-- 클러스터를 선택하면 선택 시점의 미답변 원본 질문을 답변 대상으로 확정한다.
+- 클러스터를 선택하면 선택 시점의 미답변 원본 질문과 대표 질문 문장의 정확한 text를 답변 대상으로 확정한다.
 - 대상 질문을 `SELECTED`로 변경하고 선택 시점의 마지막 final sequence를 `capture_started_after_sequence`로 기록한다. 아직 final이 없으면 `0`이다.
 - 실제 `start_sequence`는 선택 이후 처음 포함되는 final 구간이며 생성 전에는 `null`일 수 있다.
 - 성공: `201 Created`, Answer 상태 `CAPTURING`
@@ -767,8 +859,10 @@ Idempotency-Key: <key>
 
 - 권한: 요청형 작업은 요청자, 공유 후처리 작업은 Course `PROFESSOR`를 초안으로 한다.
 - `FAILED`인 작업만 재시도한다.
-- 성공: `202 Accepted`
-- 재시도 시 새 Job 생성 여부는 TBD이다.
+- `retryable=false`인 작업은 `409 AI_JOB_NOT_RETRYABLE`, `FAILED`가 아닌 작업은 `409 AI_JOB_STATE_CONFLICT`를 반환한다.
+- 성공: `202 Accepted`, 같은 Job ID와 `attempt + 1`, `status=PENDING`인 Job을 반환한다.
+- 현재 시도의 progress, error, `started_at`, `finished_at`은 `null`, `retryable`은 `false`로 초기화된다.
+- 이전 attempt worker의 늦은 결과는 Job ID·attempt·실행 token·`RUNNING` 상태를 대조해 반영하지 않는다.
 
 ### 14.3 Session 공용 작업 목록
 
@@ -1110,8 +1204,8 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 | --------------------- | --------------- | --------------------------------------- | --------------------------------- |
 | AUTH                  | Google 로그인   | Auth start·callback·logout              | —                                 |
 | PRE-T-01              | Course 생성     | `POST /courses`                         | —                                 |
-| PRE-T-02              | 참여 코드 발급  | Course 생성·상세 응답                   | —                                 |
-| PRE-T-03              | class 생성      | `POST /courses/{id}/sessions`           | —                                 |
+| PRE-T-02              | 참여 코드 발급  | Course 생성·상세·참여 코드 회전         | —                                 |
+| PRE-T-03              | class 관리      | class 생성·제목 수정·삭제               | —                                 |
 | PRE-T-04              | PDF 업로드      | `POST /sessions/{id}/materials`         | `job.updated`                     |
 | PRE-T-05              | class 시작      | `POST /sessions/{id}/start`             | `session.updated`                 |
 | PRE-S-01              | 코드 참여       | `POST /courses/join`                    | —                                 |
@@ -1145,20 +1239,19 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 
 ## 19. 미정 사항
 
-| 항목             | 현재 상태                        | 결정 시 영향            |
-| ---------------- | -------------------------------- | ----------------------- |
-| ID 형식          | 불투명 string                    | OpenAPI `format`, DB PK |
-| Course 참여 코드 | 길이·표준화·회전·만료 TBD        | Course 요청·오류        |
-| PDF 카디널리티   | Session당 개수 TBD               | 업로드 충돌 응답        |
-| Session 동시성   | Course당 `LIVE` 개수 TBD         | 시작 API 제약           |
-| 답변 형식        | MVP 텍스트 답변 여부 TBD         | Answer 요청·응답        |
-| 답변 카디널리티  | 질문당 답변 수 TBD               | Answer 스키마           |
-| 개인 AI 데이터   | 교수자 LIVE 사용·보관·삭제 TBD   | Summary·Chat 권한·수명  |
-| AI 응답 전송     | 폴링·SSE·WebSocket TBD           | Chat·Summary 응답       |
-| 오디오 publisher | 단일 연결 lease·교대 정책 TBD    | 중복 탭·장치 충돌       |
-| 이벤트 재생      | event log 보존 여부 TBD          | 재연결 프로토콜         |
-| 개인 AI 스트림   | streaming HTTP·SSE·target WS TBD | delta·재연결 계약       |
-| 레이트 리미트    | 임계치 TBD                       | `429` 헤더·재시도       |
+| 항목               | 현재 상태                                         | 결정 시 영향                |
+| ------------------ | ------------------------------------------------- | --------------------------- |
+| ID 형식            | 불투명 string                                     | OpenAPI `format`, DB PK     |
+| class 자동 제목    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD | Session 생성·제목 수정 응답 |
+| active Course 삭제 | active Session 보유 시 삭제·보관 방식 TBD         | Course 삭제 응답·트랜잭션   |
+| PDF 카디널리티     | Session당 개수 TBD                                | 업로드 충돌 응답            |
+| 답변 형식          | MVP 텍스트 답변 여부 TBD                          | Answer 요청·응답            |
+| 개인 AI 데이터     | 교수자 LIVE 사용·보관·삭제 TBD                    | Summary·Chat 권한·수명      |
+| AI 응답 전송       | 폴링·SSE·WebSocket TBD                            | Chat·Summary 응답           |
+| 오디오 publisher   | 단일 연결 lease·교대 정책 TBD                     | 중복 탭·장치 충돌           |
+| 이벤트 재생        | event log 보존 여부 TBD                           | 재연결 프로토콜             |
+| 개인 AI 스트림     | streaming HTTP·SSE·target WS TBD                  | delta·재연결 계약           |
+| 레이트 리미트      | 임계치 TBD                                        | `429` 헤더·재시도           |
 
 ## 20. 검토 체크리스트
 
