@@ -1220,7 +1220,7 @@
 
 .live-axis-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-3);
 }
 
@@ -1484,6 +1484,18 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.questions-panel .live-mindmap {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.questions-panel .live-mindmap__center {
+  min-height: 144px;
+}
+
+.questions-panel .live-mindmap__center::after {
+  display: none;
 }
 
 .live-node-meta {

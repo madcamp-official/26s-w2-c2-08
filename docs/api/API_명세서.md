@@ -538,7 +538,7 @@ Idempotency-Key: <key>
 - 권한: Course `PROFESSOR`
 - `LIVE → PROCESSING`을 한 번만 적용한다.
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
-- 정상 클라이언트는 `audio.stop`과 `audio.stopped` 완료 후 호출한다. 종료 요청이 먼저 오면 서버가 새 audio frame을 차단하고 이미 받은 chunk만 drain한다.
+- 정상 클라이언트도 종료 확인 즉시 이 API를 호출한다. `audio.stop` 전송과 로컬 녹음 마감은 best-effort로 함께 시작하되 `audio.stopped`나 drain 완료를 HTTP 호출의 선행조건으로 두지 않는다. 서버는 종료 transaction에서 새 audio frame을 차단하고 이미 받은 chunk만 별도로 drain한다.
 - 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
 - 같은 transaction에서 모든 개인 LIVE Summary, `mode=LIVE` Chat·Message·Evidence, `REQUESTER_ONLY LIVE_SUMMARY` Job, LIVE Chat에 귀속된 `REQUESTER_ONLY CHAT_RESPONSE` Job과 `purge_on_session_end=true`인 멱등성 원장을 삭제한다. 늦게 도착한 Worker 결과는 삭제된 Job·run token을 재확인하여 저장하지 않는다. FINAL Summary, `mode=REVIEW` Chat과 관련 Job·멱등성 원장은 영향받지 않는다.
 - 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
@@ -1463,9 +1463,9 @@ partial Transcript는 복구 대상이 아니다. 재연결할 때 기존 partia
 3. 서버가 Recording ID, claim 결과, 협상 형식과 전송 한도를 담은 `audio.ready`를 반환한다.
 4. 클라이언트는 같은 microphone source를 live PCM 경로와 브라우저 로컬 녹음 경로로 분기하고, live 경로에서 sequence가 포함된 binary audio chunk를 전송한다.
 5. 서버가 주기적으로 `audio.ack`와 필요 시 flow control을 보낸다.
-6. 교수자가 class를 종료하면 클라이언트가 `audio.stop`을 보내고 로컬 녹음을 확정하며, 서버는 live 큐를 drain한다.
-7. 마지막 live final Transcript 저장 후 서버가 `audio.stopped`와 LIVE version의 `FINALIZED` 또는 `EMPTY` 상태를 담은 `transcript.status`를 보낸다.
-8. 클라이언트가 class 종료 HTTP를 호출한 뒤 Recording resumable upload를 시작한다.
+6. 교수자가 class 종료를 확인하면 클라이언트는 종료 HTTP를 즉시 호출하고, `audio.stop` 전송과 로컬 녹음 마감을 best-effort 병행한다. 서버는 종료 transaction commit과 함께 새 audio frame·audio 연결·resume을 차단하고 이미 받은 live 큐만 별도로 drain한다.
+7. 종료 HTTP가 `202 Accepted`를 반환하면 Session은 이미 `PROCESSING`이다. active publisher는 로컬 녹음 마감 결과를 `UPLOAD_PENDING` Recording의 resumable upload에 인계하며 `audio.stopped`를 기다려 Session 전이를 늦추지 않는다.
+8. 마지막 live final 저장과 drain이 끝나면 서버는 `audio.stopped`와 LIVE version의 `FINALIZED` 또는 `EMPTY` 상태를 담은 `transcript.status`를 보낸다. 이 후속 상태는 이미 commit된 Session 종료를 되돌리지 않는다.
 
 MVP v1 오디오 전송 형식은 `PCM_S16LE`, 16 kHz, mono, 500 ms chunk로 고정한다. STT 모델 어댑터가 필요하면 서버 내부에서 변환하며 wire format을 변경하려면 protocol version을 올린다.
 
@@ -1535,7 +1535,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - ack 주기, `max_in_flight`, 최대 queue와 `max_chunk_bytes`는 서버가 `audio.ready`에서 통지한다.
 - audio WS의 PCM frame은 live STT 전송용이며 영구 녹음의 원본으로 취급하지 않는다. 영구 녹음은 같은 microphone source의 브라우저 로컬 branch를 15.3~15.5절로 upload해 저장한다.
 
-교수자가 class 종료를 누르면 클라이언트는 `audio.stop`과 로컬 녹음 확정을 시작하고 `audio.stopped`를 기다린 뒤 HTTP 종료 API를 호출한다. 종료 API가 먼저 호출되거나 대기 timeout이 발생해도 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단하며, 이미 받은 chunk만 drain한다. Recording은 `UPLOAD_PENDING`이 되고 upload complete 전에는 HQ STT를 시작하지 않는다. 연결 손실로 받지 못한 live chunk는 gap으로 기록해 교수자에게 표시한다.
+교수자가 class 종료를 확인하면 클라이언트는 HTTP 종료 API를 즉시 호출하면서 `audio.stop`과 로컬 녹음 확정을 best-effort 병행한다. `audio.stopped`와 drain 완료는 HTTP 종료의 선행조건이 아니다. 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단하며, 이미 받은 chunk만 별도로 drain한다. Recording은 `UPLOAD_PENDING`이 되고 upload complete 전에는 HQ STT를 시작하지 않는다. 연결 손실로 받지 못한 live chunk는 gap으로 기록하되 후처리 HQ version과 구분한다.
 
 녹음 또는 upload 중 tab 종료 warning과 로컬 데이터 유실 안내는 화면 책임이다. 브라우저 로컬 저장 방식과 warning 해제 조건은 TBD이며 WebSocket control message로 만들지 않는다.
 

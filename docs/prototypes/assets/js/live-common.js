@@ -88,6 +88,8 @@ function initLiveAi(root, announce) {
   const chatForm = root.querySelector("[data-live-chat-form]");
   const chatInput = root.querySelector("[data-live-chat-input]");
 
+  if (chat?.dataset.demoState === "pending") setChatLocked(chatForm, true);
+
   root.addEventListener("click", (event) => {
     const summaryAction = event.target.closest("[data-live-summary-action]");
     const chatAction = event.target.closest("[data-live-chat-action]");
