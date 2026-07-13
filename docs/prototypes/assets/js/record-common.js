@@ -7,10 +7,20 @@ function initPlayback() {
   if (!player) return;
 
   const time = player.querySelector("[data-playback-time]");
+  const updateSeekAvailability = (state) => {
+    const allowed = ["ready", "playing", "paused", "ended"].includes(state);
+    document.querySelectorAll("[data-recording-seek]").forEach((item) => {
+      item.disabled = !allowed;
+      item.title = allowed
+        ? "재생 권한 확인 후 녹음 위치로 이동"
+        : "녹음 접근 권한 확인 뒤 사용할 수 있습니다";
+    });
+  };
   const setPlayback = (state, label, progress) => {
     setDemoState(player, state);
     if (time && label) time.textContent = label;
     if (progress) player.style.setProperty("--recording-progress", progress);
+    updateSeekAvailability(state);
   };
 
   document.addEventListener("click", (event) => {
@@ -37,6 +47,8 @@ function initPlayback() {
       showToast("현재 권한을 확인하고 서버 recording offset으로 이동합니다.");
     }
   });
+
+  updateSeekAvailability(player.dataset.demoState);
 }
 
 function initPagination() {
@@ -142,7 +154,9 @@ function initReviewChat() {
     }
   });
 
-  validate();
+  if (count) count.textContent = "0 / 2,000자";
+  input.setAttribute("aria-invalid", "false");
+  if (error) error.hidden = true;
 }
 
 function initManifestRetry() {
