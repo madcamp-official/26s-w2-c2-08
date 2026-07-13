@@ -375,7 +375,8 @@ paths:
       operationId: joinCourse
       summary: 참여 코드로 Course 참여
       description: |
-        참여 코드를 검증하고 요청 사용자를 STUDENT로 등록한다.
+        앞뒤 공백을 제거하고 영문자를 대문자로 바꾼 뒤 `[A-Z]{6}` 참여 코드를 검증해
+        요청 사용자를 STUDENT로 등록한다. 구분자는 허용하지 않으며 코드는 만료되지 않는다.
         이미 같은 Course의 학생이면 기존 멤버십을 반환할 수 있으며,
         PROFESSOR 멤버십을 STUDENT로 덮어쓰지 않는다.
       parameters:
@@ -387,7 +388,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CourseJoinRequest"
             example:
-              join_code: A7K9Q2
+              join_code: abcxyz
       responses:
         "200":
           description: 이미 존재하는 학생 멤버십의 Course
@@ -2418,13 +2419,15 @@ components:
       properties:
         join_code:
           type: string
-          minLength: 1
-          description: 길이, 대소문자 정규화, 만료와 회전 정책은 TBD
+          pattern: '^\s*[A-Za-z]{6}\s*$'
+          description: |
+            앞뒤 공백을 제거하고 대문자로 정규화한다. 정규화 결과는 `[A-Z]{6}`이며
+            구분자를 허용하지 않는다. 코드는 만료되지 않고 회전 시 이전 값이 즉시 무효화된다.
 
     LectureSessionSummary:
       type: object
       additionalProperties: false
-      required: [id, title, lecture_date, status]
+      required: [id, title, lecture_date, status, started_at]
       properties:
         id:
           $ref: "#/components/schemas/ResourceId"
@@ -2463,11 +2466,15 @@ components:
           description: 현재 인증 사용자의 이 Course 안 역할
         join_code:
           type: string
-          description: 현재 사용자가 이 Course의 PROFESSOR일 때만 필드 제공
+          minLength: 6
+          maxLength: 6
+          pattern: '^[A-Z]{6}$'
+          description: 현재 사용자가 이 Course의 PROFESSOR일 때만 제공하는 정규화된 참여 코드
         current_session:
           oneOf:
             - $ref: "#/components/schemas/LectureSessionSummary"
             - type: "null"
+          description: READY, LIVE, PROCESSING 중 하나인 유일한 active Session. 없으면 null
         created_at:
           type: string
           format: date-time

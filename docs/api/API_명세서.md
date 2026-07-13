@@ -296,8 +296,8 @@ POST /api/v1/courses
 
 - 권한: 인증 사용자
 - 성공: `201 Created`
-- 생성자는 해당 Course의 `PROFESSOR`가 된다.
-- 서버가 고유한 `join_code`를 생성한다.
+- 생성자는 해당 Course의 유일한 `PROFESSOR`가 되며 Course 생성과 교수자 멤버십 생성을 원자적으로 처리한다.
+- 서버가 영문 대문자 6자인 고유한 `join_code`를 생성한다.
 - 참여 코드는 교수자 권한 응답에만 포함한다.
 
 ### 6.3 Course 참여
@@ -308,11 +308,13 @@ POST /api/v1/courses/join
 
 ```json
 {
-  "join_code": "A7K9Q2"
+  "join_code": "ABCXYZ"
 }
 ```
 
 - 권한: 인증 사용자
+- 입력 앞뒤 공백을 제거하고 영문자를 대문자로 정규화한 뒤 `[A-Z]{6}`인지 검증한다. 구분자는 허용하지 않는다.
+- 참여 코드는 만료되지 않는다. 회전된 이전 코드는 즉시 무효가 된다.
 - 새 멤버십: `201 Created`
 - 기존 학생 멤버십에 대한 재요청: `200 OK`
 - 기존 교수자 멤버십을 학생으로 덮어쓰지 않는다.
@@ -1179,8 +1181,8 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 | --------------------- | --------------- | --------------------------------------- | --------------------------------- |
 | AUTH                  | Google 로그인   | Auth start·callback·logout              | —                                 |
 | PRE-T-01              | Course 생성     | `POST /courses`                         | —                                 |
-| PRE-T-02              | 참여 코드 발급  | Course 생성·상세 응답                   | —                                 |
-| PRE-T-03              | class 생성      | `POST /courses/{id}/sessions`           | —                                 |
+| PRE-T-02              | 참여 코드 발급  | Course 생성·상세·참여 코드 회전         | —                                 |
+| PRE-T-03              | class 관리      | class 생성·제목 수정·삭제               | —                                 |
 | PRE-T-04              | PDF 업로드      | `POST /sessions/{id}/materials`         | `job.updated`                     |
 | PRE-T-05              | class 시작      | `POST /sessions/{id}/start`             | `session.updated`                 |
 | PRE-S-01              | 코드 참여       | `POST /courses/join`                    | —                                 |
