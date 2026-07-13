@@ -747,6 +747,12 @@ paths:
         coordinator는 종료 시점 requested sequence 이하의 학생 실제 질문과 ended_at까지
         COMPLETED Answer가 있는 AI 대표질문을 현재 중앙 여부와 무관하게 snapshot한
         FINAL QUESTION_CLUSTERING blocking Job도 생성한다.
+        같은 LIVE→PROCESSING transaction은 모든 개인 LIVE Summary,
+        mode=LIVE Chat·Message·Evidence, REQUESTER_ONLY LIVE_SUMMARY Job, LIVE Chat에
+        귀속된 REQUESTER_ONLY CHAT_RESPONSE Job과 purge_on_session_end로 표시한
+        멱등성 원장을 삭제한다. 늦은 Worker 결과는 삭제된 Job·run token을
+        재확인해 저장하지 않는다. FINAL Summary, REVIEW Chat·Job과 class
+        종료 요청 자체의 멱등성 원장은 영향받지 않는다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -1131,7 +1137,11 @@ paths:
         QUESTION_CLUSTERING active Job과 backlog을 소유한 retryable FAILED Job이 모두
         없으면 시스템이 자동 생성하고, 둘 중 하나라도 있으면 새 Job 없이 pending
         watermark만 올린다. 응답은 Question과 현재 clustering_state다.
-        클러스터링 실패는 질문 생성을 rollback하지 않는다.
+        content는 앞뒤 공백 제거, Unicode NFC 정규화, Unicode code point
+        1~300자 검증 순으로 처리한다. 정규화 결과를 저장하며 비었거나
+        최대 길이를 넘으면 자르지 않고 422 VALIDATION_ERROR와 field,
+        EMPTY_AFTER_NORMALIZATION 또는 MAX_LENGTH_EXCEEDED reason, max_length,
+        actual_length를 반환한다. 클러스터링 실패는 질문 생성을 rollback하지 않는다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1165,7 +1175,7 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
-          $ref: "#/components/responses/ValidationFailed"
+          $ref: "#/components/responses/TextInputValidationFailed"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -1180,8 +1190,10 @@ paths:
       description: |
         해당 Course의 STUDENT가 LIVE Session에서 사용한다. 현재 Session 문맥을 이용해
         짧은 후보를 동기 200으로 반환하지만 실제 질문·초안·AIJob을 저장하거나
-        공개하지 않는다. 초안은 500 Unicode code point, 각 제안은 300 code point를
-        초과할 수 없고 서버는 문자열을 자동 절단하지 않는다.
+        공개하지 않는다. draft는 앞뒤 공백 제거·Unicode NFC 정규화 후
+        1~500 Unicode code point를 검증하고 정규화 결과만 모델에 전달한다.
+        빈 결과·초과는 자르지 않고 422 VALIDATION_ERROR의 안정적 details를
+        반환한다. 각 제안은 1~300 code point다.
       requestBody:
         required: true
         content:
@@ -1209,7 +1221,7 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
-          $ref: "#/components/responses/ValidationFailed"
+          $ref: "#/components/responses/TextInputValidationFailed"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -1653,9 +1665,12 @@ paths:
       operationId: listSessionSummaries
       summary: 저장된 요약 목록 조회
       description: |
-        Course 멤버만 조회할 수 있다. 저장된 LIVE 요약은 요청자에게만, FINAL 요약은
-        Course 멤버에게 공개한다. 성공한 LIVE 요약도 반드시 저장한 뒤 Job을 SUCCEEDED로
-        변경하므로 연결이 끊겨도 Job result URL로 복구할 수 있다. 자동 FINAL
+        PROFESSOR와 STUDENT Course 멤버 모두 조회할 수 있다. 저장된 LIVE
+        요약은 요청자에게만, FINAL 요약은 Course 멤버에게 공개한다. 성공한
+        LIVE 요약도 반드시 저장한 뒤 Job을 SUCCEEDED로 변경하므로 연결이
+        끊겨도 Job result URL로 복구할 수 있다. LIVE→PROCESSING에서 LIVE
+        Summary·Job을 삭제하며 이후 목록에 나타나지 않는다. 비멤버에게는 Session
+        존재를 숨기고 404를 반환한다. 자동 FINAL
         요약은 최신 HQ TranscriptVersion이 RECORDING/FINALIZED이고 final Segment가
         1건 이상일 때만 생성하며 preserved LIVE canonical은 현재 source로 사용하지 않는다.
         목록은 created_at DESC, id DESC의 안정적인 keyset 순서를 사용한다.
@@ -1681,8 +1696,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -1695,7 +1708,12 @@ paths:
         제외한다. 요청 범위의 final Segment가 0건이면 Job 없이 409
         SUMMARY_TRANSCRIPT_NOT_READY, source TranscriptVersion이 FAILED이면 Job 없이 409
         SUMMARY_SOURCE_UNAVAILABLE를 반환한다. final Segment가 1건 이상일 때만 202와
-        AIJob을 반환한다. UI는 학생 중심이지만 교수자의 LIVE 요약 권한은 아직 미정이다.
+        REQUESTER_ONLY AIJob을 반환한다. PROFESSOR와 STUDENT Course 멤버에게
+        동일하게 허용한다. 요청자는 Job을 polling한 뒤 result URL에서 저장된
+        최종 Summary만 GET한다. 부분 문장·token은 저장·broadcast·streaming하지
+        않는다. LIVE→PROCESSING에서 Summary·Job·purge-on-session-end 멱등성
+        원장을 삭제해 구 202를 재생하지 않는다. 인증되지 않은 요청은 401,
+        비멤버는 Session 존재를 숨기는 404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1721,8 +1739,6 @@ paths:
                 $ref: "#/components/schemas/AIJobAcceptedResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -1744,7 +1760,8 @@ paths:
       summary: 저장된 요약 단건 조회
       description: |
         FINAL 요약은 Course 멤버가 조회할 수 있다. 저장된 LIVE 요약은 요청자만 조회한다.
-        권한이 없는 사용자에게는 리소스 존재를 공개하지 않는다.
+        비요청자·비멤버·삭제된 LIVE Summary에는 리소스 존재를 공개하지
+        않고 404를 반환한다.
       responses:
         "200":
           description: LectureSummary
@@ -1757,8 +1774,6 @@ paths:
                 $ref: "#/components/schemas/LectureSummary"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1770,7 +1785,11 @@ paths:
       tags: [Chats]
       operationId: listMySessionChats
       summary: 내 AI 대화 목록 조회
-      description: 현재 사용자가 이 Session에서 생성한 개인 대화만 반환한다.
+      description: |
+        현재 사용자가 이 Session에서 생성한 개인 대화만 반환한다.
+        PROFESSOR와 STUDENT Course 멤버에게 동일한 규칙을 적용한다. LIVE→PROCESSING
+        transaction이 LIVE Chat을 삭제하면 목록에서 즉시 사라진다. 비멤버에게는
+        Session 존재를 숨기고 404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
@@ -1788,8 +1807,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -1797,8 +1814,12 @@ paths:
       operationId: createSessionChat
       summary: AI 대화 생성
       description: |
-        LIVE는 진행 중 class, REVIEW는 정리 중·완료 class에서 사용한다. 대화는 생성한
-        사용자에게만 노출하는 초안이며 교수자의 LIVE 사용 범위는 미정이다.
+        PROFESSOR와 STUDENT Course 멤버 모두 같은 개인 Chat 권한을 갖는다.
+        LIVE mode는 Session LIVE, REVIEW mode는 Session COMPLETED에서만 생성한다.
+        PROCESSING을 포함해 mode와 상태가 다르면 409 SESSION_STATE_CONFLICT를
+        반환한다. 대화는 생성자에게만 노출한다. LIVE Chat 멱등성 원장은
+        purge_on_session_end로 표시해 class 종료와 함께 삭제한다. 인증되지 않은
+        요청은 401, 비멤버는 Session 존재를 숨기는 404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1825,12 +1846,10 @@ paths:
                 $ref: "#/components/schemas/Chat"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          $ref: "#/components/responses/ChatRequestConflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
@@ -1842,7 +1861,10 @@ paths:
       tags: [Chats]
       operationId: getChat
       summary: 내 AI 대화 단건 조회
-      description: Chat 소유자이면서 현재도 Session의 Course 멤버인 사용자만 조회한다.
+      description: |
+        Chat 소유자이면서 현재도 Session의 Course 멤버인 사용자만 조회한다.
+        비소유자·비멤버·삭제된 LIVE Chat에는 존재를 공개하지 않고 404를
+        반환한다.
       responses:
         "200":
           description: Chat
@@ -1855,8 +1877,6 @@ paths:
                 $ref: "#/components/schemas/Chat"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1868,7 +1888,10 @@ paths:
       tags: [Chats]
       operationId: listChatMessages
       summary: AI 대화 메시지 목록 조회
-      description: 대화 소유자만 sequence 오름차순으로 조회할 수 있다.
+      description: |
+        현재도 Course 멤버인 대화 소유자만 sequence 오름차순으로 조회한다.
+        비소유자·비멤버·삭제된 LIVE Chat에는 Chat·Message 존재를 숨기고
+        404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - name: limit
@@ -1893,8 +1916,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -1904,8 +1925,21 @@ paths:
       description: |
         대화 소유자만 요청할 수 있다. 서버가 URL로 확정된 Session에 연결된 READY PDF,
         final Transcript와 Q&A만 검색하며 UPLOADED, PROCESSING, FAILED 또는 분리된 자료는
-        제외한다. 사용자 메시지를 먼저 저장하고 AI 답변 작업을 비동기로 생성한다.
-        같은 Chat에 RUNNING/PENDING 답변 Job이 있으면 409 CHAT_RESPONSE_IN_PROGRESS를 반환한다.
+        제외한다. content는 앞뒤 공백 제거·Unicode NFC 정규화 후 Unicode
+        code point 기준 1~2,000자를 검증한다. 정규화 결과를 USER Message에
+        저장하며 빈 결과·초과는 자르지 않고 422 VALIDATION_ERROR와 field,
+        EMPTY_AFTER_NORMALIZATION 또는 MAX_LENGTH_EXCEEDED reason, max_length,
+        actual_length를 반환한다.
+        LIVE Chat은 Session LIVE, REVIEW Chat은 Session COMPLETED에서만 메시지를
+        수락하며 다르면 409 SESSION_STATE_CONFLICT를 반환한다. 사용자 메시지를
+        같은 요청 transaction에서 정규화한 USER Message, 그 Message를 immutable
+        target으로 가리킨 REQUESTER_ONLY CHAT_RESPONSE Job, outbox와 terminal 202
+        멱등성 응답을 함께 commit한다. 요청자는 Job을 polling한
+        뒤 result URL에서 성공해 저장된 최종 Assistant Message만 GET한다. 부분
+        Assistant·token은 저장·broadcast·streaming하지 않는다.
+        같은 Chat에 RUNNING/PENDING 답변 Job이 있으면 409 CHAT_RESPONSE_IN_PROGRESS를
+        반환한다. 인증되지 않은 요청은 401, 비소유자·비멤버·삭제된 LIVE
+        Chat은 존재를 숨기는 404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1928,18 +1962,43 @@ paths:
                 $ref: "#/components/schemas/ChatTurnAcceptedResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          $ref: "#/components/responses/ChatRequestConflict"
         "422":
-          $ref: "#/components/responses/ValidationFailed"
+          $ref: "#/components/responses/TextInputValidationFailed"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/chat-messages/{message_id}:
+    parameters:
+      - $ref: "#/components/parameters/MessageId"
+      - $ref: "#/components/parameters/RequestId"
+    get:
+      tags: [Chats]
+      operationId: getChatMessage
+      summary: 저장된 Chat 메시지 단건 조회
+      description: |
+        현재도 Course 멤버인 Chat 소유자만 조회한다. CHAT_RESPONSE Job이
+        SUCCEEDED일 때 result.resource_url은 이 경로를 가리킨다. 비소유자·비멤버·
+        삭제된 LIVE Message에는 존재를 공개하지 않고 404를 반환한다.
+      responses:
+        "200":
+          description: 저장된 USER 또는 최종 ASSISTANT Message
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/jobs/{job_id}:
     parameters:
@@ -1953,6 +2012,8 @@ paths:
         개인 작업은 요청자, 공유 작업은 권한 있는 Course 멤버만 조회한다. 내부 스택,
         프롬프트 원문 또는 외부 모델 응답 원문은 오류에 포함하지 않는다. 개인 AI
         요청은 이 endpoint와 result URL을 요청자가 polling하며 별도 개인 스트림을 제공하지 않는다.
+        REQUESTER_ONLY Job의 비요청자·비멤버·삭제된 개인 LIVE Job에는 존재를
+        공개하지 않고 404를 반환한다.
       responses:
         "200":
           description: AI 작업 상태
@@ -1965,8 +2026,6 @@ paths:
                 $ref: "#/components/schemas/AIJob"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -2473,6 +2532,13 @@ components:
       description: 불투명 Chat ID
       schema:
         $ref: "#/components/schemas/ResourceId"
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      description: 불투명 ChatMessage ID
+      schema:
+        $ref: "#/components/schemas/ResourceId"
     JobId:
       name: job_id
       in: path
@@ -2510,6 +2576,12 @@ components:
         중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
         status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
         terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
+        단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
+        LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
+        purge_on_session_end로 표시하고 LIVE→PROCESSING transaction에서
+        결과·Job과 함께 삭제해, 삭제된 202·201 응답은 24시간 안이어도
+        재생하지 않는다. FINAL Summary와 mode=REVIEW Chat·관련 Job retry는
+        이 예외에 포함하지 않는다.
       schema:
         type: string
         minLength: 1
@@ -2523,6 +2595,12 @@ components:
         처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
         다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
         완료 시각부터 정확히 24시간 보관하고 재사용한다.
+        단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
+        LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
+        purge_on_session_end로 표시하고 LIVE→PROCESSING transaction에서
+        결과·Job과 함께 삭제한다. 삭제된 응답은 24시간 안이어도 재생하지
+        않는다. FINAL Summary와 mode=REVIEW Chat·관련 Job retry는 이 예외에
+        포함하지 않는다.
       schema:
         type: string
         minLength: 1
@@ -2872,6 +2950,50 @@ components:
                   message: 같은 멱등 키가 다른 요청에 사용되었습니다.
                   request_id: req_01HXYZ
                   details: null
+    ChatRequestConflict:
+      description: Chat mode·Session 상태, 동시 답변 또는 멱등성 키 충돌
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            liveStateConflict:
+              value:
+                error:
+                  code: SESSION_STATE_CONFLICT
+                  message: LIVE Chat은 LIVE 상태의 class에서만 사용할 수 있습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    mode: LIVE
+                    current_status: PROCESSING
+                    required_status: LIVE
+            reviewStateConflict:
+              value:
+                error:
+                  code: SESSION_STATE_CONFLICT
+                  message: REVIEW Chat은 COMPLETED 상태의 class에서만 사용할 수 있습니다.
+                  request_id: req_01HXYZ
+                  details:
+                    mode: REVIEW
+                    current_status: PROCESSING
+                    required_status: COMPLETED
+            responseInProgress:
+              value:
+                error:
+                  code: CHAT_RESPONSE_IN_PROGRESS
+                  message: 이 대화의 AI 답변을 생성하고 있습니다.
+                  request_id: req_01HXYZ
+                  details: null
+            idempotencyKeyReused:
+              value:
+                error:
+                  code: IDEMPOTENCY_KEY_REUSED
+                  message: 같은 멱등 키가 다른 요청에 사용되었습니다.
+                  request_id: req_01HXYZ
+                  details: null
     IdempotencyKeyReused:
       description: 같은 멱등성 키가 다른 request_hash에 재사용됨
       headers:
@@ -3154,6 +3276,60 @@ components:
                 field_violations:
                   - field: content
                     reason: 빈 문자열일 수 없습니다.
+    TextInputValidationFailed:
+      description: 앞뒤 공백 제거·Unicode NFC 정규화 후 질문·초안·Chat USER 텍스트 길이 검증 실패
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TextInputValidationErrorResponse"
+          examples:
+            emptyAfterNormalization:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: 입력 길이를 확인해 주세요.
+                  request_id: req_01HXYZ
+                  details:
+                    field: content
+                    reason: EMPTY_AFTER_NORMALIZATION
+                    max_length: 300
+                    actual_length: 0
+            questionTooLong:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: 입력 길이를 확인해 주세요.
+                  request_id: req_01HXYZ
+                  details:
+                    field: content
+                    reason: MAX_LENGTH_EXCEEDED
+                    max_length: 300
+                    actual_length: 301
+            draftTooLong:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: 입력 길이를 확인해 주세요.
+                  request_id: req_01HXYZ
+                  details:
+                    field: draft
+                    reason: MAX_LENGTH_EXCEEDED
+                    max_length: 500
+                    actual_length: 501
+            chatTooLong:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: 입력 길이를 확인해 주세요.
+                  request_id: req_01HXYZ
+                  details:
+                    field: content
+                    reason: MAX_LENGTH_EXCEEDED
+                    max_length: 2000
+                    actual_length: 2001
     RateLimited:
       description: 요청 한도를 초과함
       headers:
@@ -3233,7 +3409,8 @@ components:
         coordinator의 terminal 전이·downstream blocking Job 생성·outbox를 같은 transaction에
         commit한 뒤에만 완료를 재평가한다. 실패 terminal이어도 Session은 COMPLETED가
         될 수 있다. ended_at + 10분 watchdog도 Session·coordinator lock 아래 미생성
-        applicable downstream blocking Job을 FAILED/retryable로 먼저 생성하고 Summary state를
+        applicable downstream blocking Job을 FAILED/retryable로 먼저 생성하되 eligible
+        source의 누락 FINAL_SUMMARY는 합성하지 않고 DATA_INTEGRITY_ERROR로 기록한다. Summary state를
         기록한 뒤 coordinator·Recording·Upload·나머지 gate를 FAILED로 전환하고 완료를 재평가한다.
         COMPLETED 후 Job 재시도는 Session을 PROCESSING으로 되돌리지 않는다.
         한 Course에는 READY, LIVE, PROCESSING 중 하나인 active Session이 합계 최대 1개다.
@@ -3279,7 +3456,11 @@ components:
 
     FinalSummaryStatus:
       type: string
-      enum: [PENDING, AVAILABLE, FAILED, NOT_APPLICABLE]
+      enum: [PENDING, AVAILABLE, FAILED, NOT_APPLICABLE, DATA_INTEGRITY_ERROR]
+      description: |
+        DATA_INTEGRITY_ERROR는 eligible HQ source의 필수 FINAL_SUMMARY Job, SUCCEEDED
+        결과 또는 관련 원장이 불일치할 때 내부 세부정보를 노출하지 않고
+        반환하는 안전한 상태다.
 
     MaterialProcessingStatus:
       type: string
@@ -3357,6 +3538,7 @@ components:
     ChatMode:
       type: string
       enum: [LIVE, REVIEW]
+      description: LIVE는 Session LIVE, REVIEW는 Session COMPLETED에서만 생성·사용
 
     ChatMessageRole:
       type: string
@@ -3483,6 +3665,82 @@ components:
       properties:
         error:
           $ref: "#/components/schemas/ErrorDetail"
+
+    TextInputValidationReason:
+      type: string
+      enum: [EMPTY_AFTER_NORMALIZATION, MAX_LENGTH_EXCEEDED]
+
+    TextInputValidationDetails:
+      type: object
+      additionalProperties: false
+      required: [field, reason, max_length, actual_length]
+      properties:
+        field:
+          type: string
+          enum: [content, draft]
+        reason:
+          $ref: "#/components/schemas/TextInputValidationReason"
+        max_length:
+          type: integer
+          enum: [300, 500, 2000]
+        actual_length:
+          type: integer
+          minimum: 0
+          description: 앞뒤 공백 제거·Unicode NFC 정규화 후 Unicode code point 수
+      oneOf:
+        - properties:
+            field: { const: content }
+            reason: { const: EMPTY_AFTER_NORMALIZATION }
+            max_length: { const: 300 }
+            actual_length: { const: 0 }
+        - properties:
+            field: { const: content }
+            reason: { const: MAX_LENGTH_EXCEEDED }
+            max_length: { const: 300 }
+            actual_length: { type: integer, minimum: 301 }
+        - properties:
+            field: { const: draft }
+            reason: { const: EMPTY_AFTER_NORMALIZATION }
+            max_length: { const: 500 }
+            actual_length: { const: 0 }
+        - properties:
+            field: { const: draft }
+            reason: { const: MAX_LENGTH_EXCEEDED }
+            max_length: { const: 500 }
+            actual_length: { type: integer, minimum: 501 }
+        - properties:
+            field: { const: content }
+            reason: { const: EMPTY_AFTER_NORMALIZATION }
+            max_length: { const: 2000 }
+            actual_length: { const: 0 }
+        - properties:
+            field: { const: content }
+            reason: { const: MAX_LENGTH_EXCEEDED }
+            max_length: { const: 2000 }
+            actual_length: { type: integer, minimum: 2001 }
+
+    TextInputValidationError:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id, details]
+      properties:
+        code:
+          type: string
+          const: VALIDATION_ERROR
+        message:
+          type: string
+        request_id:
+          type: string
+        details:
+          $ref: "#/components/schemas/TextInputValidationDetails"
+
+    TextInputValidationErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/TextInputValidationError"
 
     User:
       type: object
@@ -4215,6 +4473,7 @@ components:
           type: string
           minLength: 1
           maxLength: 300
+          description: 앞뒤 공백 제거·Unicode NFC 정규화 후 저장된 Question content
         lifecycle_status:
           $ref: "#/components/schemas/RepresentativeQuestionLifecycle"
         status:
@@ -4573,9 +4832,19 @@ components:
       properties:
         content:
           type: string
-          minLength: 1
-          maxLength: 300
-          description: btrim 후 Unicode code point 1..300. 서버는 자동 절단하지 않음
+          description: |
+            서버가 앞뒤 공백 제거, Unicode NFC 정규화를 순서대로 적용한 결과를
+            Unicode code point 기준 1~300자로 검증한다. 정규화 결과를
+            저장하고, 비었거나 최대를 넘으면 자르지 않고 422 VALIDATION_ERROR의
+            안정적 details를 반환한다.
+          x-normalization:
+            steps: [trim-surrounding-whitespace, unicode-nfc]
+            order: before-length-validation
+            length_unit: Unicode code points
+            normalized_min_code_points: 1
+            normalized_max_code_points: 300
+            truncation: forbidden
+            invalid_response: 422 VALIDATION_ERROR
 
     QuestionCreateResponse:
       type: object
@@ -4607,9 +4876,18 @@ components:
       properties:
         draft:
           type: string
-          minLength: 1
-          maxLength: 500
-          description: 공개 질문이 아니며 기본적으로 영구 저장하지 않는 사용자 초안
+          description: |
+            앞뒤 공백 제거·Unicode NFC 정규화 후 1~500 Unicode code point를
+            검증한다. 정규화 결과만 모델에 전달하고 영구 저장하지 않는다.
+            빈 결과·초과는 자르지 않고 422 VALIDATION_ERROR의 안정적 details를 반환한다.
+          x-normalization:
+            steps: [trim-surrounding-whitespace, unicode-nfc]
+            order: before-length-validation
+            length_unit: Unicode code points
+            normalized_min_code_points: 1
+            normalized_max_code_points: 500
+            truncation: forbidden
+            invalid_response: 422 VALIDATION_ERROR
 
     QuestionDraftResponse:
       type: object
@@ -5174,6 +5452,19 @@ components:
         created_at:
           type: string
           format: date-time
+      oneOf:
+        - title: 요청자 전용 LIVE Summary
+          properties:
+            summary_type:
+              const: LIVE
+            visibility:
+              const: REQUESTER_ONLY
+        - title: Course 공용 FINAL Summary
+          properties:
+            summary_type:
+              const: FINAL
+            visibility:
+              const: COURSE_MEMBERS
 
     NoFinalTranscriptSummaryReason:
       type: object
@@ -5199,19 +5490,64 @@ components:
           type: string
           const: Transcript 처리 문제로 요약을 만들지 못했습니다.
 
-    FinalSummaryReason:
-      oneOf:
-        - $ref: "#/components/schemas/NoFinalTranscriptSummaryReason"
-        - $ref: "#/components/schemas/SummarySourceUnavailableReason"
-      discriminator:
-        propertyName: code
-        mapping:
-          NO_FINAL_TRANSCRIPT: "#/components/schemas/NoFinalTranscriptSummaryReason"
-          SUMMARY_SOURCE_UNAVAILABLE: "#/components/schemas/SummarySourceUnavailableReason"
-
-    FinalSummaryState:
+    FinalSummaryPendingState:
       type: object
       additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/FinalSummaryStatus"
+          const: PENDING
+        reason:
+          type: "null"
+
+    FinalSummaryAvailableState:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/FinalSummaryStatus"
+          const: AVAILABLE
+        reason:
+          type: "null"
+
+    FinalSummaryNotApplicableState:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/FinalSummaryStatus"
+          const: NOT_APPLICABLE
+        reason:
+          $ref: "#/components/schemas/NoFinalTranscriptSummaryReason"
+
+    FinalSummaryFailedState:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/FinalSummaryStatus"
+          const: FAILED
+        reason:
+          oneOf:
+            - $ref: "#/components/schemas/SummarySourceUnavailableReason"
+            - type: "null"
+
+    FinalSummaryDataIntegrityErrorState:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/FinalSummaryStatus"
+          const: DATA_INTEGRITY_ERROR
+        reason:
+          type: "null"
+
+    FinalSummaryState:
       description: |
         자동 FINAL_SUMMARY source gate는 canonical 상태가 아니라 최신 HQ RECORDING
         TranscriptVersion을 기준으로 한다. RECORDING/FINALIZED와 final Segment 1건 이상일
@@ -5219,53 +5555,22 @@ components:
         Recording source가 없으면 LIVE drain terminal 직후, RECORDING/FAILED나
         Recording은 있지만 10분 deadline까지 HQ 결과가 없으면 해당 시점에
         FAILED/SUMMARY_SOURCE_UNAVAILABLE이며 FINAL_SUMMARY Job을 생성하지 않는다.
-        유효한 RECORDING/FINALIZED source가 있지만 watchdog이 미생성 FINAL_SUMMARY를
-        timeout 실패 Job으로 만들면 status=FAILED, reason=null이고 Job error가 원인을 제공한다.
+        HQ source gate가 아직 terminal이 아닌 PROCESSING은 Job 없는 PENDING이
+        정상이다. PROCESSING의 active Job은 attempt와 관계없이 PENDING·RUNNING이
+        정상이며, COMPLETED에서는 명시적 재시도 attempt>1만 정상이다. COMPLETED에서
+        최초 attempt=1이 PENDING·RUNNING이면 DATA_INTEGRITY_ERROR다. 반면
+        RECORDING/FINALIZED와 final Segment 1건 이상으로 생성
+        자격이 확정됐는데 FINAL_SUMMARY Job이 없거나, SUCCEEDED Job의 Summary
+        결과가 없거나, 필수 원장이 불일치하면 DATA_INTEGRITY_ERROR/reason=null이다.
+        유효한 RECORDING/FINALIZED source의 필수 FINAL_SUMMARY Job이 없으면 10분
+        watchdog도 Job을 합성하지 않고 DATA_INTEGRITY_ERROR/reason=null을 유지한다.
         preserved LIVE canonical을 final source로 쓸지는 TBD이며 현재 자동 생성에서 제외한다.
-      required: [status, reason]
-      properties:
-        status:
-          $ref: "#/components/schemas/FinalSummaryStatus"
-        reason:
-          oneOf:
-            - $ref: "#/components/schemas/FinalSummaryReason"
-            - type: "null"
-          description: |
-            RECORDING/EMPTY이면 NO_FINAL_TRANSCRIPT, Recording source가 없으면 LIVE drain terminal
-            직후 SUMMARY_SOURCE_UNAVAILABLE이다. RECORDING/FAILED나 Recording은 있지만
-            10분 deadline까지 HQ 결과가 없는 경우도 SUMMARY_SOURCE_UNAVAILABLE이다. 유효한
-            RECORDING/FINALIZED source의 PENDING·AVAILABLE과 downstream Job 실패는 null일 수 있다.
       oneOf:
-        - title: 생성 대기
-          properties:
-            status:
-              type: string
-              const: PENDING
-            reason:
-              type: "null"
-        - title: 생성 완료
-          properties:
-            status:
-              type: string
-              const: AVAILABLE
-            reason:
-              type: "null"
-        - title: 요약 대상 없음
-          properties:
-            status:
-              type: string
-              const: NOT_APPLICABLE
-            reason:
-              $ref: "#/components/schemas/NoFinalTranscriptSummaryReason"
-        - title: 생성 실패
-          properties:
-            status:
-              type: string
-              const: FAILED
-            reason:
-              oneOf:
-                - $ref: "#/components/schemas/SummarySourceUnavailableReason"
-                - type: "null"
+        - $ref: "#/components/schemas/FinalSummaryPendingState"
+        - $ref: "#/components/schemas/FinalSummaryAvailableState"
+        - $ref: "#/components/schemas/FinalSummaryNotApplicableState"
+        - $ref: "#/components/schemas/FinalSummaryFailedState"
+        - $ref: "#/components/schemas/FinalSummaryDataIntegrityErrorState"
 
     SummaryListResponse:
       type: object
@@ -5324,8 +5629,20 @@ components:
       properties:
         content:
           type: string
-          minLength: 1
-          description: 최대 길이는 모델·제품 정책 확정 후 결정
+          description: |
+            서버가 앞뒤 공백 제거, Unicode NFC 정규화를 순서대로 적용한 결과를 Unicode code point
+            기준 1~2,000자로 검증한다. 범위 밖 입력은 잘라내지 않고
+            422 VALIDATION_ERROR의 field·reason·max_length·actual_length를 반환한다.
+            정규화 결과를 USER Message에 저장한다. 이 제한은 USER 입력에만 적용하고
+            ASSISTANT Message content에는 적용하지 않는다.
+          x-normalization:
+            steps: [trim-surrounding-whitespace, unicode-nfc]
+            order: before-length-validation
+            length_unit: Unicode code points
+            normalized_min_code_points: 1
+            normalized_max_code_points: 2000
+            truncation: forbidden
+            invalid_response: 422 VALIDATION_ERROR
 
     ChatEvidenceSourceKind:
       type: string
@@ -5475,6 +5792,7 @@ components:
         - id
         - chat_id
         - job_id
+        - response_job_id
         - sequence
         - role
         - content
@@ -5490,6 +5808,12 @@ components:
         job_id:
           type: [string, "null"]
           description: USER 메시지는 null, 생성된 ASSISTANT 메시지는 원인 AIJob ID
+        response_job_id:
+          type: [string, "null"]
+          description: |
+            USER 메시지에 응답할 CHAT_RESPONSE Job ID. 202 transaction이 메시지와
+            Job을 함께 저장하므로 USER에서는 non-null이고 ASSISTANT에서는 null이다.
+            새로고침 후에도 이 필드로 같은 turn의 Job을 다시 polling할 수 있다.
         sequence:
           type: integer
           minimum: 1
@@ -5516,6 +5840,19 @@ components:
               const: USER
             job_id:
               type: "null"
+            response_job_id:
+              $ref: "#/components/schemas/ResourceId"
+            content:
+              type: string
+              minLength: 1
+              maxLength: 2000
+              description: 앞뒤 공백 제거·Unicode NFC 정규화 후 저장된 1~2,000 Unicode code point USER 입력
+              x-normalization:
+                steps: [trim-surrounding-whitespace, unicode-nfc]
+                order: before-length-validation
+                length_unit: Unicode code points
+                truncation: forbidden
+                invalid_response: 422 VALIDATION_ERROR
             evidence:
               type: array
               maxItems: 0
@@ -5530,6 +5867,12 @@ components:
               const: ASSISTANT
             job_id:
               $ref: "#/components/schemas/ResourceId"
+            response_job_id:
+              type: "null"
+            content:
+              type: string
+              minLength: 1
+              description: 저장된 최종 Assistant Message. USER용 2,000자 상한을 적용하지 않음
             evidence:
               type: array
               items:
@@ -5538,6 +5881,7 @@ components:
         - id: message_user_01HXYZ
           chat_id: chat_01HXYZ
           job_id: null
+          response_job_id: job_01HXYZ
           sequence: 1
           role: USER
           content: 음수 가중치가 있을 때는 어떤 알고리즘을 써야 해?
@@ -5548,6 +5892,7 @@ components:
         - id: message_assistant_01HXYZ
           chat_id: chat_01HXYZ
           job_id: job_01HXYZ
+          response_job_id: null
           sequence: 2
           role: ASSISTANT
           content: 음수 가중치가 있으면 벨만-포드 알고리즘을 사용할 수 있습니다.
@@ -5574,12 +5919,41 @@ components:
     ChatTurnAcceptedResponse:
       type: object
       additionalProperties: false
+      description: |
+        한 transaction에서 앞뒤 공백 제거·Unicode NFC 정규화·검증을 거친 USER
+        Message, 그 메시지를 immutable 입력으로 삼는 PENDING CHAT_RESPONSE Job,
+        outbox와 terminal 202 멱등성 응답을 함께 commit한다. user_message.response_job_id는
+        job.id와 같고 job.target.resource_id는 user_message.id와 같다.
       required: [user_message, job]
       properties:
         user_message:
-          $ref: "#/components/schemas/ChatMessage"
+          allOf:
+            - $ref: "#/components/schemas/ChatMessage"
+            - properties:
+                role:
+                  const: USER
         job:
-          $ref: "#/components/schemas/AIJob"
+          allOf:
+            - $ref: "#/components/schemas/AIJob"
+            - properties:
+                job_type:
+                  const: CHAT_RESPONSE
+                visibility:
+                  const: REQUESTER_ONLY
+                status:
+                  const: PENDING
+                target:
+                  allOf:
+                    - $ref: "#/components/schemas/AIJobResourceLink"
+                    - properties:
+                        resource_type:
+                          const: CHAT_MESSAGE
+                        resource_id:
+                          type: string
+                        resource_url:
+                          type: string
+                          format: uri-reference
+                          pattern: '^/api/v1/chat-messages/[^/?#]+$'
 
     AIJobResourceType:
       type: string
@@ -5691,7 +6065,8 @@ components:
         최대 5분이며, 이 lease는 Session WebSocket의 20초 ping과 별개다.
         Session 10분 deadline에 watchdog이 handoff를 보전하기 위해 생성하는 미생성
         downstream blocking Job은 FAILED, retryable=true, started_at=null, finished_at=now,
-        error.code=SESSION_PROCESSING_TIMEOUT이다.
+        error.code=SESSION_PROCESSING_TIMEOUT이다. 단 eligible RECORDING/FINALIZED source의
+        누락 FINAL_SUMMARY Job은 합성하지 않고 Summary를 DATA_INTEGRITY_ERROR로 표시한다.
       required:
         - id
         - session_id
@@ -5825,6 +6200,110 @@ components:
                     const: ANSWER
                   resource_id:
                     type: string
+        - if:
+            properties:
+              job_type:
+                enum: [LIVE_SUMMARY, CHAT_RESPONSE]
+            required: [job_type]
+          then:
+            properties:
+              visibility:
+                const: REQUESTER_ONLY
+              blocks_session_completion:
+                const: false
+        - if:
+            properties:
+              job_type:
+                const: CHAT_RESPONSE
+            required: [job_type]
+          then:
+            properties:
+              target:
+                allOf:
+                  - $ref: "#/components/schemas/AIJobResourceLink"
+                  - properties:
+                      resource_type:
+                        const: CHAT_MESSAGE
+                      resource_id:
+                        type: string
+                      resource_url:
+                        type: string
+                        format: uri-reference
+                        pattern: '^/api/v1/chat-messages/[^/?#]+$'
+        - if:
+            properties:
+              job_type:
+                const: FINAL_SUMMARY
+            required: [job_type]
+          then:
+            properties:
+              visibility:
+                const: SHARED
+              blocks_session_completion:
+                const: true
+        - if:
+            properties:
+              job_type:
+                const: LIVE_SUMMARY
+              status:
+                const: SUCCEEDED
+            required: [job_type, status]
+          then:
+            properties:
+              result:
+                allOf:
+                  - $ref: "#/components/schemas/AIJobResourceLink"
+                  - properties:
+                      resource_type:
+                        const: SUMMARY
+                      resource_id:
+                        type: string
+                      resource_url:
+                        type: string
+                        format: uri-reference
+                        pattern: '^/api/v1/summaries/[^/?#]+$'
+        - if:
+            properties:
+              job_type:
+                const: FINAL_SUMMARY
+              status:
+                const: SUCCEEDED
+            required: [job_type, status]
+          then:
+            properties:
+              result:
+                allOf:
+                  - $ref: "#/components/schemas/AIJobResourceLink"
+                  - properties:
+                      resource_type:
+                        const: SUMMARY
+                      resource_id:
+                        type: string
+                      resource_url:
+                        type: string
+                        format: uri-reference
+                        pattern: '^/api/v1/summaries/[^/?#]+$'
+        - if:
+            properties:
+              job_type:
+                const: CHAT_RESPONSE
+              status:
+                const: SUCCEEDED
+            required: [job_type, status]
+          then:
+            properties:
+              result:
+                allOf:
+                  - $ref: "#/components/schemas/AIJobResourceLink"
+                  - properties:
+                      resource_type:
+                        const: CHAT_MESSAGE
+                      resource_id:
+                        type: string
+                      resource_url:
+                        type: string
+                        format: uri-reference
+                        pattern: '^/api/v1/chat-messages/[^/?#]+$'
         - if:
             properties:
               job_type:
@@ -6005,7 +6484,13 @@ components:
     RecordSummaryIndex:
       type: object
       additionalProperties: false
-      description: Summary 본문을 embed하지 않고 상태와 안정적인 조회 경로만 반환하는 compact index
+      description: |
+        Summary 본문을 embed하지 않고 상태와 안정적인 조회 경로만 반환하는
+        compact index. HQ source gate 대기는 Job 없는 PENDING이 정상이다. 반면
+        eligible RECORDING/FINALIZED source의 필수 Job 누락, SUCCEEDED Job의 결과
+        누락, COMPLETED에서 최초 attempt=1 Job이 active인 경우 또는 다른 필수
+        원장 불일치는 DATA_INTEGRITY_ERROR/reason=null로
+        감추고 summary_url을 null로 반환한다.
       required: [state, summary_url, summaries_url]
       properties:
         state:
@@ -6024,28 +6509,64 @@ components:
         - title: Summary 사용 가능
           properties:
             state:
-              allOf:
-                - $ref: "#/components/schemas/FinalSummaryState"
-                - type: object
-                  properties:
-                    status:
-                      const: AVAILABLE
-                  required: [status]
+              $ref: "#/components/schemas/FinalSummaryAvailableState"
             summary_url:
               type: string
               format: uri-reference
-        - title: Summary 사용 불가
+        - title: Summary 생성 대기
           properties:
             state:
-              allOf:
-                - $ref: "#/components/schemas/FinalSummaryState"
-                - type: object
-                  properties:
-                    status:
-                      enum: [PENDING, FAILED, NOT_APPLICABLE]
-                  required: [status]
+              $ref: "#/components/schemas/FinalSummaryPendingState"
             summary_url:
               type: "null"
+        - title: Summary 대상 없음
+          properties:
+            state:
+              $ref: "#/components/schemas/FinalSummaryNotApplicableState"
+            summary_url:
+              type: "null"
+        - title: Summary 생성 실패
+          properties:
+            state:
+              $ref: "#/components/schemas/FinalSummaryFailedState"
+            summary_url:
+              type: "null"
+        - title: Summary 원장 무결성 오류
+          properties:
+            state:
+              $ref: "#/components/schemas/FinalSummaryDataIntegrityErrorState"
+            summary_url:
+              type: "null"
+      examples:
+        - state:
+            status: PENDING
+            reason: null
+          summary_url: null
+          summaries_url: /api/v1/sessions/session_01HXYZ/summaries?summary_type=FINAL
+        - state:
+            status: AVAILABLE
+            reason: null
+          summary_url: /api/v1/summaries/summary_01HXYZ
+          summaries_url: /api/v1/sessions/session_01HXYZ/summaries?summary_type=FINAL
+        - state:
+            status: NOT_APPLICABLE
+            reason:
+              code: NO_FINAL_TRANSCRIPT
+              message: 요약할 강의 내용이 없습니다.
+          summary_url: null
+          summaries_url: /api/v1/sessions/session_01HXYZ/summaries?summary_type=FINAL
+        - state:
+            status: FAILED
+            reason:
+              code: SUMMARY_SOURCE_UNAVAILABLE
+              message: Transcript 처리 문제로 요약을 만들지 못했습니다.
+          summary_url: null
+          summaries_url: /api/v1/sessions/session_01HXYZ/summaries?summary_type=FINAL
+        - state:
+            status: DATA_INTEGRITY_ERROR
+            reason: null
+          summary_url: null
+          summaries_url: /api/v1/sessions/session_01HXYZ/summaries?summary_type=FINAL
 
     RecordQuestionClustersIndex:
       type: object
@@ -6585,18 +7106,19 @@ x-contract-notes:
       started_at: null
       finished_at: watchdog transaction time
       error_code: SESSION_PROCESSING_TIMEOUT
+      excludes: eligible RECORDING FINALIZED source missing FINAL_SUMMARY; project DATA_INTEGRITY_ERROR without synthesizing a Job
     summary_state_before_terminal:
-      recording_finalized_missing_final_summary: FAILED with null reason; synthesize retryable FINAL_SUMMARY Job with SESSION_PROCESSING_TIMEOUT
+      recording_finalized_missing_final_summary: DATA_INTEGRITY_ERROR with null reason; never synthesize a FINAL_SUMMARY Job
       recording_empty: NOT_APPLICABLE with NO_FINAL_TRANSCRIPT
       recording_failed_or_no_hq_or_no_recording_source: FAILED with SUMMARY_SOURCE_UNAVAILABLE
-    action_order: synthesize applicable missing downstream blocking Jobs and outbox, record Summary state, fail coordinator and remaining Recording or Upload and blocking gates, then evaluate COMPLETED
+    action_order: synthesize applicable missing downstream blocking Jobs except eligible missing FINAL_SUMMARY and its outbox, record Summary state including DATA_INTEGRITY_ERROR, fail coordinator and remaining Recording or Upload and blocking gates, then evaluate COMPLETED
     retry_after_completed: Job retry does not transition the Session back to PROCESSING
   session_postprocessing_coordinator:
     creation: Session end transaction creates a SHARED blocking PENDING SESSION_POSTPROCESSING Job
     claim_gate: wait until the Recording and HQ source, or the LIVE source when no Recording exists, is terminal
     wake_on_hq_statuses: [FINALIZED, EMPTY, FAILED]
     atomic_terminal: commit coordinator terminal, downstream blocking Job creation and outbox in one transaction before completion reevaluation
-    watchdog_terminal: the 10-minute watchdog preserves the same handoff invariant by synthesizing applicable missing downstream blocking Jobs before failing the coordinator
+    watchdog_terminal: the 10-minute watchdog synthesizes applicable missing downstream blocking Jobs before failing the coordinator, except an eligible missing FINAL_SUMMARY which remains DATA_INTEGRITY_ERROR without a synthetic Job
     failure_isolation: Answer mapping or Knowledge relink failure never rolls back the committed HQ Transcript or canonical pointer
   final_summary:
     create_job_only_when: latest HQ TranscriptVersion has source RECORDING, status FINALIZED and at least one final Segment
@@ -6607,6 +7129,43 @@ x-contract-notes:
       AVAILABLE: null
       NOT_APPLICABLE: NO_FINAL_TRANSCRIPT
       FAILED: SUMMARY_SOURCE_UNAVAILABLE or null when the Job error carries the downstream failure
+      DATA_INTEGRITY_ERROR: null
+    ledger_matrix:
+      source_gate_waiting_without_job: PENDING with null reason; normal during PROCESSING
+      processing_any_attempt_pending_or_running: PENDING with null reason
+      completed_explicit_retry_attempt_greater_than_one_pending_or_running: PENDING with null reason
+      completed_initial_attempt_pending_or_running: DATA_INTEGRITY_ERROR with null reason and null summary_url
+      succeeded_job_with_matching_summary: AVAILABLE with null reason and non-null summary_url
+      failed_job: FAILED with null reason
+      recording_empty_without_job: NOT_APPLICABLE with NO_FINAL_TRANSCRIPT
+      source_unavailable_without_job: FAILED with SUMMARY_SOURCE_UNAVAILABLE
+      eligible_source_missing_job: DATA_INTEGRITY_ERROR with null reason and null summary_url
+      succeeded_job_missing_result_or_other_required_ledger_mismatch: DATA_INTEGRITY_ERROR with null reason and null summary_url
+    record_index_examples:
+      waiting:
+        state: { status: PENDING, reason: null }
+        summary_url: null
+        summaries_url: /api/v1/sessions/{session_id}/summaries?summary_type=FINAL
+      available:
+        state: { status: AVAILABLE, reason: null }
+        summary_url: /api/v1/summaries/{summary_id}
+        summaries_url: /api/v1/sessions/{session_id}/summaries?summary_type=FINAL
+      no_transcript:
+        state:
+          status: NOT_APPLICABLE
+          reason: { code: NO_FINAL_TRANSCRIPT }
+        summary_url: null
+        summaries_url: /api/v1/sessions/{session_id}/summaries?summary_type=FINAL
+      source_unavailable:
+        state:
+          status: FAILED
+          reason: { code: SUMMARY_SOURCE_UNAVAILABLE }
+        summary_url: null
+        summaries_url: /api/v1/sessions/{session_id}/summaries?summary_type=FINAL
+      integrity_error:
+        state: { status: DATA_INTEGRITY_ERROR, reason: null }
+        summary_url: null
+        summaries_url: /api/v1/sessions/{session_id}/summaries?summary_type=FINAL
     preserved_live_canonical: excluded from automatic FINAL_SUMMARY; eligibility as completed-record final source is TBD
   question_clustering:
     trigger: every committed student Question increments requested_through_sequence
@@ -6669,9 +7228,50 @@ x-contract-notes:
     rag_eligible_status: READY only
   personal_ai_delivery:
     transport: REST polling only
+    authorized_course_roles: [PROFESSOR, STUDENT]
+    modes:
+      live_summary: Session LIVE only
+      live_chat: Session LIVE only
+      review_chat: Session COMPLETED only
+      mismatch: 409 SESSION_STATE_CONFLICT
     job_endpoint: GET /api/v1/jobs/{job_id}
-    result: use AIJob.result.resource_url to fetch the stored Summary or Chat resource
-    websocket_events: none
+    result: use AIJob.result.resource_url to fetch the stored Summary or final Assistant Message
+    visibility: requester and current Course member only; conceal nonowner, nonrequester, nonmember, deleted resources with 404
+    persisted_generation_output: successful final Summary or Assistant Message only
+    partial_output: never persisted or shared
+    websocket_events: none; no SSE, streaming HTTP or personal WebSocket
+    live_end_transaction:
+      transition: LIVE to PROCESSING
+      purge: [LIVE summaries, LIVE chats, LIVE chat messages, LIVE chat evidence, requester-only LIVE_SUMMARY jobs, requester-only CHAT_RESPONSE jobs belonging to LIVE chats]
+      idempotency: delete records marked purge_on_session_end in the same transaction so stale 202 or 201 responses are not replayed
+      late_worker_results: rejected by missing Job and run-token fence
+      unaffected: [FINAL summaries, REVIEW chats, related jobs and idempotency records]
+    chat_turn_transaction:
+      commit_together: [normalized USER Message, immutable-target REQUESTER_ONLY CHAT_RESPONSE Job, outbox, terminal 202 idempotency response]
+      public_inverse: USER Message response_job_id equals Job id
+      immutable_target: Job target is the exact USER Message for every attempt
+      successful_result: Job result is the stored final ASSISTANT Message
+    lock_order:
+      candidate_lookup: unlocked identifiers only; acquire locks and revalidate before mutation
+      idempotent_live_operation: purge-scoped idempotency rows prefix, Session, then the operation-specific aggregate suffix
+      live_chat_response_worker: purge-scoped idempotency rows prefix, Session, Chat, target USER Message, AIJob
+      review_chat_response_worker: Session, Chat, target USER Message, AIJob
+      live_summary_worker: purge-scoped idempotency rows prefix, Session, AIJob
+      purge: purge-scoped idempotency rows prefix, Session, LIVE Summary rows, LIVE Chat rows, LIVE Message rows, LIVE Evidence rows, related requester-only AIJob rows
+    chat_user_content:
+      normalization: trim surrounding whitespace, then Unicode NFC, then count Unicode code points
+      min_code_points: 1
+      max_code_points: 2000
+      truncation: forbidden
+      invalid_response: 422 VALIDATION_ERROR with field, stable reason, max_length and actual_length
+  text_input_validation:
+    order: [trim-surrounding-whitespace, unicode-nfc, unicode-code-point-length]
+    maxima: { question_content: 300, question_draft: 500, chat_user_content: 2000 }
+    empty_reason: EMPTY_AFTER_NORMALIZATION
+    too_long_reason: MAX_LENGTH_EXCEEDED
+    details: [field, reason, max_length, actual_length]
+    truncation: forbidden
+    persisted_values: Question and Chat USER content use the normalized result; Draft is not persisted
 
 x-websocket-channels:
   status: draft

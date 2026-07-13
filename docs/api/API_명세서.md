@@ -147,6 +147,7 @@ POST /api/v1/auth/logout
 - 동일 요청이 처리 중이면 중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 저장된 응답을 재사용한다.
 - 같은 키로 다른 `request_hash`를 보내면 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
 - terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
+- 단, LIVE Summary 요청·`mode=LIVE` Chat 생성·메시지와 관련 `LIVE_SUMMARY`·LIVE-mode `CHAT_RESPONSE` Job 재시도의 멱등성 원장은 생성 시 `purge_on_session_end=true`로 표시한다. `LIVE → PROCESSING` transaction에서 개인 LIVE 리소스와 함께 이 원장을 삭제하며, 이 후에는 24시간 재사용 규칙으로 삭제된 `202`·201 응답을 재생하지 않는다. class 종료 요청 자체의 멱등성 원장과 FINAL Summary·`mode=REVIEW` Chat·관련 Job 재시도는 이 예외에 포함하지 않는다.
 
 ### 2.7 요청 ID
 
@@ -167,23 +168,59 @@ POST /api/v1/auth/logout
 }
 ```
 
-|  HTTP | 의미                       | 주요 코드                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----: | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`, `MATERIAL_NOT_FOUND`, `RECORDING_NOT_FOUND`, `RECORDING_UPLOAD_NOT_FOUND`                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE`, `AI_JOB_RETRY_SYSTEM_MANAGED`, `MATERIAL_PROCESSING_ACTIVE`, `MATERIAL_LIMIT_EXCEEDED`, `MATERIAL_DELETE_CONFLICT`, `RECORDING_STATE_CONFLICT`, `RECORDING_UPLOAD_CONFLICT`, `UPLOAD_OFFSET_MISMATCH`, `RECORDING_NOT_READY`, `ANSWER_CAPTURE_ACTIVE`, `ANSWER_ALREADY_EXISTS`, `ANSWER_TRANSCRIPT_NOT_READY`, `SUMMARY_TRANSCRIPT_NOT_READY`, `SUMMARY_SOURCE_UNAVAILABLE` |
-| `410` | upload 만료                | `RECORDING_UPLOAD_EXPIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_RECORDING_FORMAT`                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `416` | playback 범위 오류         | `RANGE_NOT_SATISFIABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|  HTTP | 의미                       | 주요 코드                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----: | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`, `MATERIAL_NOT_FOUND`, `RECORDING_NOT_FOUND`, `RECORDING_UPLOAD_NOT_FOUND`                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE`, `AI_JOB_RETRY_SYSTEM_MANAGED`, `MATERIAL_PROCESSING_ACTIVE`, `MATERIAL_LIMIT_EXCEEDED`, `MATERIAL_DELETE_CONFLICT`, `RECORDING_STATE_CONFLICT`, `RECORDING_UPLOAD_CONFLICT`, `UPLOAD_OFFSET_MISMATCH`, `RECORDING_NOT_READY`, `ANSWER_CAPTURE_ACTIVE`, `ANSWER_ALREADY_EXISTS`, `ANSWER_TRANSCRIPT_NOT_READY`, `SUMMARY_TRANSCRIPT_NOT_READY`, `SUMMARY_SOURCE_UNAVAILABLE`, `CHAT_RESPONSE_IN_PROGRESS` |
+| `410` | upload 만료                | `RECORDING_UPLOAD_EXPIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_RECORDING_FORMAT`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `416` | playback 범위 오류         | `RANGE_NOT_SATISFIABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 녹음 checksum 불일치의 공개 오류 코드는 `RECORDING_CHECKSUM_MISMATCH`로 고정한다. checksum algorithm, 검증 시점과 이 오류의 HTTP status는 resumable upload protocol과 함께 TBD이다.
+
+#### 3.1.1 질문·초안·Chat USER 텍스트 검증
+
+서버는 세 입력에 동일한 순서를 적용한다.
+
+1. 앞뒤 공백을 제거한다.
+2. Unicode NFC로 정규화한다.
+3. 정규화 결과의 Unicode code point 수를 검증한다.
+
+| 필드                 | 최대 code point |
+| -------------------- | --------------: |
+| 실제 질문 `content`  |           `300` |
+| AI 질문 초안 `draft` |           `500` |
+| Chat USER `content`  |         `2,000` |
+
+- 정규화 결과가 0자이면 `422 VALIDATION_ERROR`, `details.reason=EMPTY_AFTER_NORMALIZATION`을 반환한다.
+- 최대 길이를 넘으면 `422 VALIDATION_ERROR`, `details.reason=MAX_LENGTH_EXCEEDED`를 반환한다.
+- `details`는 항상 `field`, `reason`, `max_length`, 정규화 후 code point 수인 `actual_length`를 포함한다.
+- 서버는 초과 입력을 자르지 않고 대체 문자열도 반환하지 않는다. 클라이언트는 재입력을 위해 원본 입력을 유지한다.
+- 저장 대상인 Question과 Chat USER Message의 `content`는 정규화 결과다. 초안은 영구 저장하지 않고 정규화 결과만 모델 입력으로 사용한다.
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "입력 길이를 확인해 주세요.",
+    "request_id": "req_01HXYZ",
+    "details": {
+      "field": "content",
+      "reason": "MAX_LENGTH_EXCEEDED",
+      "max_length": 2000,
+      "actual_length": 2001
+    }
+  }
+}
+```
 
 ### 3.2 AI 작업 수락 응답
 
@@ -236,6 +273,7 @@ POST /api/v1/auth/logout
 - 계정 전역 역할은 없으며 모든 인증 사용자가 Course를 생성하거나 참여 코드로 참여할 수 있다.
 - Course 생성자는 해당 Course의 유일한 `PROFESSOR`가 되며, Course에는 정확히 한 명의 교수자만 존재한다.
 - MVP API는 교수자 추가·교체·탈퇴를 제공하지 않는다.
+- Course 멤버인 `PROFESSOR`와 `STUDENT`는 동일한 개인 AI 권한을 갖는다. 두 역할 모두 `LIVE` Session에서 LIVE Summary·LIVE Chat을, `COMPLETED` Session에서 REVIEW Chat을 사용할 수 있다.
 
 ### 4.2 LectureSession
 
@@ -263,8 +301,8 @@ READY → LIVE → PROCESSING → COMPLETED
 - `FINAL_SUMMARY`는 최신 HQ source가 `source=RECORDING`, `status=FINALIZED`, final Segment 1건 이상일 때만 자동 생성한다. RECORDING `EMPTY`면 Job 없이 `NO_FINAL_TRANSCRIPT`를 확정한다. Recording source가 처음부터 없으면 LIVE drain terminal 직후, Recording은 있지만 HQ가 `FAILED`이거나 `ended_at + 10분`까지 결과가 없으면 해당 시점에 Job 없이 `SUMMARY_SOURCE_UNAVAILABLE`을 확정한다. 독립 가능한 최종 clustering은 계속 예약한다.
 - Session 완료 조건은 coordinator terminal transaction이 child blocking Job을 등록한 뒤에만 재평가한다. 따라서 coordinator를 먼저 terminal로 관찰한 순간 새 child가 늦게 생기는 조기 `COMPLETED` race를 허용하지 않는다.
 - `RUNNING` Job worker는 15초마다 내부 heartbeat로 lease를 갱신한다. 60초 동안 갱신되지 않은 lease는 watchdog이 해당 Job을 `FAILED`로 전환한다. 이는 16절의 20초 WebSocket ping과 별개인 worker 종료 관찰 계약이다.
-- HQ를 포함한 각 후처리 Job의 실행 상한은 5분이다. Session `ended_at + 10분`에 watchdog은 Session과 coordinator를 잠근 뒤, coordinator를 terminal로 바꾸기 전에 아직 생성하지 않은 적용 가능한 downstream blocking Job을 `status=FAILED`, `retryable=true`, `started_at=null`, `finished_at=now`, `error.code=SESSION_PROCESSING_TIMEOUT`으로 생성하고 outbox를 남긴다.
-- 같은 watchdog transaction에서 RECORDING `FINALIZED` source는 미생성 `FINAL_SUMMARY`를 위 timeout 실패 Job으로 생성하고 Final Summary 상태를 `status=FAILED`, `reason=null`로 기록한다. RECORDING `EMPTY`면 `NO_FINAL_TRANSCRIPT`, HQ 결과·Recording source가 없거나 `FAILED`면 `SUMMARY_SOURCE_UNAVAILABLE`을 기록한 뒤 coordinator·남은 Recording·upload gate·blocking Job을 `FAILED` terminal로 바꾼다. 그 후에만 실패를 포함해 모든 gate가 terminal인지 재평가해 Session을 `COMPLETED`로 전환한다.
+- HQ를 포함한 각 후처리 Job의 실행 상한은 5분이다. Session `ended_at + 10분`에 watchdog은 Session과 coordinator를 잠근 뒤, coordinator를 terminal로 바꾸기 전에 아직 생성하지 않은 적용 가능한 downstream blocking Job을 `status=FAILED`, `retryable=true`, `started_at=null`, `finished_at=now`, `error.code=SESSION_PROCESSING_TIMEOUT`으로 생성하고 outbox를 남긴다. 단, 생성 자격이 확정된 RECORDING `FINALIZED` source의 누락 `FINAL_SUMMARY` Job은 합성하지 않고 원장 무결성 오류로 분류한다.
+- 같은 watchdog transaction에서 RECORDING `FINALIZED`·final Segment 1건 이상인데 `FINAL_SUMMARY` Job이 없으면 Final Summary 상태를 `DATA_INTEGRITY_ERROR`, `reason=null`로 기록하고 Job은 합성하지 않는다. RECORDING `EMPTY`면 `NO_FINAL_TRANSCRIPT`, HQ 결과·Recording source가 없거나 `FAILED`면 `SUMMARY_SOURCE_UNAVAILABLE`을 기록한 뒤 coordinator·남은 Recording·upload gate·blocking Job을 `FAILED` terminal로 바꾼다. 그 후에만 실패와 무결성 상태를 포함해 모든 gate가 terminal인지 재평가해 Session을 `COMPLETED`로 전환한다.
 - `SESSION_POSTPROCESSING`의 성공은 Answer mapping·Knowledge 재연결과 downstream Job 예약이 끝났다는 뜻이며 `FINAL_SUMMARY`·`QUESTION_CLUSTERING`의 성공까지 의미하지 않는다.
 - `ANSWER_ORGANIZATION`도 다른 blocking Job과 마찬가지로 `SUCCEEDED|FAILED` terminal이면 완료 판정을 막지 않는다. 실패 결과는 Answer별로 표시하고 같은 Job 행의 `attempt + 1`로 나중에 재시도하며 Session을 `PROCESSING`으로 되돌리지 않는다. 10분 watchdog은 적용 대상 Answer에 Job이 아직 없으면 `SESSION_PROCESSING_TIMEOUT` 실패 Job을 먼저 합성한다.
 - Session 종료 transaction은 active 또는 `retry_job_id`에 예약된 LIVE `QUESTION_CLUSTERING` Job을 `FAILED`, `retryable=false`, `error.code=SESSION_ENDED`로 종료하고 retry 예약·run token을 폐기해 느린 결과 commit을 막는다. coordinator는 종료 시점 `requested_through_sequence`와 `ended_at`을 각각 학생 질문·완료 Answer 대표질문의 최초 attempt input 상한으로 저장한 `FINAL` clustering Job을 `SHARED`, `blocks_session_completion=true`로 생성한다. 학생 질문 상한은 모든 attempt에서 유지하고, 실패한 FINAL을 교수가 명시적으로 재시도할 때만 `base_revision`과 Answer 시각 상한을 현재 값으로 다시 캡처한다. 대표질문은 현재 중앙인지 과거 child인지와 무관하게 해당 attempt 상한까지 `COMPLETED` Answer가 있으면 포함한다.
@@ -502,6 +540,7 @@ Idempotency-Key: <key>
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
 - 정상 클라이언트는 `audio.stop`과 `audio.stopped` 완료 후 호출한다. 종료 요청이 먼저 오면 서버가 새 audio frame을 차단하고 이미 받은 chunk만 drain한다.
 - 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
+- 같은 transaction에서 모든 개인 LIVE Summary, `mode=LIVE` Chat·Message·Evidence, `REQUESTER_ONLY LIVE_SUMMARY` Job, LIVE Chat에 귀속된 `REQUESTER_ONLY CHAT_RESPONSE` Job과 `purge_on_session_end=true`인 멱등성 원장을 삭제한다. 늦게 도착한 Worker 결과는 삭제된 Job·run token을 재확인하여 저장하지 않는다. FINAL Summary, `mode=REVIEW` Chat과 관련 Job·멱등성 원장은 영향받지 않는다.
 - 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
 - 같은 transaction에서 SHARED·blocking `SESSION_POSTPROCESSING` coordinator를 `PENDING`으로 생성한다. Recording/HQ 또는 Recording이 없는 경우 LIVE Transcript source가 terminal이 되기 전에는 claim하지 않는다.
 - coordinator는 source terminal 후 Answer mapping·Knowledge 재연결을 수행하고 자신의 terminal 전이와 downstream blocking Job 생성·outbox를 같은 transaction에 commit한다. HQ Transcript version·canonical 전환과 Answer 재매핑은 9절과 11절을 따른다.
@@ -674,7 +713,7 @@ Idempotency-Key: <key>
 ```
 
 - 권한: Course `STUDENT`. Session이 `LIVE`일 때만 허용한다.
-- 서버는 앞뒤 공백을 제거한 후 Unicode code point 기준 `1..300`자를 검증하고 자동으로 자르지 않는다.
+- 서버는 3.1.1절에 따라 앞뒤 공백 제거·Unicode NFC 정규화 후 `1..300` code point를 검증한다. 초과·빈 결과는 잘라 저장하지 않고 안정적인 `422 VALIDATION_ERROR` details를 반환하며, Question `content`에는 정규화 결과를 저장한다.
 - Question 행과 Session 내 증가 `clustering_sequence`, `requested_through_sequence` 갱신을 먼저 commit하고 `question.created`를 전파한다.
 - active clustering Job과 현재 backlog을 소유한 retryable `FAILED` Job이 모두 없으면 시스템이 `LIVE_INCREMENTAL` Job을 즉시 하나 생성한다. `PENDING|RUNNING` Job이나 `retry_job_id`가 있으면 새 Job을 만들지 않고 pending watermark만 남긴다. retry Job은 기존 captured watermark로 `attempt + 1`을 수행하고, 성공 후에도 requested가 applied보다 크면 추가 질문을 위한 새 Job을 만든다.
 - 성공은 클러스터링 성공과 무관하게 `201 Created`이다. 응답은 `question`과 현재 `clustering_state`를 반환하며 active Job이 없으면 `active_job_id=null`일 수 있다.
@@ -705,7 +744,7 @@ POST /api/v1/sessions/{session_id}/question-drafts
 ```
 
 - 권한: Course `STUDENT`. Session이 `LIVE`일 때만 허용한다.
-- 초안은 앞뒤 공백 제거 후 Unicode code point `1..500`자, AI 제안은 각각 `1..300`자다. 초과 입력을 자동으로 잘라내지 않는다.
+- 초안은 3.1.1절에 따라 앞뒤 공백 제거·Unicode NFC 정규화 후 `1..500` code point를 검증한다. 초과·빈 결과는 잘라내지 않고 안정적인 `422 VALIDATION_ERROR` details를 반환한다. AI 제안은 각각 `1..300`자이며 정규화한 초안은 영구 저장하지 않는다.
 - `200 OK`에서 짧은 질문 문장 후보를 직접 반환하고 Question·AIJob·초안을 저장하지 않는다. 제안을 실제 질문으로 등록하려면 10.3 API를 다시 호출한다.
 
 ### 10.5 ‘나도 궁금해요’ 추가·취소
@@ -878,6 +917,14 @@ Idempotency-Key: <key>
 
 ## 12. AI 요약 API
 
+| 개인 AI 기능 | `PROFESSOR` | `STUDENT` | 허용 Session 상태 | 다른 상태                    |
+| ------------ | ----------- | --------- | ----------------- | ---------------------------- |
+| LIVE Summary | 허용        | 허용      | `LIVE`            | `409 SESSION_STATE_CONFLICT` |
+| LIVE Chat    | 허용        | 허용      | `LIVE`            | `409 SESSION_STATE_CONFLICT` |
+| REVIEW Chat  | 허용        | 허용      | `COMPLETED`       | `409 SESSION_STATE_CONFLICT` |
+
+개인 AI 리소스와 `REQUESTER_ONLY` Job은 생성자/요청자에게만 노출하며, 비소유자·비요청자·비멤버에는 `404`를 반환한다.
+
 ### 12.1 실시간 요약 요청
 
 ```http
@@ -895,13 +942,14 @@ Idempotency-Key: <key>
 }
 ```
 
-- 권한: Course 멤버. 실시간 UI는 학생 중심이지만 교수자 허용 여부는 TBD이다.
+- 권한: Course 멤버. `PROFESSOR`와 `STUDENT`에게 동일하게 허용한다.
 - `LIVE` Session에서 현재까지 또는 선택한 final Transcript 범위를 요약한다.
 - 같은 Session에 연결되고 `READY`인 PDF 조각만 검색한다. `UPLOADED`, `PROCESSING`, `FAILED` 또는 분리된 자료는 제외한다.
 - 요청 범위에 final Segment가 0건이면 AIJob을 만들지 않고 `409 SUMMARY_TRANSCRIPT_NOT_READY`와 `아직 확정된 강의 내용이 없습니다. 잠시 후 다시 시도해 주세요.`를 반환한다.
 - 요약 source Transcript version이 `FAILED`이면 AIJob을 만들지 않고 `409 SUMMARY_SOURCE_UNAVAILABLE`와 `Transcript 처리 문제로 요약을 만들지 못했습니다.`를 반환한다.
 - 요청 범위에 final Segment가 1건 이상이면 `202 Accepted`, AIJob을 반환한다.
-- 요청자는 `GET /jobs/{job_id}`를 polling하고 `SUCCEEDED` 결과 URL의 요약 조회 API로 저장 결과를 확인한다.
+- 요청자는 `GET /jobs/{job_id}`를 polling하고 `SUCCEEDED` 결과 URL의 요약 조회 API로 저장된 최종 결과만 확인한다. 생성 중인 부분 문장·token은 저장·공유·streaming하지 않는다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버에게는 Session 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환한다.
 
 ### 12.2 요약 조회
 
@@ -914,15 +962,25 @@ GET /api/v1/sessions/{session_id}/summaries?summary_type=LIVE&cursor=<cursor>&li
 - 목록은 `created_at DESC, id DESC`로 안정적으로 정렬한다.
 - 성공한 `LIVE` 요약은 요청자 전용으로 반드시 저장하고, `FINAL` 요약은 Course 멤버에게 공개한다.
 - Summary 저장이 완료돼 `result.resource_url`로 조회할 수 있을 때만 AIJob을 `SUCCEEDED`로 변경한다.
-- 보관 기간이 끝나거나 사용자가 삭제하기 전까지 저장하며 구체 보관 기간·삭제 API는 개인정보 정책과 함께 확정한다.
+- `LIVE → PROCESSING` 전이 transaction이 `LIVE` Summary·해당 Job·멱등성 원장을 즉시 삭제한다. 삭제 후 목록에는 나타나지 않고 단건·Job 조회는 `404`를 반환한다.
 - `FINAL`은 class 종료 후 생성된 강의 요약을 의미한다.
 - `FINAL_SUMMARY` Job은 최신 HQ TranscriptVersion이 `source=RECORDING`, `status=FINALIZED`, final Segment 1건 이상일 때만 자동 생성한다. canonical LIVE version이 `FINALIZED`여도 자동 생성 근거로 사용하지 않는다.
-- 유효한 RECORDING `FINALIZED` source가 있지만 10분 watchdog이 미생성 `FINAL_SUMMARY`를 timeout 실패 Job으로 만든 경우 `/record.summary.state.status=FAILED`, `reason=null`, `summary_url=null`이며 Job `error.code=SESSION_PROCESSING_TIMEOUT`으로 원인을 확인한다.
+- 유효한 RECORDING `FINALIZED` source와 final Segment가 있지만 필수 `FINAL_SUMMARY` Job이 없으면 watchdog도 실패 Job을 합성하지 않는다. `/record.summary.state.status=DATA_INTEGRITY_ERROR`, `reason=null`, `summary_url=null`로 원장 누락을 안전하게 표시한다.
 - 최신 RECORDING TranscriptVersion이 정상 `EMPTY`이면 `FINAL_SUMMARY` Job을 만들지 않는다. 통합 기록 응답은 `/record.summary.state.status=NOT_APPLICABLE`, `reason.code=NO_FINAL_TRANSCRIPT`, `summary_url=null`, message `요약할 강의 내용이 없습니다.`를 반환한다.
 - Recording source가 처음부터 없으면 LIVE drain terminal 직후, Recording은 있지만 최신 RECORDING TranscriptVersion이 `FAILED`이거나 `ended_at + 10분`까지 HQ 결과가 없으면 해당 시점에 `FINAL_SUMMARY` Job 없이 상태를 확정한다. `/record.summary.state.status=FAILED`, reason code `SUMMARY_SOURCE_UNAVAILABLE`, `summary_url=null`, message `Transcript 처리 문제로 요약을 만들지 못했습니다.`를 반환한다.
 - HQ 무결과·미생성에서 보존된 LIVE canonical을 완료 기록·Summary final source로 사용할지는 TBD이며, 현재 자동 `FINAL_SUMMARY`는 LIVE를 source로 사용하지 않는다.
 - 저장된 Summary는 생성에 사용한 `source_transcript_version_id`를 보존한다.
-- `/record.summary.state`의 허용 조합은 `PENDING|AVAILABLE + reason=null`, `NOT_APPLICABLE + NO_FINAL_TRANSCRIPT`, `FAILED + SUMMARY_SOURCE_UNAVAILABLE|null`로 고정한다. 다른 status·reason 조합은 반환하지 않는다.
+- `/record.summary.state`는 다음 원장 조합만 반환한다. `DATA_INTEGRITY_ERROR`는 provider 오류가 아니라 서버 원장 불일치를 감춘 안전한 상태이며 `reason=null`, `summary_url=null`이다.
+
+| source·Job·결과 조건                                                                                                                          | `status`               | `reason`                     | Job 없음의 의미         |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------------- | ----------------------- |
+| HQ source gate가 아직 terminal이 아닌 `PROCESSING`                                                                                            | `PENDING`              | `null`                       | 정상 대기               |
+| `PROCESSING`의 attempt 관계없이 active한 Job 또는 `COMPLETED` 후 명시적 재시도 Job(`attempt>1`)이 `PENDING`, `RUNNING`                        | `PENDING`              | `null`                       | 해당 없음               |
+| `FINAL_SUMMARY` Job과 저장 Summary가 일치하고 Job이 `SUCCEEDED`                                                                               | `AVAILABLE`            | `null`                       | 해당 없음               |
+| `FINAL_SUMMARY` Job이 `FAILED`                                                                                                                | `FAILED`               | `null`                       | 해당 없음               |
+| 최신 RECORDING TranscriptVersion이 정상 `EMPTY`                                                                                               | `NOT_APPLICABLE`       | `NO_FINAL_TRANSCRIPT`        | 정상적으로 Job 생략     |
+| Recording source 없음, RECORDING `FAILED` 또는 10분까지 HQ 미완료                                                                             | `FAILED`               | `SUMMARY_SOURCE_UNAVAILABLE` | 정상적으로 Job 생략     |
+| 생성 자격 source에 Job이 없음, `SUCCEEDED` Job에 Summary 결과가 없음, `COMPLETED`에서 최초 Job(`attempt=1`)이 active이거나 필수 원장이 불일치 | `DATA_INTEGRITY_ERROR` | `null`                       | 서버 데이터 무결성 오류 |
 
 ### 12.3 요약 단건 조회
 
@@ -930,7 +988,7 @@ GET /api/v1/sessions/{session_id}/summaries?summary_type=LIVE&cursor=<cursor>&li
 GET /api/v1/summaries/{summary_id}
 ```
 
-- 저장된 `LIVE` 요약은 요청자만, `FINAL` 요약은 Course 멤버가 조회한다.
+- 저장된 `LIVE` 요약은 요청자만, `FINAL` 요약은 Course 멤버가 조회한다. 미인증은 `401`, 개인 요약의 비요청자·비멤버·삭제된 LIVE 요약은 존재 여부를 숨기고 `404`를 반환한다.
 - AIJob의 `result.resource_url`이 이 경로를 가리킨다.
 
 ## 13. AI 채팅 API
@@ -947,10 +1005,11 @@ POST /api/v1/sessions/{session_id}/chats
 }
 ```
 
-- 권한: Course 멤버. 교수자 사용 범위는 TBD이다.
+- 권한: Course 멤버. `PROFESSOR`와 `STUDENT`에게 동일하게 허용한다.
 - `mode`: `LIVE`, `REVIEW`
-- `LIVE`는 진행 중 class, `REVIEW`는 정리 중·완료 class에서 사용하는 것을 초안으로 한다.
-- 대화는 생성한 사용자 개인에게만 노출하는 것을 초안으로 한다.
+- `LIVE`는 Session이 `LIVE`일 때만, `REVIEW`는 Session이 `COMPLETED`일 때만 생성한다. mode와 Session 상태가 다르면 `409 SESSION_STATE_CONFLICT`를 반환한다. `PROCESSING`에서는 두 mode 모두 생성하지 않는다.
+- 대화는 생성한 사용자 개인에게만 노출한다. LIVE Chat의 멱등성 원장은 `purge_on_session_end=true`로 저장한다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비멤버에게는 Session 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환한다.
 
 ### 13.2 대화 목록
 
@@ -958,8 +1017,9 @@ POST /api/v1/sessions/{session_id}/chats
 GET /api/v1/sessions/{session_id}/chats?cursor=<cursor>&limit=20
 ```
 
-- 권한: Course 멤버
+- 권한: Course 멤버이면서 현재 사용자가 생성한 대화
 - 현재 사용자가 생성한 대화만 반환한다.
+- 비멤버에게는 Session 존재를 숨기고 `404`를 반환한다. class 종료로 LIVE Chat이 삭제되면 목록에서 즉시 사라진다.
 
 ### 13.3 대화 단건
 
@@ -968,7 +1028,7 @@ GET /api/v1/chats/{chat_id}
 ```
 
 - 권한: 대화 소유자이면서 현재 Course 멤버인 사용자
-- 다른 학생 또는 교수자의 개인 대화 존재를 공개하지 않는다.
+- 비소유자·비멤버·삭제된 LIVE Chat에는 존재를 공개하지 않고 `404`를 반환한다.
 
 ### 13.4 메시지 전송
 
@@ -984,10 +1044,13 @@ Idempotency-Key: <key>
 ```
 
 - 권한: 대화 소유자이자 Course 멤버
+- 서버는 3.1.1절에 따라 `content`의 앞뒤 공백 제거·Unicode NFC 정규화 후 1~2,000 code point를 검증한다. 초과·빈 결과는 잘라 저장하지 않고 `422 VALIDATION_ERROR`와 안정적인 details를 반환하며, USER Message `content`에는 정규화 결과를 저장한다.
+- Chat mode와 Session 상태는 메시지 수락 시점에도 다시 검증한다. `LIVE` Chat은 Session `LIVE`, `REVIEW` Chat은 Session `COMPLETED`에서만 허용하며 다르면 `409 SESSION_STATE_CONFLICT`를 반환한다. 단, Session 종료 transaction이 먼저 LIVE Chat을 삭제했다면 `404`를 반환한다.
 - 서버는 같은 Session에 연결되고 `READY`인 PDF, final Transcript와 Q&A만 검색한다. `UPLOADED`, `PROCESSING`, `FAILED` 또는 분리된 자료는 제외한다.
 - 근거가 부족하면 확인할 수 없음을 응답한다.
-- 성공: `202 Accepted`, 사용자 Message와 AIJob 반환
-- 요청자는 반환된 Job ID를 16.8절 규칙으로 polling해 완료된 Assistant Message를 조회한다.
+- 성공: `202 Accepted`. 앞뒤 공백 제거·Unicode NFC 정규화·검증을 거친 사용자 Message, `REQUESTER_ONLY CHAT_RESPONSE` AIJob, outbox와 terminal 멱등성 응답을 한 transaction에서 commit하고 함께 반환한다. USER Message의 `response_job_id`는 Job ID와 같고 Job `target.resource_type=CHAT_MESSAGE`, `target.resource_id=USER Message ID`로 immutable 입력 turn을 가리킨다.
+- 요청자는 반환된 Job ID를 16.8절 규칙으로 polling하고 `SUCCEEDED` Job의 `result.resource_url`로 저장된 최종 Assistant Message를 조회한다. 생성 중 token·부분 Assistant Message는 저장·공유·streaming하지 않는다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비소유자·비멤버·삭제된 LIVE Chat에는 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환한다.
 
 ### 13.5 메시지 목록
 
@@ -995,9 +1058,11 @@ Idempotency-Key: <key>
 GET /api/v1/chats/{chat_id}/messages?cursor=<cursor>&limit=20
 ```
 
-- 권한: 대화 소유자
+- 권한: 대화 소유자이면서 현재 Course 멤버인 사용자
 - 정렬: `sequence ASC`
-- `USER` Message는 `job_id`, `model_name`, `prompt_version`이 모두 `null`이고 `evidence=[]`다. `ASSISTANT` Message는 생성 원인 `job_id`가 반드시 non-null이며 Evidence는 0개 이상일 수 있고 모델·프롬프트 공개 정책에 따라 `model_name`, `prompt_version`은 null일 수 있다.
+- 비소유자·비멤버·삭제된 LIVE Chat에는 Chat·Message 존재를 숨기고 `404`를 반환한다.
+- `USER` Message는 앞뒤 공백 제거·Unicode NFC 정규화된 1~2,000자 `content`, non-null `response_job_id`, `job_id=null`, `model_name=null`, `prompt_version=null`, `evidence=[]`다. `ASSISTANT` Message는 빈 문자열이 아닌 최종 `content`, 생성 원인 non-null `job_id`, `response_job_id=null`을 반환한다. Assistant content에는 USER용 2,000자 상한을 적용하지 않으며 Evidence는 0개 이상일 수 있고 모델·프롬프트 공개 정책에 따라 `model_name`, `prompt_version`은 null일 수 있다.
+- 새로고침 후에도 USER Message의 `response_job_id`로 같은 turn Job을 polling할 수 있다. Job의 `target` 단건 URL은 해당 USER Message를, `SUCCEEDED result` URL은 해당 ASSISTANT Message를 가리킨다.
 - Assistant Message의 Evidence는 `source_kind`, 안전한 `label` snapshot, 권한 검사를 거치는 nullable 상대 경로 `link`만 공개한다. DB 식별자인 `knowledge_chunk_id`, 내부 storage key·path와 pagination cursor는 포함하지 않는다.
 - `source_kind`는 KnowledgeChunk의 typed source FK에서 `MATERIAL`, `TRANSCRIPT_SEGMENT`, `STUDENT_QUESTION`, `AI_REPRESENTATIVE_QUESTION`, `ANSWER` 중 하나로 파생한다. generic source ID를 따로 노출하지 않는다.
 - `label`은 Evidence 생성 시점에 저장한 non-empty 표시용 snapshot이다. 자료명·페이지, Transcript 시간 구간, “학생 질문”·“AI 대표질문”·“교수자 답변”처럼 사용자가 이해할 정보만 포함하고 학생 식별정보나 내부 ID·경로를 포함하지 않는다. 정확한 문자열 format은 UI locale에 맡긴다.
@@ -1014,6 +1079,16 @@ GET /api/v1/chats/{chat_id}/messages?cursor=<cursor>&limit=20
 
 - source가 분리·삭제되었거나 현재 사용자에게 안전한 이동 경로를 제공할 수 없으면 `label`은 유지하고 `link=null`로 반환한다. 분리된 Material과 폐기된 AI 대표질문은 새 AI 검색에 사용하지 않는다. Evidence가 참조하는 폐기 대표질문의 내부 tombstone·Chunk는 provenance로만 보존하며 `GET /api/v1/representative-questions/{id}`는 항상 `404`를 반환한다. 마지막 Evidence 삭제와 tombstone·Chunk hard delete는 같은 transaction에서 원자 처리한다.
 
+### 13.6 메시지 단건 조회
+
+```http
+GET /api/v1/chat-messages/{message_id}
+```
+
+- 현재도 Course 멤버인 Chat 소유자만 조회한다.
+- `CHAT_RESPONSE` Job이 `SUCCEEDED`일 때 `result.resource_url`은 이 경로를 가리킨다. 요청자는 Job polling 후 이 GET으로 저장된 최종 Assistant Message를 복구한다.
+- 비소유자·비멤버·삭제된 LIVE Message에는 존재를 숨기고 `404`를 반환한다.
+
 ## 14. AI 작업 API
 
 ### 14.1 작업 조회
@@ -1024,6 +1099,8 @@ GET /api/v1/jobs/{job_id}
 
 - 권한: 작업의 Session에 접근 가능하고 해당 Job의 공개 범위에 포함되는 사용자
 - 응답: 작업 유형, 상태, 진행률, 오류, 대상·결과 리소스 링크, 결과 비가용 사유, 시작·종료 시각
+- `REQUESTER_ONLY` Job은 요청자에게만 노출한다. 비요청자·비멤버·삭제된 개인 LIVE Job은 존재 여부를 숨기고 `404`를 반환한다.
+- `CHAT_RESPONSE` Job의 `target` 리소스는 요청 transaction이 저장한 정확한 USER Message이며 모든 attempt에서 변경하지 않는다. `SUCCEEDED result`는 저장된 최종 ASSISTANT Message를 가리킨다.
 - 일반 이력을 보관하지 않는 성공 `QUESTION_CLUSTERING` generation이 새 결과로 교체되면 과거 Job은 `SUCCEEDED`를 유지하되 `result=null`, `result_unavailable_reason=SUPERSEDED`다. 이는 Job 실패나 데이터 오류가 아니다.
 - 오류 메시지는 민감한 입력과 외부 모델 응답 원문을 포함하지 않는다.
 
@@ -1042,6 +1119,7 @@ Idempotency-Key: <key>
 - 성공: `202 Accepted`, 같은 Job ID와 `attempt + 1`, `status=PENDING`인 Job을 반환한다.
 - 현재 시도의 progress, error, `started_at`, `finished_at`은 `null`, `retryable`은 `false`로 초기화된다.
 - 이전 attempt worker의 늦은 결과는 Job ID·attempt·실행 token·`RUNNING` 상태를 대조해 반영하지 않는다.
+- `CHAT_RESPONSE` 재시도는 같은 Job 행의 `target` USER Message를 변경하지 않고 원본 입력으로 재사용한다. 새 USER Message를 생성하지 않는다.
 - `ANSWER_ORGANIZATION`은 Course 교수자만 실패 Job을 재시도하며 Answer에 고정된 source 범위를 재사용한다. 이미 성공한 Job은 재생성하지 않는다.
 
 ### 14.3 Session 공용 작업 목록
@@ -1085,7 +1163,7 @@ GET /api/v1/sessions/{session_id}/record
 | `recording`         | 권한이 허용한 nullable Recording 메타데이터와 안정적인 `recording_url`                      |
 | `materials`         | 현재 연결된 Material `total_count`, `list_url`                                              |
 | `transcript`        | nullable aggregate·`selected_version_id`, Segment·Gap count, `timeline_url`, `versions_url` |
-| `summary`           | 최종 Summary 상태, nullable `summary_url`, `summaries_url`; Summary 본문은 해당 URL로 조회  |
+| `summary`           | 최종 Summary 상태(`DATA_INTEGRITY_ERROR` 포함), nullable `summary_url`, `summaries_url`     |
 | `questions`         | 학생 질문 `total_count`, `sort=RECENT`인 `list_url`                                         |
 | `question_clusters` | clustering state, `CURRENT`·`FINAL` 각각의 `total_count`, `list_url`                        |
 | `answers`           | Answer `total_count`, `list_url`                                                            |
@@ -1463,11 +1541,14 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 
 ### 16.8 개인 AI 결과 polling
 
-- LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고, 완료 결과를 DB에 저장한다.
+- LIVE Summary와 Chat turn은 REST 요청을 `202 Accepted + AIJob`으로 수락한다. Chat 생성 자체는 AI 실행이 아니므로 `201`을 반환한다.
 - 요청자는 `GET /api/v1/jobs/{job_id}`를 polling해 `PENDING|RUNNING|SUCCEEDED|FAILED`를 확인한다. 구체 polling 간격은 서버 `429`·`Retry-After` 정책과 클라이언트 backoff를 따르며 수치는 TBD이다.
-- `SUCCEEDED` Job은 원칙적으로 `result.resource_type`, `result.resource_id`, `result.resource_url`로 생성 결과를 가리킨다. 새 generation으로 교체되어 일반 clustering 결과가 폐기된 과거 Job만 `result=null`, `result_unavailable_reason=SUPERSEDED`를 반환한다. Summary와 Assistant Message도 원인 `job_id`를 보관한다.
+- 개인 AI는 성공한 최종 Summary 또는 Assistant Message만 DB에 저장한다. 부분 문장·token·중간 출력은 저장하거나 공용 WebSocket으로 보내지 않고 SSE·streaming HTTP·개인 WS도 제공하지 않는다.
+- `SUCCEEDED` Job은 `result.resource_type`, `result.resource_id`, `result.resource_url`로 저장 결과를 가리킨다. 요약 또는 Assistant Message는 원인 `job_id`를 보관하며 요청자는 이 URL을 다시 GET해 결과를 복구한다.
 - 생성 실패는 Job `FAILED`와 안전한 `error`로 표시하며 별도 개인 이벤트를 정의하지 않는다.
 - MVP는 같은 Chat에서 동시에 하나의 Assistant 생성 Job만 허용하며 진행 중 요청이 있으면 `409 CHAT_RESPONSE_IN_PROGRESS`를 반환한다.
+- `LIVE → PROCESSING` transition은 개인 LIVE 결과·Chat·Job과 `purge_on_session_end=true` 멱등성 원장을 함께 삭제한다. 전이 후 구 ID로 Summary·Chat·Message·Job을 조회하면 소유자에게도 `404`이며 늦은 Worker 결과는 저장하지 않는다. FINAL·REVIEW 데이터는 유지한다.
+- 개인 AI mutation은 잠금 전 조회에서 후보 ID만 찾고, canonical row를 잠근 뒤 Session 상태·소유권·Job attempt·run token을 다시 검증한다. purge 대상 LIVE 작업은 `purge_on_session_end=true` 멱등성 row prefix를 먼저 잠근다. 이후 LIVE `CHAT_RESPONSE`는 Session → Chat → target USER Message → AIJob, LIVE Summary는 Session → AIJob 순서로 잠근다. REVIEW `CHAT_RESPONSE`는 purge prefix 없이 Session → Chat → target USER Message → AIJob 순서를 사용한다. 종료 purge는 멱등성 row prefix → Session → LIVE Summary → LIVE Chat → Message → Evidence → 관련 requester-only AIJob aggregate 순서를 따른다.
 
 ### 16.9 실시간 오류와 종료 코드
 
@@ -1534,6 +1615,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - AI 모델 입력에 학생의 실제 식별 정보를 포함하지 않는다.
 - 모든 Material, Recording, RecordingUpload, Transcript, Question, Answer, Summary, Chat과 Job 접근은 현재 인증과 Course 접근 권한을 검증한다.
 - 개인 요약·Chat Job 상태는 Session 전체에 broadcast하지 않는다. 질문 초안은 동기 REST 응답에서만 반환한다.
+- 개인 Summary·Chat·Message·`REQUESTER_ONLY` Job 조회는 해당 소유자/요청자와 현재 Course 멤버십을 재검증한다. 비소유자·비요청자·비멤버·삭제된 LIVE 리소스에는 `404`로 응답해 존재 여부를 숨긴다.
 - PDF·녹음의 스토리지 키, 서버 파일 경로, fragment key·manifest와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
 - Chat Evidence는 현재 사용자의 Course 권한과 source 상태를 다시 검증한 `link`만 제공한다. `knowledge_chunk_id`, pagination cursor, 배열 위치와 학생 식별정보는 노출하지 않는다.
 
@@ -1551,7 +1633,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | LIVE clustering 실패 재시도        | pending watermark·같은 Job 행 `attempt + 1` 재사용은 확정; backoff·최대 attempt 횟수 TBD                                                                                                        | Job scheduler·운영 UI        |
 | 클러스터 품질·대형 마인드맵        | cursor 기본 20·최대 100은 확정; 유사도 threshold·model·prompt·품질 지표, generation 교체 중 cursor 만료·재시작, preload page 수·점진 loading·자동 축소 layout TBD                               | AI worker·Cluster 화면       |
 | FINAL clustering 입력 0건          | Job 생략 또는 모델 호출 없는 성공 빈 원장, `final_generation`·`finalized_at` 표현 TBD                                                                                                           | coordinator·Cluster 응답     |
-| 개인 AI 데이터                     | 교수자 LIVE 사용·보관·삭제 TBD                                                                                                                                                                  | Summary·Chat 권한·수명       |
 | 녹음 형식·저장                     | codec·container·브라우저 로컬 저장·최대 크기, 물리 단일 파일 또는 fragment+manifest 구조 TBD                                                                                                    | upload 검증·storage·playback |
 | 녹음 upload                        | offset 조회 `GET`/`HEAD`, chunk method·header·Content-Type·크기, checksum algorithm·status, expiry 값 TBD                                                                                       | resumable protocol·정리      |
 | 오디오 publisher                   | 첫 `client_stream_id` claim과 동일 stream resume은 확정; 비정상 단절 lease·재획득·takeover TBD                                                                                                  | 중복 탭·장치 충돌            |
