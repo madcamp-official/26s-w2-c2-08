@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
     <script type="module" src="assets/js/prototype.js"></script>
+    <script type="module" src="assets/js/course-join.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
@@ -73,8 +74,9 @@
           <p class="eyebrow">COURSE_JOIN_PAGE · PRE-S-01</p>
           <h1>참여 코드로 수업방에 들어갑니다.</h1>
           <p>
-            참여에 성공하면 이 Course에서 학생이 됩니다. 다른 Course에서 가진
-            역할에는 영향을 주지 않습니다.
+            로그인한 사용자는 누구나 Course 참여 코드를 입력할 수 있습니다.
+            참여에 성공하면 이 Course에서 학생이 되며 다른 Course의 역할에는
+            영향을 주지 않습니다.
           </p>
         </div>
         <div
@@ -120,7 +122,7 @@
         <div class="onboarding-layout" data-show-state="form">
           <form
             class="panel form-card"
-            data-demo-form
+            data-course-join-form
             data-state-target="#joinFlow"
             data-success-state="success"
             data-success-toast="Course 참여 성공 상태를 표시했습니다."
@@ -139,16 +141,19 @@
                   name="join_code"
                   type="text"
                   autocomplete="off"
+                  inputmode="text"
                   autocapitalize="characters"
                   spellcheck="false"
-                  placeholder="참여 코드"
+                  minlength="6"
+                  maxlength="6"
+                  pattern="[A-Z]{6}"
+                  placeholder="예: ALGORT"
                   required
-                  data-uppercase-input
                   aria-describedby="joinCodeHelp joinCodeError"
                 />
                 <p class="field__help" id="joinCodeHelp">
-                  앞뒤 공백을 제거하고 영문은 대문자로 바꿔 확인합니다. 코드의
-                  길이와 사용 문자 정책은 아직 미정입니다.
+                  앞뒤 공백을 제거하고 영문을 대문자로 바꾼 뒤, 구분자 없는 영문
+                  대문자 6자리인지 확인합니다.
                 </p>
                 <p
                   class="field__error"
@@ -156,7 +161,7 @@
                   data-field-error-for="joinCode"
                   hidden
                 >
-                  공백이 아닌 참여 코드를 입력해주세요.
+                  영문 대문자 6자리 참여 코드를 입력해주세요.
                 </p>
               </div>
             </div>
@@ -177,8 +182,9 @@
               </ul>
             </section>
             <p class="notice notice--info" role="note">
-              유효하지 않은 코드에는 Course 존재 여부나 만료 여부를 과도하게
-              노출하지 않는 공통 안내를 사용합니다.
+              참여 코드는 만료되지 않습니다. 올바르지 않은 코드와 새 코드
+              발급으로 폐기된 기존 코드는 Course 정보를 노출하지 않는 공통
+              안내를 사용합니다.
             </p>
           </aside>
         </div>
@@ -253,8 +259,9 @@
             <span class="state-panel__icon" aria-hidden="true">?</span>
             <h2>참여 코드를 확인할 수 없습니다</h2>
             <p>
-              코드를 다시 확인하거나 교수자에게 새 코드를 문의해주세요. 잘못된
-              코드인지 만료된 코드인지는 구분해 표시하지 않습니다.
+              영문 대문자 6자리인지 다시 확인하거나 교수자에게 현재 코드를
+              문의해주세요. 올바르지 않은 코드와 새 코드 발급으로 폐기된 기존
+              코드는 구분해 표시하지 않습니다.
             </p>
             <button
               class="button button--secondary"
