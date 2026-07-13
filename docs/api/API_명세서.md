@@ -105,6 +105,8 @@ POST /api/v1/auth/logout
 | JSON 요청·응답   | `application/json`                         |
 | PDF 업로드       | `multipart/form-data`                      |
 | PDF 열람         | `application/pdf`                          |
+| 녹음 upload      | resumable upload protocol 확정 전 TBD      |
+| 녹음 playback    | 녹음 codec·container 확정 전 TBD           |
 | WebSocket 이벤트 | JSON text frame                            |
 | 실시간 음성      | binary frame, MVP v1 PCM_S16LE 16 kHz mono |
 
@@ -163,19 +165,23 @@ POST /api/v1/auth/logout
 }
 ```
 
-|  HTTP | 의미                       | 주요 코드                                                                                                                                                                                                                                |
-| ----: | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                                                                                                      |
-| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                                                                                                             |
-| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                  |
-| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`, `MATERIAL_NOT_FOUND`                                                                                                                                                                                               |
-| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE`, `MATERIAL_PROCESSING_ACTIVE`, `MATERIAL_LIMIT_EXCEEDED`, `MATERIAL_DELETE_CONFLICT` |
-| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                                                                                                         |
-| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                                                                                                                                                                                                                 |
-| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                                                                                                       |
-| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                                                                                                           |
-| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                         |
-| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                 |
+|  HTTP | 의미                       | 주요 코드                                                                                                                                                                                                                                                                                                                                          |
+| ----: | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                                                                                                                                                                                                                |
+| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                                                                                                                                                                                                                       |
+| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                                                                                                                            |
+| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`, `MATERIAL_NOT_FOUND`, `RECORDING_NOT_FOUND`, `RECORDING_UPLOAD_NOT_FOUND`                                                                                                                                                                                                                                                    |
+| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE`, `MATERIAL_PROCESSING_ACTIVE`, `MATERIAL_LIMIT_EXCEEDED`, `MATERIAL_DELETE_CONFLICT`, `RECORDING_STATE_CONFLICT`, `RECORDING_UPLOAD_CONFLICT`, `UPLOAD_OFFSET_MISMATCH`, `RECORDING_NOT_READY` |
+| `410` | upload 만료                | `RECORDING_UPLOAD_EXPIRED`                                                                                                                                                                                                                                                                                                                         |
+| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                                                                                                                                                                                                                   |
+| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`, `UNSUPPORTED_RECORDING_FORMAT`                                                                                                                                                                                                                                                                                           |
+| `416` | playback 범위 오류         | `RANGE_NOT_SATISFIABLE`                                                                                                                                                                                                                                                                                                                            |
+| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                                                                                                                                                                                                                 |
+| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                                                                                                                                                                                                                     |
+| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                                                                                   |
+| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                           |
+
+녹음 checksum 불일치의 공개 오류 코드는 `RECORDING_CHECKSUM_MISMATCH`로 고정한다. checksum algorithm, 검증 시점과 이 오류의 HTTP status는 resumable upload protocol과 함께 TBD이다.
 
 ### 3.2 AI 작업 수락 응답
 
@@ -244,8 +250,9 @@ READY → LIVE → PROCESSING → COMPLETED
 - 한 Course에는 `READY`, `LIVE`, `PROCESSING` 중 하나인 active Session이 합계 최대 1개만 존재한다.
 - active Session이 이미 있을 때 class 생성은 `409 ACTIVE_SESSION_EXISTS`로 거부한다.
 - `PROCESSING`과 `COMPLETED`에서는 새 음성, 질문과 반응을 받지 않는다.
-- 종료 시 생성한 공용 Job 집합은 `SESSION_POSTPROCESSING`, `FINAL_SUMMARY`와 필요 시 마지막 `QUESTION_CLUSTERING`이다.
-- 이 공용 Job이 모두 terminal 상태인 `SUCCEEDED` 또는 `FAILED`에 도달하면 Session을 `COMPLETED`로 전환한다. 모든 Job의 성공을 요구하지 않는다.
+- 종료 시점에는 `SESSION_POSTPROCESSING`, `FINAL_SUMMARY`와 필요 시 마지막 `QUESTION_CLUSTERING` 중 녹음 upload에 의존하지 않는 공용 Job만 생성할 수 있다. HQ STT는 Recording upload complete 뒤에만 시작한다.
+- 첫 `audio.start`로 Recording이 생긴 Session은 Recording이 `UPLOAD_PENDING` 또는 `UPLOADING`인 동안 `PROCESSING`을 유지한다. `UPLOADED` 또는 `FAILED`가 PR3에서 정의하는 녹음 저장 gate의 terminal 상태다.
+- HQ STT를 어떤 Job type·완료 차단 상태로 표현할지, upload가 완료되지 않는 Recording을 언제 `FAILED`로 전이할지와 최종 Session 완료 조건은 PR4에서 확정한다. Recording이 없는 Session의 기존 공용 Job 완료 규칙은 유지한다.
 - `SESSION_POSTPROCESSING`의 성공은 drain과 child Job 상태 수집이 끝났다는 뜻이며 `FINAL_SUMMARY`·`QUESTION_CLUSTERING`의 성공까지 의미하지 않는다.
 - `FAILED` Job은 기록 화면에 오류와 재시도 상태를 표시하고, 재시도 중에도 Session은 `COMPLETED`를 유지한다.
 - worker 장애로 `RUNNING`에 남은 Job은 watchdog이 timeout 후 `FAILED`로 바꿔 Session이 `PROCESSING`에 영구 정체되지 않게 한다.
@@ -476,9 +483,11 @@ Idempotency-Key: <key>
 - `LIVE → PROCESSING`을 한 번만 적용한다.
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
 - 정상 클라이언트는 `audio.stop`과 `audio.stopped` 완료 후 호출한다. 종료 요청이 먼저 오면 서버가 새 audio frame을 차단하고 이미 받은 chunk만 drain한다.
-- 남은 final Transcript drain, 최종 요약과 마지막 질문 클러스터링을 위한 공용 Job을 생성한다.
-- 성공: `202 Accepted`, 갱신된 Session과 생성된 Job 요약을 반환한다.
-- 재요청은 기존 Session과 Job 결과를 반환한다.
+- 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
+- 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
+- 남은 live final Transcript drain과 녹음 upload에 의존하지 않는 종료 작업만 먼저 처리할 수 있다. HQ Transcript generation·canonical 교체·timeout·Answer 재매핑은 PR4에서 확정한다.
+- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 이 시점에 생성된 Job을 반환한다.
+- 재요청은 기존 Session, Recording과 Job 결과를 반환한다.
 
 ## 8. 강의자료 API
 
@@ -894,7 +903,7 @@ GET /api/v1/sessions/{session_id}/jobs?job_type=<type>&status=<status>&cursor=<c
 ```
 
 - 권한: Course 멤버
-- 자료 처리, 질문 클러스터링과 Session 후처리처럼 참여자가 상태를 알아야 하는 공용 Job만 반환한다.
+- 자료 처리, 질문 클러스터링과 Session 후처리처럼 참여자가 상태를 알아야 하는 공용 Job만 반환한다. HQ STT Job의 공개 계약은 PR4에서 추가한다.
 - 개인 LIVE 요약, 질문 초안과 Chat Job은 포함하지 않는다.
 - 질문 클러스터링 실패를 재연결 후 발견하고 교수자가 재시도할 때 사용한다.
 
@@ -908,10 +917,98 @@ GET /api/v1/sessions/{session_id}/record
 
 - 권한: Course 멤버
 - 허용 Session 상태: `PROCESSING`, `COMPLETED`
-- 응답: Session, 외부에서 연결된 자료 메타데이터, final Transcript, 최신 최종 요약, 질문·반응·클러스터·답변, 후처리 Job 상태
+- 응답: Session, 권한에 따라 노출하는 안전한 Recording 메타데이터, 외부에서 연결된 자료 메타데이터, final Transcript, 최신 최종 요약, 질문·반응·클러스터·답변, 후처리 Job 상태
 - `jobs`에는 자료 처리·Session 후처리 같은 공용 Job만 포함하고 개인 요약·질문 초안·Chat Job은 포함하지 않는다.
 - 일부 AI 작업이 실패해도 연결된 PDF, Transcript와 Q&A는 반환한다. 분리된 자료는 즉시 제외한다.
 - 응답 크기가 커지면 통합 API는 요약만 반환하고 세부 리소스 API로 분리한다.
+
+### 15.2 녹음 메타데이터 조회
+
+```http
+GET /api/v1/sessions/{session_id}/recording
+```
+
+- 첫 성공 `audio.start` 전에는 Recording이 없고, 성공 뒤에는 Session당 외부에 정확히 하나의 논리 Recording aggregate를 만들고 `CAPTURING`으로 전이한다. 같은 `client_stream_id`의 reconnect는 이 Recording을 재사용한다.
+- Recording은 브라우저 로컬 녹음과 upload·HQ STT·playback의 외부 상태를 나타낸다. 이 논리 cardinality는 DB row나 object storage cardinality를 확정하지 않는다. 물리 저장물이 파일 하나인지 여러 fragment·row와 manifest인지는 TBD이며 외부 API에 노출하지 않는다.
+- 응답은 `id`, `session_id`, 공개 상태, `version`, nullable `content_type`·`byte_size`·`duration_ms`·`playback_url`과 생성·갱신 시각만 포함한다. storage key, 서버 경로, fragment key와 manifest는 포함하지 않는다.
+- 모든 조회에서 현재 인증과 Course 접근 권한을 다시 확인한다. 녹음 동의와 교수자·학생별 세부 접근 범위는 TBD이다.
+- Recording이 없거나 존재를 공개하지 않으면 `404 RECORDING_NOT_FOUND`를 반환한다.
+
+| 상태             | 의미                                                                |
+| ---------------- | ------------------------------------------------------------------- |
+| `CAPTURING`      | 첫 publisher가 같은 microphone source로 live PCM과 로컬 녹음을 생성 |
+| `UPLOAD_PENDING` | Session 종료 후 로컬 녹음 upload 시작을 기다림                      |
+| `UPLOADING`      | resumable upload가 진행 중                                          |
+| `UPLOADED`       | 논리 녹음 upload가 완결되어 playback과 HQ STT 시작이 가능           |
+| `FAILED`         | capture·upload·storage 검증 중 하나가 실패한 terminal 상태          |
+
+### 15.3 resumable upload 초기화
+
+```http
+POST /api/v1/sessions/{session_id}/recording/uploads
+Idempotency-Key: <key>
+Content-Type: application/json
+```
+
+```json
+{
+  "client_stream_id": "stable-client-stream-id",
+  "content_type": "audio/format-tbd",
+  "total_bytes": 12345678,
+  "duration_ms": 3600000
+}
+```
+
+- 15.3~15.5절의 init·offset 조회·chunk·complete operation은 모두 provisional 초안이다. resource lifecycle과 오류 의미를 연결하지만 미정인 wire 세부를 규범 계약으로 간주하지 않는다.
+- `Idempotency-Key`는 필수이며 같은 요청의 재실행은 기존 upload를 반환한다.
+- 첫 publisher와 같은 `client_stream_id`를 사용하는 Course `PROFESSOR`만 초기화할 수 있다.
+- Session은 `PROCESSING`, Recording은 `UPLOAD_PENDING`이어야 한다. 아니면 `409 RECORDING_STATE_CONFLICT`를 반환한다.
+- 이미 다른 active upload가 있으면 `409 RECORDING_UPLOAD_CONFLICT`를 반환한다.
+- 성공: `201 Created`. Recording을 `UPLOADING`으로 바꾸고 불투명 upload ID, 현재 byte offset, 전체 byte 수와 만료 시각을 반환한다.
+- codec·container와 허용 `content_type`, 브라우저 로컬 저장 방식, 최대 크기와 정확한 expiry 값은 TBD이다.
+
+### 15.4 upload offset 조회와 chunk 전송
+
+```http
+GET /api/v1/recording-uploads/{upload_id}
+PATCH /api/v1/recording-uploads/{upload_id}
+```
+
+- 위 `GET`과 `PATCH`는 resource와 오류 형태를 연결하기 위한 비규범적 protocol 초안이다. offset 조회를 `GET` 또는 `HEAD`로 할지, chunk method·offset header·request Content-Type·응답 status·chunk 크기는 TBD이다.
+- offset 조회는 최소한 upload ID, 상태, `offset_bytes`, `total_bytes`, `expires_at`을 반환해야 한다.
+- chunk 요청은 서버가 확인한 현재 byte offset에서만 이어 쓴다. 다른 offset이면 `409 UPLOAD_OFFSET_MISMATCH`와 안전한 현재 offset을 반환한다.
+- upload가 없거나 존재를 공개하지 않으면 `404 RECORDING_UPLOAD_NOT_FOUND`, 만료됐으면 `410 RECORDING_UPLOAD_EXPIRED`를 반환한다.
+- codec·container 검증에 실패하면 `415 UNSUPPORTED_RECORDING_FORMAT`을 반환한다. 검사 시점과 지원 형식은 TBD이다.
+- 각 요청은 인증, Course 권한과 최초 publisher 연결을 다시 검증한다. 내부 임시 경로와 storage key는 반환하거나 로그에 남기지 않는다.
+
+RecordingUpload의 공개 상태는 `ACTIVE`, `COMPLETED`, `EXPIRED`, `FAILED`이다. 정확한 expiry 값, 만료·실패 후 Recording 전이와 새 upload 재시작 정책은 TBD이다.
+
+### 15.5 upload 완료
+
+```http
+POST /api/v1/recording-uploads/{upload_id}/complete
+Idempotency-Key: <key>
+```
+
+- `Idempotency-Key`는 필수이다. 동일 요청은 최초 응답을 재사용하고 새 Job을 중복 생성하지 않는다.
+- 서버가 전체 byte 수와 선택된 checksum 규칙을 만족하는지 확인한 뒤 논리 Recording을 `UPLOADED`로 확정한다.
+- 같은 transaction에서 Recording을 `UPLOADED`로 확정하고 HQ STT 시작을 요청한다. HQ STT의 구체 Job type·응답·상태와 Transcript 결과 계약은 PR4에서 확정한다.
+- 성공: `202 Accepted`, `UPLOADED` Recording을 반환한다.
+- checksum 불일치는 `RECORDING_CHECKSUM_MISMATCH`를 사용한다. checksum algorithm, 전달 위치, 검증 시점과 HTTP status는 TBD이다.
+- HQ Transcript generation·canonical 교체·timeout, Answer 재매핑과 Segment recording offset 스키마는 PR4 범위다.
+
+### 15.6 녹음 playback
+
+```http
+GET /api/v1/recordings/{recording_id}/playback
+Range: bytes=<start>-<end>
+```
+
+- 요청마다 현재 인증, Course 접근과 향후 녹음 접근 정책을 다시 검증한다.
+- `UPLOADED` Recording만 재생할 수 있다. 그 전에는 `409 RECORDING_NOT_READY`, 없거나 비가시면 `404 RECORDING_NOT_FOUND`를 반환한다.
+- 전체 재생은 `200 OK`, 유효한 byte Range 재생은 `206 Partial Content`를 사용한다. 범위가 유효하지 않으면 `416 RANGE_NOT_SATISFIABLE`을 반환한다.
+- proxy streaming과 권한 확인 뒤 짧은 opaque signed delivery URL로 redirect하는 방식은 TBD이다. 어느 방식이든 내부 storage key와 서버 경로를 외부에 노출하지 않는다.
+- 응답 MIME은 codec·container 결정 후 확정한다. 이번 범위에는 별도 녹음 다운로드 API와 Transcript 문장 seek offset을 추가하지 않는다.
 
 ## 16. WebSocket과 음성 스트리밍
 
@@ -926,10 +1023,12 @@ GET /api/v1/sessions/{session_id}/record
 | 전송 경로                                   | 방향                   | 사용자             | 책임                                                    |
 | ------------------------------------------- | ---------------------- | ------------------ | ------------------------------------------------------- |
 | `WS /api/v1/ws/sessions/{session_id}`       | 주로 서버 → 클라이언트 | Course 멤버        | Transcript, 질문, 반응, 답변과 Session의 공용 변경 알림 |
-| `WS /api/v1/ws/sessions/{session_id}/audio` | 양방향                 | Course `PROFESSOR` | 저지연 음성 업로드와 ack·backpressure 제어              |
+| `WS /api/v1/ws/sessions/{session_id}/audio` | 양방향                 | Course `PROFESSOR` | 저지연 PCM 전송과 ack·backpressure·resume 제어          |
 | 개인 AI 스트림 경로 TBD                     | 서버 → 요청자          | AI 요청자          | 개인 요약·채팅의 delta와 완료 알림                      |
 
 - 질문 생성, 반응, 답변과 Session 상태 변경 같은 비즈니스 명령은 REST API로 수행한다.
+- Session event WS와 audio WS는 별도 연결·티켓·책임을 유지한다. event WS로 audio frame이나 upload chunk를 보내지 않고 audio WS로 Session 공용 event를 broadcast하지 않는다.
+- 첫 publisher의 같은 microphone source를 `PCM_S16LE` 16 kHz mono 500 ms live 경로와 브라우저 로컬 binary 녹음 경로로 동시에 분기한다. 로컬 녹음은 Session 종료 뒤 15.3~15.5절의 HTTP upload로 전송한다.
 - 일반 Session 채널에 교수자 음성 원본을 broadcast하지 않는다.
 - 개인 요약과 AI 채팅 결과를 Session 공용 채널에 broadcast하지 않는다.
 - 개인 AI 스트림은 streaming HTTP 또는 SSE를 권장한다. MVP에서 polling만 구현해도 완료 결과는 Job과 리소스 REST API로 복구할 수 있어야 한다.
@@ -938,7 +1037,9 @@ GET /api/v1/sessions/{session_id}/record
 
 - Session 이벤트 채널: 해당 Session의 Course 멤버
 - 음성 채널: 해당 Session의 Course `PROFESSOR`이면서 Session 상태가 `LIVE`
-- 음성 publisher: Session당 한 명을 권장하며 중복 탭이나 장치 연결 정책은 TBD이다.
+- 첫 성공 `audio.start`의 `client_stream_id`가 LIVE Session의 publisher를 claim한다. claim과 Recording `CAPTURING` 전이는 원자적으로 처리한다.
+- 이미 claim된 Session에 다른 `client_stream_id`가 `audio.start`를 보내면 `AUDIO_PUBLISHER_CONFLICT`를 전송하고 WebSocket close code `4409`로 그 연결을 종료한다. active publisher의 식별정보는 오류에 포함하지 않는다.
+- 동일한 `client_stream_id`는 새 1회용 ticket으로 네트워크 reconnect와 sequence resume을 시도할 수 있다. 비정상 단절의 lease 만료, 재획득과 명시적 takeover는 TBD이다.
 - 연결 시점뿐 아니라 재연결과 권한 변경 시점에도 멤버십을 다시 확인한다.
 - 브라우저 WebSocket은 임의의 `Authorization` 헤더를 설정하기 어렵기 때문에 MVP는 단기·1회용 티켓 방식을 사용한다.
 
@@ -1018,6 +1119,7 @@ POST /api/v1/realtime-tickets
 | `reaction.updated`   | question_id, reaction_count                                            | Course 멤버                        |
 | `answer.updated`     | Answer                                                                 | Course 멤버                        |
 | `session.updated`    | LectureSession                                                         | Course 멤버                        |
+| `recording.updated`  | 안전한 SessionRecording 메타데이터                                     | 녹음 접근 정책이 허용한 사용자     |
 | `job.updated`        | AIJob                                                                  | 공용 자료·후처리 Job의 허용 사용자 |
 
 개인 LIVE 요약, 질문 작성 초안과 Chat Job은 공용 `job.updated`로 노출하지 않고 요청자 전용 polling 또는 스트림에서만 전달한다.
@@ -1090,7 +1192,7 @@ STT 상태 후보는 `LISTENING`, `DEGRADED`, `FINALIZING`, `FINALIZED`, `STOPPE
 3. `POST /realtime-tickets` 요청의 `resume_cursor`에 최근 cursor를 넣어 새 티켓을 발급하고 연결한다.
 4. 서버가 짧은 버퍼에서 재생할 수 있으면 현재 권한으로 필터한 이벤트를 재전달한다.
 5. 커서가 만료됐거나 서버 재시작으로 재생할 수 없으면 `resync.required`를 보낸다.
-6. 클라이언트는 `Session → final Transcript → Questions/Answers → 본인의 Jobs/Chats` 순서로 REST를 다시 조회한다.
+6. 클라이언트는 `Session → Recording → final Transcript → Questions/Answers → 본인의 Jobs/Chats` 순서로 REST를 다시 조회한다.
 
 partial Transcript는 복구 대상이 아니다. 재연결할 때 기존 partial 표시를 제거하고 다음 partial 또는 final을 기다린다. Redis나 영구 event log를 MVP 필수로 확정하지 않았으므로 이벤트 replay는 best-effort이고 REST 복구가 필수다.
 
@@ -1101,11 +1203,13 @@ partial Transcript는 복구 대상이 아니다. 재연결할 때 기존 partia
 음성 WebSocket 연결 후 다음 순서를 사용한다.
 
 1. 클라이언트가 JSON `audio.start`를 보낸다.
-2. 서버가 협상 결과와 전송 한도를 담은 `audio.ready`를 반환한다.
-3. 클라이언트가 sequence가 포함된 binary audio chunk를 전송한다.
-4. 서버가 주기적으로 `audio.ack`와 필요 시 flow control을 보낸다.
-5. 교수자가 class를 종료하면 클라이언트가 `audio.stop`을 보내고 서버가 큐를 drain한다.
-6. 마지막 final Transcript 저장 후 `audio.stopped`와 `transcript.status=FINALIZED`를 보낸다.
+2. 서버가 첫 `client_stream_id`를 publisher로 claim하고 논리 Recording을 `CAPTURING`으로 만든다. 다른 stream의 경쟁 요청은 `AUDIO_PUBLISHER_CONFLICT`와 `4409`로 거부한다.
+3. 서버가 Recording ID, claim 결과, 협상 형식과 전송 한도를 담은 `audio.ready`를 반환한다.
+4. 클라이언트는 같은 microphone source를 live PCM 경로와 브라우저 로컬 녹음 경로로 분기하고, live 경로에서 sequence가 포함된 binary audio chunk를 전송한다.
+5. 서버가 주기적으로 `audio.ack`와 필요 시 flow control을 보낸다.
+6. 교수자가 class를 종료하면 클라이언트가 `audio.stop`을 보내고 로컬 녹음을 확정하며, 서버는 live 큐를 drain한다.
+7. 마지막 live final Transcript 저장 후 서버가 `audio.stopped`와 `transcript.status=FINALIZED`를 보낸다.
+8. 클라이언트가 class 종료 HTTP를 호출한 뒤 Recording resumable upload를 시작한다.
 
 MVP v1 오디오 전송 형식은 `PCM_S16LE`, 16 kHz, mono, 500 ms chunk로 고정한다. STT 모델 어댑터가 필요하면 서버 내부에서 변환하며 wire format을 변경하려면 protocol version을 올린다.
 
@@ -1130,6 +1234,8 @@ MVP v1 오디오 전송 형식은 `PCM_S16LE`, 16 kHz, mono, 500 ms chunk로 고
 {
   "type": "audio.ready",
   "stream_id": "stream_01HXYZ",
+  "recording_id": "recording_01HXYZ",
+  "publisher_status": "CLAIMED",
   "accepted_format": {
     "encoding": "PCM_S16LE",
     "sample_rate_hz": 16000,
@@ -1168,12 +1274,14 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - 클라이언트는 ack 전 최근 5초 audio를 ring buffer로 보관한다.
 - 재연결 시 같은 `client_stream_id`를 사용하고 `resume_from_sequence`에는 마지막 `audio.ack.received_through`를 넣은 뒤 그 다음 sequence부터 재전송한다.
 - 서버는 `(session_id, client_stream_id, chunk_sequence)`로 중복 chunk를 제거한다.
-- 서버 상태가 사라져 resume할 수 없으면 `audio.resume_rejected`를 보내고 새 stream을 시작한다. 음성 원본을 저장하지 않는 MVP에서는 이 구간의 gap을 완전히 복구할 수 없으므로 교수자 화면에 알려야 한다.
+- 서버 상태가 사라져 live PCM resume을 할 수 없으면 `audio.resume_rejected`를 보내고 교수자 화면에 live Transcript gap을 알린다. 브라우저 로컬 녹음과 이후 HQ Transcript가 이 gap을 어떻게 보정하는지는 PR4에서 확정한다.
 - 큐가 한도를 넘으면 `audio.flow_control` 또는 재시도 가능한 `AUDIO_BACKPRESSURE` 오류를 보내고 오래된 음성을 무한 적재하지 않는다.
 - ack 주기, `max_in_flight`, 최대 queue와 `max_chunk_bytes`는 서버가 `audio.ready`에서 통지한다.
-- 원본 audio는 기본적으로 영구 저장하지 않고 STT 처리 메모리에서 폐기한다.
+- audio WS의 PCM frame은 live STT 전송용이며 영구 녹음의 원본으로 취급하지 않는다. 영구 녹음은 같은 microphone source의 브라우저 로컬 branch를 15.3~15.5절로 upload해 저장한다.
 
-교수자가 class 종료를 누르면 클라이언트는 먼저 `audio.stop`을 보내고 `audio.stopped`를 기다린 뒤 HTTP 종료 API를 호출한다. 종료 API가 먼저 호출되거나 대기 timeout이 발생하면 서버는 새 binary frame을 차단하고 이미 받은 chunk만 drain한 뒤 Session을 `PROCESSING`으로 전환한다. `PROCESSING` 전환 후에는 새 audio 연결과 resume을 허용하지 않으며, 연결 손실로 받지 못한 chunk는 gap으로 기록해 교수자에게 표시한다.
+교수자가 class 종료를 누르면 클라이언트는 `audio.stop`과 로컬 녹음 확정을 시작하고 `audio.stopped`를 기다린 뒤 HTTP 종료 API를 호출한다. 종료 API가 먼저 호출되거나 대기 timeout이 발생해도 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단하며, 이미 받은 chunk만 drain한다. Recording은 `UPLOAD_PENDING`이 되고 upload complete 전에는 HQ STT를 시작하지 않는다. 연결 손실로 받지 못한 live chunk는 gap으로 기록해 교수자에게 표시한다.
+
+녹음 또는 upload 중 tab 종료 warning과 로컬 데이터 유실 안내는 화면 책임이다. 브라우저 로컬 저장 방식과 warning 해제 조건은 TBD이며 WebSocket control message로 만들지 않는다.
 
 ### 16.8 개인 AI 결과 스트리밍
 
@@ -1223,59 +1331,64 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 
 ## 17. 기능–API 추적표
 
-| 기능 ID               | 기능            | HTTP API                                | WebSocket                         |
-| --------------------- | --------------- | --------------------------------------- | --------------------------------- |
-| AUTH                  | Google 로그인   | Auth start·callback·logout              | —                                 |
-| PRE-T-01              | Course 생성     | `POST /courses`                         | —                                 |
-| PRE-T-02              | 참여 코드 발급  | Course 생성·상세·참여 코드 회전         | —                                 |
-| PRE-T-03              | class 관리      | class 생성·제목 수정·삭제               | —                                 |
-| PRE-T-04              | PDF 관리        | Material 목록·업로드·열람·분리 API      | `job.updated`                     |
-| PRE-T-05              | class 시작      | `POST /sessions/{id}/start`             | `session.updated`                 |
-| PRE-S-01              | 코드 참여       | `POST /courses/join`                    | —                                 |
-| PRE-S-02              | class 확인      | `GET /courses/{id}/sessions`            | —                                 |
-| PRE-S-03              | 진행 class 입장 | `GET /sessions/{id}`                    | Session WS                        |
-| LIVE_AUDIO_STREAM     | 교수자 음성 STT | `POST /realtime-tickets`                | audio WS, `transcript.*`          |
-| LIVE-T-01 / LIVE-S-01 | Transcript      | `GET /sessions/{id}/transcript`         | `transcript.*`                    |
-| LIVE-T-02 / LIVE-S-04 | 질문 확인       | `GET /sessions/{id}/questions`          | `question.*`                      |
-| LIVE-T-03             | 클러스터        | 질문 목록, `GET /sessions/{id}/jobs`    | `question.updated`, `job.updated` |
-| LIVE-T-04             | 인기 질문       | 질문 `sort=POPULAR`                     | `reaction.updated`                |
-| LIVE-T-05~07          | 답변 선택·완료  | Answer API                              | `answer.updated`                  |
-| LIVE-T-08             | class 종료      | `POST /sessions/{id}/end`               | `session.updated`, `job.updated`  |
-| LIVE-S-02 / LIVE-S-07 | 현재 요약       | Summary API                             | 요청자 전용 AI stream TBD         |
-| LIVE-S-03             | 익명 질문       | `POST /sessions/{id}/questions`         | `question.created`                |
-| LIVE-S-05             | 반응            | Reaction API                            | `reaction.updated`                |
-| LIVE-S-06 / LIVE-S-08 | 실시간 AI 채팅  | Chat API                                | 요청자 전용 AI stream TBD         |
-| LIVE-S-09             | 질문 작성 도움  | `POST /sessions/{id}/question-drafts`   | —                                 |
-| POST-01~05            | 수업 기록       | `GET /sessions/{id}/record` 및 세부 API | `job.updated`                     |
-| POST-06               | 복습 AI         | `mode=REVIEW` Chat API                  | `job.updated`                     |
-| POST-07               | 이전 class      | `GET /courses/{id}/sessions`            | —                                 |
-| POST-08               | PDF 다시 보기   | Material API                            | —                                 |
+| 기능 ID               | 기능            | HTTP API                               | WebSocket                                     |
+| --------------------- | --------------- | -------------------------------------- | --------------------------------------------- |
+| AUTH                  | Google 로그인   | Auth start·callback·logout             | —                                             |
+| PRE-T-01              | Course 생성     | `POST /courses`                        | —                                             |
+| PRE-T-02              | 참여 코드 발급  | Course 생성·상세·참여 코드 회전        | —                                             |
+| PRE-T-03              | class 관리      | class 생성·제목 수정·삭제              | —                                             |
+| PRE-T-04              | PDF 관리        | Material 목록·업로드·열람·분리 API     | `job.updated`                                 |
+| PRE-T-05              | class 시작      | `POST /sessions/{id}/start`            | `session.updated`                             |
+| PRE-S-01              | 코드 참여       | `POST /courses/join`                   | —                                             |
+| PRE-S-02              | class 확인      | `GET /courses/{id}/sessions`           | —                                             |
+| PRE-S-03              | 진행 class 입장 | `GET /sessions/{id}`                   | Session WS                                    |
+| LIVE_AUDIO_STREAM     | 교수자 STT·녹음 | realtime ticket, Recording upload API  | audio WS, `transcript.*`, `recording.updated` |
+| LIVE-T-01 / LIVE-S-01 | Transcript      | `GET /sessions/{id}/transcript`        | `transcript.*`                                |
+| LIVE-T-02 / LIVE-S-04 | 질문 확인       | `GET /sessions/{id}/questions`         | `question.*`                                  |
+| LIVE-T-03             | 클러스터        | 질문 목록, `GET /sessions/{id}/jobs`   | `question.updated`, `job.updated`             |
+| LIVE-T-04             | 인기 질문       | 질문 `sort=POPULAR`                    | `reaction.updated`                            |
+| LIVE-T-05~07          | 답변 선택·완료  | Answer API                             | `answer.updated`                              |
+| LIVE-T-08             | class 종료      | `POST /sessions/{id}/end`              | `session.updated`, `job.updated`              |
+| LIVE-S-02 / LIVE-S-07 | 현재 요약       | Summary API                            | 요청자 전용 AI stream TBD                     |
+| LIVE-S-03             | 익명 질문       | `POST /sessions/{id}/questions`        | `question.created`                            |
+| LIVE-S-05             | 반응            | Reaction API                           | `reaction.updated`                            |
+| LIVE-S-06 / LIVE-S-08 | 실시간 AI 채팅  | Chat API                               | 요청자 전용 AI stream TBD                     |
+| LIVE-S-09             | 질문 작성 도움  | `POST /sessions/{id}/question-drafts`  | —                                             |
+| POST-01~05            | 수업 기록       | record·Recording metadata·playback API | `recording.updated`, `job.updated`            |
+| POST-06               | 복습 AI         | `mode=REVIEW` Chat API                 | `job.updated`                                 |
+| POST-07               | 이전 class      | `GET /courses/{id}/sessions`           | —                                             |
+| POST-08               | PDF 다시 보기   | Material API                           | —                                             |
 
 ## 18. 보안과 개인정보
 
 - 익명 질문 API와 WebSocket은 작성자 ID, 이름, 이메일을 공개하지 않는다.
 - 서버 로그에 인증 토큰, WebSocket 티켓, 참여 코드, 질문 원문과 프롬프트 원문을 남기지 않는다.
 - AI 모델 입력에 학생의 실제 식별 정보를 포함하지 않는다.
-- 모든 Material, Transcript, Question, Answer, Summary, Chat과 Job 접근은 Course 멤버십을 검증한다.
+- 모든 Material, Recording, RecordingUpload, Transcript, Question, Answer, Summary, Chat과 Job 접근은 현재 인증과 Course 접근 권한을 검증한다.
 - 개인 요약·질문 초안·Chat 이벤트와 Job 상태는 Session 전체에 broadcast하지 않는다.
-- 스토리지 키, 서버 파일 경로와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
+- PDF·녹음의 스토리지 키, 서버 파일 경로, fragment key·manifest와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
 
 ## 19. 미정 사항
 
-| 항목               | 현재 상태                                                                                             | 결정 시 영향                |
-| ------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------- |
-| ID 형식            | 불투명 string                                                                                         | OpenAPI `format`, DB PK     |
-| class 자동 제목    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD                                                     | Session 생성·제목 수정 응답 |
-| active Course 삭제 | active Session 보유 시 삭제·보관 방식 TBD                                                             | Course 삭제 응답·트랜잭션   |
-| Material 표시명    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD             | 업로드·목록·다운로드 파일명 |
-| Material 분리 근거 | 안전한 label snapshot과 `resource_url=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD | Chat 근거·DB 삭제 정책      |
-| 답변 형식          | MVP 텍스트 답변 여부 TBD                                                                              | Answer 요청·응답            |
-| 개인 AI 데이터     | 교수자 LIVE 사용·보관·삭제 TBD                                                                        | Summary·Chat 권한·수명      |
-| AI 응답 전송       | 폴링·SSE·WebSocket TBD                                                                                | Chat·Summary 응답           |
-| 오디오 publisher   | 단일 연결 lease·교대 정책 TBD                                                                         | 중복 탭·장치 충돌           |
-| 이벤트 재생        | event log 보존 여부 TBD                                                                               | 재연결 프로토콜             |
-| 개인 AI 스트림     | streaming HTTP·SSE·target WS TBD                                                                      | delta·재연결 계약           |
-| 레이트 리미트      | 임계치 TBD                                                                                            | `429` 헤더·재시도           |
+| 항목               | 현재 상태                                                                                                 | 결정 시 영향                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| ID 형식            | 불투명 string                                                                                             | OpenAPI `format`, DB PK      |
+| class 자동 제목    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD                                                         | Session 생성·제목 수정 응답  |
+| active Course 삭제 | active Session 보유 시 삭제·보관 방식 TBD                                                                 | Course 삭제 응답·트랜잭션    |
+| Material 표시명    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD                 | 업로드·목록·다운로드 파일명  |
+| Material 분리 근거 | 안전한 label snapshot과 `resource_url=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD     | Chat 근거·DB 삭제 정책       |
+| 답변 형식          | MVP 텍스트 답변 여부 TBD                                                                                  | Answer 요청·응답             |
+| 개인 AI 데이터     | 교수자 LIVE 사용·보관·삭제 TBD                                                                            | Summary·Chat 권한·수명       |
+| AI 응답 전송       | 폴링·SSE·WebSocket TBD                                                                                    | Chat·Summary 응답            |
+| 녹음 형식·저장     | codec·container·브라우저 로컬 저장·최대 크기, 물리 단일 파일 또는 fragment+manifest 구조 TBD              | upload 검증·storage·playback |
+| 녹음 upload        | offset 조회 `GET`/`HEAD`, chunk method·header·Content-Type·크기, checksum algorithm·status, expiry 값 TBD | resumable protocol·정리      |
+| 오디오 publisher   | 첫 `client_stream_id` claim과 동일 stream resume은 확정; 비정상 단절 lease·재획득·takeover TBD            | 중복 탭·장치 충돌            |
+| 실시간 임계값      | `DEGRADED` 기준, audio stop timeout과 event replay window TBD                                             | 상태 표시·종료·재연결        |
+| 녹음 정책·전달     | 동의, 역할별 접근, 보관·삭제와 playback proxy 또는 opaque signed URL 방식 TBD                             | 권한·개인정보·Range 전송     |
+| HQ Transcript 연계 | generation·canonical 교체·HQ timeout·Answer 재매핑·Segment recording offset schema는 PR4에서 확정         | Transcript·Answer·AI 후처리  |
+| 이벤트 재생        | event log 보존 여부 TBD                                                                                   | 재연결 프로토콜              |
+| 개인 AI 스트림     | streaming HTTP·SSE·target WS TBD                                                                          | delta·재연결 계약            |
+| 레이트 리미트      | 임계치 TBD                                                                                                | `429` 헤더·재시도            |
 
 ## 20. 검토 체크리스트
 
@@ -1289,4 +1402,6 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 - [ ] `POST` 상태 변경과 AI 작업의 멱등성이 정의됐는가?
 - [ ] AI 실패가 Course·Question·Transcript 핵심 기능을 차단하지 않는가?
 - [ ] 종료 공용 Job이 모두 terminal이면 실패가 있어도 Session이 `COMPLETED`가 되는가?
+- [ ] 첫 audio publisher claim·동일 stream resume·다른 stream `4409` 거부가 원자적인가?
+- [ ] Recording upload·playback의 모든 응답과 로그에서 storage key·서버 경로·fragment 구성이 제거됐는가?
 - [ ] `openapi.yaml`과 FastAPI `/openapi.json`의 자동 비교 방법이 있는가?

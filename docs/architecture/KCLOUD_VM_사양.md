@@ -60,6 +60,17 @@
 | 루트 파일 시스템 (`/`) | `/dev/vda1` | 97 GiB | 4.3 GiB | 93 GiB | 5% |
 | EFI 부트 파티션 | `/dev/vda15` | 105 MiB | 6.1 MiB | 99 MiB | 6% |
 
+## MVP 녹음 저장 운영 경계
+
+현재 저장소는 `STORAGE_ROOT=data/uploads` directory만 준비하며 PDF·녹음 upload handler, resumable upload, playback과 외부 Object Storage 연동은 구현하지 않았다. 아래 내용은 원본 녹음 저장·playback MVP를 배포할 때 지켜야 할 목표 경계다.
+
+- 97 GiB 루트 디스크는 OS, application, log, DB, PDF와 upload 중 temporary object가 함께 사용하는 자원이다. 장시간 수업 녹음의 최종 원장을 이 디스크 하나에 보관할 수 있다고 가정하지 않는다.
+- 운영 MVP에는 녹음 final object를 위한 외부 Object Storage 또는 동등한 내구성·용량 경계가 필요하다. KCloud 루트 디스크는 개발, 제한된 staging·cache·temporary upload에만 사용하고 final 녹음의 유일한 사본으로 두지 않는다.
+- SessionRecording의 storage key와 RecordingUpload의 temporary key는 논리 locator다. 실제로 단일 파일, 여러 part·fragment 또는 manifest를 사용할지는 미정이며 VM 문서가 물리 cardinality를 확정하지 않는다.
+- final·temporary object 사용량, 일·주 증가율, 루트 디스크 여유, 소진 예상 시각, orphan object와 cleanup 실패를 모니터링해야 한다. quota와 warning·critical threshold는 미정이다.
+- aggregate 삭제와 upload 만료·실패는 DB transaction에서 cleanup outbox를 남기고 storage consumer가 멱등 삭제한다. object가 이미 없으면 성공으로 처리하되 orphan reconciliation 주기·재시도 한도는 미정이다.
+- 외부 Object Storage provider·region·암호화·network 경로, 녹음 동의·역할별 접근·보관·삭제, backup·restore RPO/RTO는 운영 배포 전에 확정해야 한다.
+
 ## 네트워크
 
 | 항목 | 값 |
@@ -77,3 +88,5 @@
 - 운영체제와 커널 버전
 - 디스크의 실제 물리 매체 종류
 - 네트워크 대역폭 및 공인 IP
+- 외부 Object Storage의 provider·region·대역폭·egress 정책
+- 녹음·PDF storage quota, capacity alert threshold와 backup·restore RPO/RTO

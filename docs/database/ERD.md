@@ -4,11 +4,11 @@
 >
 > 작성 기준일: 2026-07-11
 >
-> 상세 컬럼·제약·트랜잭션: [DB_스키마.md](./DB_스키마.md)
+> 상세 컬럼·제약·트랜잭션: [DB\_스키마.md](./DB_스키마.md)
 
 ## 1. 범위와 표기
 
-전체 물리 모델은 24개 테이블로 구성된다. 한 그림에 모두 넣으면 핵심 관계가 흐려지므로 인증·Course, 수업 기록, 질문·답변, AI 요약·Chat, 공통 Knowledge의 다섯 도메인으로 나눴다. 같은 테이블이 여러 그림에 반복되며 모두 동일한 실제 테이블을 뜻한다.
+전체 물리 모델은 26개 테이블로 구성된다. 한 그림에 모두 넣으면 핵심 관계가 흐려지므로 인증·Course, 수업 기록, 질문·답변, AI 요약·Chat, 공통 Knowledge의 다섯 도메인으로 나눴다. 같은 테이블이 여러 그림에 반복되며 모두 동일한 실제 테이블을 뜻한다.
 
 - `PK`: Primary Key
 - `FK`: Foreign Key
@@ -125,9 +125,9 @@ erDiagram
 
 `oauth_transactions`는 callback 성공 전에는 User가 확정되지 않으므로 의도적으로 User FK를 갖지 않는다. `course_members(course_id) WHERE role = 'PROFESSOR'` partial UNIQUE와 deferrable constraint trigger가 Course마다 owner와 일치하는 교수자 membership이 정확히 하나인지 transaction 종료 시 검증한다. `idempotency_records`의 terminal 행은 `expires_at = completed_at + interval '24 hours'`다.
 
-## 3. class·자료·Transcript·이벤트
+## 3. class·자료·녹음·Transcript·이벤트
 
-한 class에 연결 상태인 PDF를 최대 10개까지 둘 수 있다. `detached_at IS NULL`인 Material만 현재 연결된 행이며 PDF가 0개여도 class를 시작할 수 있다. streaming STT의 partial 결과와 음성 원본은 이 모델에 없고, 확정된 final Transcript와 복구 불가능한 gap metadata만 저장한다.
+한 class에 연결 상태인 PDF를 최대 10개까지 둘 수 있다. `detached_at IS NULL`인 Material만 현재 연결된 행이며 PDF가 0개여도 class를 시작할 수 있다. streaming STT의 partial 결과는 저장하지 않지만 첫 `audio.start`의 논리 Recording, publisher claim, 종료 후 resumable Upload은 영구 원장에 남긴다. live gap을 HQ STT가 보정하는 canonical 계약은 PR4 범위다.
 
 ```mermaid
 erDiagram
@@ -158,6 +158,31 @@ erDiagram
         uuid processed_by_job_id FK
         integer processed_by_job_attempt
         timestamptz detached_at
+        bigint version
+    }
+
+    sessionRecordings["session_recordings"] {
+        uuid id PK
+        uuid session_id FK,UK
+        uuid publisher_user_id FK
+        bytea publisher_client_stream_id_hash
+        text status
+        text content_type
+        bigint byte_size
+        bigint duration_ms
+        text storage_key UK
+        bigint version
+    }
+
+    recordingUploads["recording_uploads"] {
+        uuid id PK
+        uuid recording_id FK
+        uuid initiated_by_user_id FK
+        text status
+        bigint offset_bytes
+        bigint total_bytes
+        text temporary_storage_key UK
+        timestamptz expires_at
         bigint version
     }
 
@@ -206,6 +231,10 @@ erDiagram
     lectureSessions ||--o{ lectureMaterials : contains
     users o|--o{ lectureMaterials : uploads
     aiJobs o|--o| lectureMaterials : processes
+    lectureSessions ||--o| sessionRecordings : records
+    users o|--o{ sessionRecordings : publishes
+    sessionRecordings ||--o{ recordingUploads : receives
+    users o|--o{ recordingUploads : initiates
     lectureSessions ||--o{ transcriptSegments : records
     aiJobs o|--o{ transcriptSegments : creates
     lectureSessions ||--o{ transcriptGaps : marks
@@ -215,7 +244,7 @@ erDiagram
     lectureSessions o|--o{ outboxEvents : scopes
 ```
 
-`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않되 Session 잠금과 trigger가 연결된 행을 최대 10개로 제한한다. `display_name`은 연결된 행 사이에서만 partial UNIQUE이고 생성 뒤 재번호를 매기지 않는다. `storage_key`는 API·공유 event·로그에 노출하지 않는 내부 값이다. Transcript는 `(session_id, sequence)`와 `(session_id, utterance_id)`가 각각 UNIQUE다.
+`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않되 Session 잠금과 trigger가 연결된 행을 최대 10개로 제한한다. `session_recordings.session_id` UNIQUE는 Session당 논리 Recording을 최대 하나로, `recording_uploads(recording_id) WHERE status = 'ACTIVE'` partial UNIQUE는 active Upload을 최대 하나로 제한한다. 첫 Recording insert는 publisher `client_stream_id` HMAC claim과 원자적으로 commit하고 같은 claim만 reconnect·resume한다. Material·Recording final·Upload temp storage key는 API·공유 event·로그에 노출하지 않는다. Recording의 논리 storage locator가 단일 파일인지 fragment·manifest 집합인지는 미정이다. Transcript는 `(session_id, sequence)`와 `(session_id, utterance_id)`가 각각 UNIQUE다.
 
 ## 4. 질문·클러스터·Answer
 
@@ -525,6 +554,12 @@ Mermaid cardinality만으로 표현할 수 없는 규칙은 다음과 같다.
 | PDF 파일 크기 최대 decimal 100 MB    | `CHECK (byte_size BETWEEN 1 AND 100000000)`                                               |
 | class 시작 Material 조건             | Session→Material 잠금 + 연결된 `PROCESSING` 존재 조건부 거부                              |
 | Material 업로드·연결 해제 상태       | Session 잠금 + `READY`·`LIVE`·`COMPLETED` 허용, `PROCESSING` 거부                         |
+| Session당 논리 Recording 최대 1개    | `session_recordings.session_id` UNIQUE                                                    |
+| Recording당 active Upload 최대 1개   | `UNIQUE (recording_id) WHERE status = 'ACTIVE'`                                           |
+| 첫 audio publisher claim             | Session 잠금 + `client_stream_id` HMAC; 같은 claim만 reconnect·resume                     |
+| resumable offset·finalize            | `offset_bytes <= total_bytes` + expected-offset 조건부 update·terminal state fence        |
+| HQ STT 시작 gate                     | Recording `UPLOADED` commit 후 내부 outbox; Job·Transcript 계약은 PR4                     |
+| Recording·Upload 내부 key 비공개     | API·공유 event·로그에서 final·temp·fragment·manifest key 제외                             |
 | 질문당 취소되지 않은 Answer 최대 1개 | `UNIQUE (question_id) WHERE released_at IS NULL`                                          |
 | Session당 캡처 중 Answer 최대 1개    | `UNIQUE (session_id) WHERE status = 'CAPTURING'`                                          |
 | 클러스터 generation·순서·provenance  | `(session_id, generation, ordinal)` UNIQUE + Job attempt constraint trigger               |
@@ -541,12 +576,16 @@ Mermaid cardinality만으로 표현할 수 없는 규칙은 다음과 같다.
 ## 8. 삭제 관계 요약
 
 - Course 삭제는 불변 owner만 요청할 수 있고 CourseMember와 LectureSession aggregate를 삭제한다. active class가 있을 때의 허용 여부와 삭제 후 복구 유예는 아직 미정이다.
-- LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Transcript, Gap, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
+- LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Recording, Upload, Transcript, Gap, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
 - Material 연결 해제는 교수자가 Session `READY`, `LIVE`, `COMPLETED`에서 `detached_at`을 기록하는 tombstone 처리다. `PROCESSING`에서는 거부하고, 결과가 없는 `PENDING`·`RUNNING`·`FAILED` Material Job을 함께 제거한 뒤 commit 즉시 목록·상세·content·RAG에서 제외한다. 결과 provenance로 참조되는 `SUCCEEDED` Job은 보존한다.
 - User 탈퇴는 공유 학습 기록을 지우지 않고 User 행을 익명화한다. 인증 정보와 개인 Chat·LIVE Summary는 제거한다.
 - Cluster 삭제 시 Question의 현재 Cluster FK만 `NULL` 처리한다. Answer의 선택 Cluster ID·AI 대표 질문 exact text와 AnswerQuestion membership snapshot은 FK 없이 유지한다.
 - 결과→AIJob과 Evidence→KnowledgeChunk는 deferred `NO ACTION`으로 독립 삭제를 막되 aggregate 전체 삭제는 허용한다.
-- 삭제는 `Course → Session → Material → AIJob` 잠금 순서를 사용하고, Session 단독 삭제와 Material lifecycle은 `Session → Material → AIJob` 순서를 사용한다. 삭제·연결 해제된 Material의 늦은 결과는 attempt·run token·상태와 Material version·tombstone fence에서 폐기한다.
-- PDF object와 Material source KnowledgeChunk는 tombstone과 같은 transaction의 내부 outbox task로 background 정리한다. object 삭제는 멱등 재시도하고 정리 실패가 Material을 다시 연결하지 않는다.
+- 삭제는 `Course → Session → Material → Recording → Upload → AIJob` 잠금 순서를 사용하고, Session 단독 삭제도 `Session → Material → Recording → Upload → AIJob`을 사용한다. Material lifecycle은 기존 `Session → Material → AIJob`, Recording lifecycle은 `Session → Recording → Upload → AIJob` 순서를 사용한다. 삭제·연결 해제된 Material의 늦은 결과는 attempt·run token·상태와 Material version·tombstone fence에서 폐기한다.
+- PDF·Recording final object와 Upload temp object는 DB 행 삭제 전 key를 수집해 같은 transaction의 내부 outbox task로 background 정리한다. object 삭제는 멱등 재시도하고 정리 실패가 삭제된 aggregate를 다시 노출하지 않는다.
 - 연결 해제 Material의 원문 content link는 제공하지 않는다. Evidence가 참조하는 Material source Chunk의 보관, snapshot 또는 FK 변경, 과거 Evidence label·source 표시 방식과 Material·Chunk hard delete 시점은 미정이다. 결정 전에는 deferred `NO ACTION` FK와 Material tombstone을 유지하고 참조 행을 임의로 삭제하지 않는다.
+- Recording이 없어도 Session 종료는 허용한다. 그 경우 HQ source·fallback과
+  `SESSION_POSTPROCESSING` 완료 predicate, Recording `FAILED`·Upload 만료·timeout 전이는
+  PR4 범위다. 녹음 동의·접근·보관·삭제와 quota·backup·RPO·RTO도 미정이며,
+  물리 file·fragment·manifest cardinality를 추가 테이블로 굳히지 않는다.
 - Course owner 탈퇴 시 aggregate와 owner membership을 어떻게 처리할지는 미정이며, 현재는 공유 참조를 보존하는 User tombstone 원칙만 있다.
