@@ -77,20 +77,21 @@ RTX 3090은 사용할 수 있는 확인 자원일 뿐 HQ STT model이 이미 설
 
 - `RECORDING_TRANSCRIPTION`은 `SHARED`, `blocks_session_completion=true`인 후처리 Job이다. 다른 후처리와 동일하게 Worker는 15초마다 lease를 갱신하고 60초 동안 갱신되지 않으면 watchdog이 `FAILED`로 끝낸다.
 - Gap의 `start_ms`, `end_ms`는 class(Session) timeline만 나타낸다. 녹음 seek offset은 Segment의 `recording_start_ms`, `recording_end_ms`에만 두며 `EMPTY` RECORDING version도 final Gap이 있으면 Gap-only timeline을 제공할 수 있다.
-- HQ 처리 실패·lease timeout·5분 timeout은 현재 attempt가 staged한 Segment·Gap을 삭제하거나 rollback하고 `last_sequence=0`, RECORDING version·Job `FAILED`를 같은 transaction에 commit한다. cleanup 또는 reset 실패를 별도 운영 오류로 경보한다.
+- HQ 처리 실패·lease timeout·확정될 HQ Job timeout은 현재 attempt가 staged한 Segment·Gap을 삭제하거나 rollback하고 `last_sequence=0`, RECORDING version·Job `FAILED`를 같은 transaction에 commit한다. cleanup 또는 reset 실패를 별도 운영 오류로 경보한다.
 - Session 종료 때 만든 `SESSION_POSTPROCESSING` `SHARED` blocking coordinator는 Recording·HQ source가 terminal이 될 때까지 PENDING dependency wait 상태이며 Worker의 실행 후보로 claim하지 않는다. source terminal 뒤 mapping·Knowledge·Summary 상태를 정리하고 자신의 terminal 전이, downstream blocking Job과 outbox를 한 transaction에 commit한다.
+- `COMPLETED` 뒤 HQ retry가 성공하면 같은 coordinator 행을 `attempt + 1`로 자동 requeue한다. Session은 완료 상태를 유지하고 새 canonical Answer mapping·KnowledgeChunk·새로 생성 자격을 얻은 FINAL Summary를 멱등 재조정하되 기존 `ANSWER_ORGANIZATION` source·결과는 바꾸지 않는다.
 - 자동 `FINAL_SUMMARY`는 latest HQ source가 RECORDING `FINALIZED`이고 Segment가 하나 이상일 때만 만든다. RECORDING `EMPTY`는 `NOT_APPLICABLE`·`NO_FINAL_TRANSCRIPT`, RECORDING `FAILED`·HQ 무결과 deadline·Recording source 없음은 `SUMMARY_SOURCE_UNAVAILABLE`다. 보존된 LIVE 포인터는 final source 인정 여부가 미정이므로 자동 Summary 입력으로 사용하지 않는다.
-- HQ STT를 포함한 개별 후처리 Job 실행 상한은 5분이다. Session 전체 `PROCESSING`은 `ended_at`부터 최대 10분이다. deadline watchdog은 Session·coordinator를 잠그고 적용 가능한 누락 downstream blocking Job을 `FAILED`, `retryable=true`, `error_code=SESSION_PROCESSING_TIMEOUT`, `started_at=NULL`인 terminal 행으로 생성한다. Summary 상태·남은 Recording·Upload·source gate·기존 blocking Job·coordinator terminal을 같은 transaction에 확정한 뒤 completion을 평가한다.
+- 일반 개별 후처리 Job 실행 상한은 5분이다. HQ STT에도 5분을 적용할지 녹음 길이를 고려한 별도 상한을 둘지는 미정이다. Session 전체 `PROCESSING`은 `ended_at`부터 최대 10분이다. deadline watchdog은 Session·coordinator를 잠그고 적용 가능한 누락 downstream blocking Job을 `FAILED`, `retryable=true`, `error_code=SESSION_PROCESSING_TIMEOUT`, `started_at=NULL`인 terminal 행으로 생성한다. Summary 상태·남은 Recording·Upload·source gate·기존 blocking Job·coordinator terminal을 같은 transaction에 확정한 뒤 completion을 평가한다.
 - timeout 뒤 run token과 lease가 제거된 이전 Worker 결과는 저장하지 않는다. 모든 gate가 `SUCCEEDED` 또는 `FAILED`가 되면 일부 실패가 있어도 Session을 `COMPLETED`로 바꾸며, 완료 뒤 재시도는 Session을 다시 `PROCESSING`으로 전환하지 않는다.
 - 외부 Object Storage의 녹음을 GPU Worker가 처리하려면 KCloud local staging이 필요할 수 있다. staging은 제한된 임시 공간이며 입력 fetch·처리가 끝나거나 실패·timeout되면 멱등 cleanup 대상으로 남긴다. 원본의 유일한 사본이나 canonical 결과 원장으로 사용하지 않는다.
-- HQ STT model, GPU 동시 실행 수와 처리 SLO는 미정이다. 다만 어떤 model을 선택해도 공통 5분 Job 제한을 바꾸지 않는다.
+- HQ STT model, GPU 동시 실행 수, 처리 SLO와 개별 Job timeout은 미정이다. 어떤 값을 선택해도 Session 전체 10분 completion deadline은 유지한다.
 
 운영에서는 최소한 다음 지표를 수집하고 대시보드·경보 기준을 후속 배포 결정에 연결한다.
 
 | 영역 | 필수 지표 | 아직 미정인 운영값 |
 |---|---|---|
 | Queue | `RECORDING_TRANSCRIPTION` queue depth·oldest age·claim delay, coordinator dependency wait·source terminal 이후 claim delay | 동시 실행 수, warning·critical threshold |
-| HQ STT | 실행 duration, 성공·`EMPTY`·실패·5분 timeout 수, 처리 녹음 duration, staged Segment·Gap rollback·삭제 및 `last_sequence` reset 실패 | model, 처리량·latency SLO |
+| HQ STT | 실행 duration, 성공·`EMPTY`·실패·확정된 timeout 수, 처리 녹음 duration, staged Segment·Gap rollback·삭제 및 `last_sequence` reset 실패 | model, 처리량·latency SLO, 개별 timeout |
 | GPU | utilization, VRAM, OOM·provider timeout, model별 concurrency | GPU 격리·예약 방식, concurrency limit |
 | Transcript | `FINALIZING` 체류, canonical switch duration·failure, Segment·Gap 수, `EMPTY` final Gap-only timeline 수 | 상태별 alert threshold |
 | Staging disk | download bytes·duration, 현재·최고 bytes, free space, oldest file age | staging quota, warning·critical threshold |

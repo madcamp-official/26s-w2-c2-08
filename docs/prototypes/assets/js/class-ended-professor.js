@@ -34,13 +34,20 @@ materialInput?.addEventListener("change", () => {
     return;
   }
 
-  const duplicate = [...materialList.querySelectorAll("strong")].some(
-    (item) => item.textContent === file.name,
+  const existingNames = new Set(
+    [...materialList.querySelectorAll("strong")].map((item) =>
+      item.textContent.trim(),
+    ),
   );
   const dot = file.name.lastIndexOf(".");
-  const displayName = duplicate
-    ? `${file.name.slice(0, dot)} (1)${file.name.slice(dot)}`
-    : file.name;
+  const basename = dot > 0 ? file.name.slice(0, dot) : file.name;
+  const extension = dot > 0 ? file.name.slice(dot) : "";
+  let displayName = file.name;
+  let suffix = 1;
+  while (existingNames.has(displayName)) {
+    displayName = `${basename} (${suffix})${extension}`;
+    suffix += 1;
+  }
   const row = document.createElement("li");
   row.className = "record-material";
   row.dataset.materialRow = "";
@@ -57,6 +64,13 @@ document.addEventListener("click", (event) => {
   const materialDelete = event.target.closest("[data-material-delete]");
   const answerEdit = event.target.closest("[data-answer-text-edit]");
   if (materialDelete) {
+    if (
+      !window.confirm(
+        "이 PDF를 목록·열람·새 AI 검색에서 즉시 분리할까요? 저장물 정리는 백그라운드에서 진행됩니다.",
+      )
+    ) {
+      return;
+    }
     materialDelete.closest("[data-material-row]")?.remove();
     updateMaterialCount();
     setDemoState(document.querySelector("#profMaterials"), "deleting");
@@ -94,12 +108,15 @@ document
   ?.addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#titleEditInput");
-    if (!input.value.trim()) return;
-    document.querySelector("#professorRecordTitle").textContent =
-      input.value.trim();
+    const customTitle = input.value.trim();
+    const nextTitle = customTitle || input.dataset.autoTitle;
+    document.querySelector("#professorRecordTitle").textContent = nextTitle;
+    input.value = nextTitle;
     closeDialog(document.querySelector("#titleEditDialog"));
     showToast(
-      "class 제목을 수정했습니다. 기록 시각은 그대로입니다.",
+      customTitle
+        ? "class 제목을 수정했습니다. 기록 시각은 그대로입니다."
+        : "빈 제목을 서버 자동 제목으로 되돌렸습니다. 기록 시각은 그대로입니다.",
       "success",
     );
   });
@@ -108,9 +125,51 @@ document
   .querySelector("#textAnswerForm")
   ?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const target = document.querySelector("#textAnswerTarget").value;
+    const targetSelect = document.querySelector("#textAnswerTarget");
+    const selected = targetSelect.selectedOptions[0];
+    const target = selected?.textContent.trim();
     const content = document.querySelector("#textAnswerInput").value.trim();
-    if (!content) return;
+    if (!target || !content) return;
+
+    const answer = document.createElement("article");
+    answer.className = "record-answer";
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = `${selected.dataset.targetKind} snapshot · TEXT`;
+    const title = document.createElement("h3");
+    title.textContent = target;
+    const label = document.createElement("strong");
+    label.textContent = "교수자 답변";
+    const copy = document.createElement("p");
+    copy.dataset.professorAnswerText = "";
+    copy.textContent = content;
+    const edit = document.createElement("button");
+    edit.className = "button button--ghost";
+    edit.type = "button";
+    edit.dataset.answerTextEdit = "";
+    edit.textContent = "교수자 text 수정";
+    answer.append(badge, title, label, copy, edit);
+
+    const answerRegion = document.querySelector("#profAnswers");
+    answerRegion.querySelector(".record-pagination")?.before(answer);
+    const currentCount = answerRegion.querySelectorAll(".record-answer").length;
+    document.querySelector("[data-answer-count]").textContent =
+      `${currentCount} ANSWERS`;
+    document.querySelector("[data-manifest-answers-jobs]").textContent =
+      `${currentCount} / 7`;
+
+    [...document.querySelectorAll("#profQuestions .record-question")]
+      .find(
+        (item) => item.querySelector("strong")?.textContent.trim() === target,
+      )
+      ?.querySelector(".badge")
+      ?.replaceChildren("ANSWERED · TEXT Answer");
+    selected.remove();
+    document.querySelector("#textAnswerInput").value = "";
+    if (targetSelect.options.length === 0) {
+      document.querySelector('[data-dialog-open="textAnswerDialog"]').disabled =
+        true;
+    }
     closeDialog(document.querySelector("#textAnswerDialog"));
     showToast(`“${target}” 한 질문에 TEXT Answer를 저장했습니다.`, "success");
   });

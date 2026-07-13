@@ -230,7 +230,9 @@ paths:
       tags: [Users]
       operationId: getCurrentUser
       summary: 내 정보 조회
-      description: 인증된 사용자의 기본 프로필을 반환한다.
+      description: |
+        인증된 사용자의 기본 프로필을 반환한다. 사용자가 수정할 수 있는
+        프로필 필드의 범위는 TBD이다.
       responses:
         "200":
           description: 현재 사용자 정보
@@ -731,8 +733,10 @@ paths:
         호출하며 audio.stop 전송과 로컬 녹음 마감은 best-effort로 병행한다. audio.stopped와
         drain 완료는 이 API의 선행조건이 아니고 서버는 수신분만 별도로 drain한다. CAPTURING
         Answer가 있으면 409로 거부한다. Recording upload complete 전에는 HQ STT를 시작하지 않는다.
-        active·retry-reserved LIVE clustering Job은 FAILED/retryable=false/SESSION_ENDED로
-        종료하고 느린 결과 commit을 fence하며 LIVE 재실행을 막는다.
+        active·retry-reserved LIVE clustering 실행은 Session·attempt·run-token fence로
+        정지하고 느린 결과 commit과 LIVE 재실행을 막는다. 이 Job의 공개
+        terminal 표현을 CANCELLED/SUPERSEDED로 확장할지 재시도 불가 FAILED로
+        표시할지는 TBD이다.
         종료 transaction은 SHARED·blocking SESSION_POSTPROCESSING coordinator를 PENDING으로
         생성하고 source terminal 전에는 claim하지 않는다. upload complete 뒤
         RECORDING_TRANSCRIPTION이 RECORDING TranscriptVersion·Segment·Gap·Segment 녹음 시간
@@ -749,12 +753,16 @@ paths:
         sequence 이하의 학생 실제 질문과 ended_at까지 COMPLETED Answer가 있는 AI 대표질문을
         현재 중앙 여부와 무관하게 snapshot한 FINAL QUESTION_CLUSTERING blocking Job을 즉시
         생성한다. 이 Job은 Recording upload·HQ Transcript·coordinator를 기다리지 않고 독립
-        실행한다. 대상 0건의 Job·빈 generation 표현은 TBD이다. 같은 transaction은 모든 개인 LIVE Summary,
+        실행한다. FINAL은 eligible input을 각각 정확히 한 번만 membership으로
+        포함해야 성공하며 분류 불가 input은 하나의 안정적인 `기타` Cluster에
+        배치한다. 대상 0건의 Job·빈 generation 표현은 TBD이다. 같은 transaction은 모든 개인 LIVE Summary,
         mode=LIVE Chat·Message·Evidence, REQUESTER_ONLY LIVE_SUMMARY Job, LIVE Chat에
-        귀속된 REQUESTER_ONLY CHAT_RESPONSE Job과 purge_on_session_end로 표시한
-        멱등성 원장을 삭제한다. 늦은 Worker 결과는 삭제된 Job·run token을
-        재확인해 저장하지 않는다. FINAL Summary, REVIEW Chat·Job과 class
-        종료 요청 자체의 멱등성 원장은 영향받지 않는다.
+        귀속된 REQUESTER_ONLY CHAT_RESPONSE Job을 삭제한다. 늦은 Worker 결과는
+        Job·target·Session state·attempt·run-token fence를 통과하지 못해 저장되지
+        않는다. 종료 후 기존 개인 LIVE 리소스·Job ID의 polling·단건 HTTP
+        status와 purge_on_session_end 멱등성 행의 조기 삭제·재요청 응답은 TBD이다.
+        FINAL Summary, REVIEW Chat·Job·멱등성 원장과 class 종료 요청 자체의
+        멱등성 원장은 영향받지 않는다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -973,13 +981,40 @@ paths:
         FAILED HQ version은 두 배열이 모두 비고, EMPTY version은 Segment가 0건이어도
         재처리 후에도 남은 final Gap을 gaps로 반환할 수 있다. 합친 타임라인은
         start_ms ASC, 같은 시각이면 SEGMENT 우선, 그 뒤 id ASC 순서다.
+        start_sequence와 end_sequence를 함께 주면 transcript_version_id도 필수이며
+        같은 version의 final Segment inclusive 범위를 안정적인 anchor로 고정한다.
+        anchor 요청은 그 Segment 범위와 범위의 class 시간축에 걸친 Gap만
+        페이지닝하고 cursor에 version·anchor를 함께 고정한다. Chat Evidence의
+        TRANSCRIPT link는 이 Session·version·sequence 범위를 사용하고 Segment ID를
+        anchor로 사용하지 않는다.
       parameters:
         - name: transcript_version_id
           in: query
           required: false
-          description: 조회할 TranscriptVersion ID. 생략하면 현재 canonical version
+          description: |
+            조회할 TranscriptVersion ID. 생략하면 현재 canonical version.
+            start_sequence·end_sequence anchor를 사용할 때는 필수이다.
           schema:
             $ref: "#/components/schemas/ResourceId"
+        - name: start_sequence
+          in: query
+          required: false
+          description: |
+            end_sequence와 함께 사용하는 inclusive final Segment 시작 sequence.
+            범위 anchor에서는 transcript_version_id도 필수이며 두 sequence는
+            같은 version에 속해야 한다.
+          schema:
+            type: integer
+            minimum: 1
+        - name: end_sequence
+          in: query
+          required: false
+          description: |
+            start_sequence와 함께 사용하는 inclusive final Segment 종료 sequence.
+            start_sequence 이상이어야 한다.
+          schema:
+            type: integer
+            minimum: 1
         - name: cursor
           in: query
           required: false
@@ -995,6 +1030,12 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
+      x-sequence-anchor-constraints:
+        require_together: [start_sequence, end_sequence]
+        requires_when_present: transcript_version_id
+        relation: start_sequence <= end_sequence
+        membership: both values identify final Segments in the selected Session and TranscriptVersion
+        cursor_scope: [transcript_version_id, start_sequence, end_sequence]
       responses:
         "200":
           description: Transcript version과 Segment·Gap 타임라인 페이지
@@ -1023,9 +1064,10 @@ paths:
       operationId: getTranscriptSegment
       summary: final Transcript Segment 단건 조회
       description: |
-        Segment가 속한 Course 멤버만 조회한다. Chat Evidence가 pagination cursor나
-        배열 순번 대신 불투명 Segment ID로 final source를 가리키는 안정적인
-        경로다. 인증 없음은 401이다. 비멤버·권한 밖 요청, 비가시·삭제되거나
+        Segment가 속한 Course 멤버만 조회한다. final Segment ID를 직접
+        조회하는 경로이며 Chat Evidence는 이 단건 경로 대신 Session·TranscriptVersion·
+        stable sequence 범위가 있는 타임라인 경로를 사용한다. 인증 없음은 401이다.
+        비멤버·권한 밖 요청, 비가시·삭제되거나
         존재하지 않는 Segment는 모두 404로 응답해 존재를 공개하지 않는다.
       responses:
         "200":
@@ -1357,6 +1399,10 @@ paths:
         provenance로 보존하며 해당 Evidence는 label을 유지하고 link=null이다.
         마지막 Evidence 삭제 transaction에서 tombstone과 Chunk도 원자적으로 hard delete해
         DISCARDED는 항상 Evidence가 1개 이상일 때만 남는다.
+        FINAL generation은 eligible 학생 질문과 cutoff까지 Answer가 완료된
+        AI 대표질문을 각각 정확히 한 번만 membership으로 포함해야 한다.
+        분류 불가 input은 하나의 안정적인 `기타` Cluster에 배치하고 누락·
+        중복이나 여러 `기타` Cluster로의 분산을 성공으로 공개하지 않는다.
       parameters:
         - name: scope
           in: query
@@ -1394,9 +1440,11 @@ paths:
       operationId: listQuestionClusterMembers
       summary: 질문 Cluster child 목록
       description: |
-        Course 멤버가 해당 Cluster의 STUDENT_QUESTION과 답변이 있어 보존된
-        AI_REPRESENTATIVE_QUESTION child를 generation 안에서 유일한 ordinal ASC로
-        조회한다. ordinal은 DB membership position의 공개 projection이다. 중앙
+        Course 멤버가 해당 Cluster child를 generation 안에서 유일한 ordinal ASC로
+        조회한다. 공개 discriminator는 source_kind이고 값은 STUDENT_QUESTION 또는
+        답변이 있어 보존된 AI_REPRESENTATIVE이다. 내부 typed FK 이름인
+        AI_REPRESENTATIVE_QUESTION을 membership enum으로 노출하지 않는다. ordinal은
+        DB membership position의 공개 projection이다. 중앙
         대표질문의 Answer가 child를 ANSWERED로 바꾸지 않는다. cluster_id는
         session_id 안의 logical ID로 해석하며 다른 Session의 Cluster를 조회할 수 없다.
       parameters:
@@ -1460,9 +1508,10 @@ paths:
       description: |
         Course PROFESSOR만 실행한다. answer_type=VOICE는 LIVE에서 하나의
         STUDENT_QUESTION 또는 AI_REPRESENTATIVE_QUESTION을 SELECTED로 바꾸고
-        CAPTURING Answer를 만든다. answer_type=TEXT는 COMPLETED에서 Answer가 없는
-        target에 즉시 COMPLETED Answer를 만든다. 둘 모두 target 정확히 하나만
-        지정하며 target당 Answer는 최대 하나다.
+        CAPTURING Answer를 만든다. answer_type=TEXT는 COMPLETED에서 Answer가 없고
+        status=OPEN인 STUDENT_QUESTION에만 즉시 COMPLETED text-only Answer를 만든다.
+        FINAL·review-only 대표질문과 미답변 ACTIVE 대표질문은 새 text-only target이
+        아니다. 둘 모두 target 정확히 하나만 지정하며 target당 Answer는 최대 하나다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1593,8 +1642,10 @@ paths:
       operationId: updateCompletedAnswerText
       summary: 완료 Answer의 텍스트 설명 추가·수정
       description: |
-        Course PROFESSOR가 COMPLETED Session의 COMPLETED Answer에만 text_content를
-        추가하거나 교체한다. 음성 Answer의 Transcript 범위는 유지한다.
+        Course PROFESSOR가 COMPLETED Session의 기존 COMPLETED Answer에만 text_content를
+        추가하거나 교체한다. 학생 질문 target의 기존 완료 Answer와 Answer 때문에
+        PRESERVED된 AI 대표질문 target의 기존 완료 Answer만 허용한다. target·snapshot·
+        음성 Answer의 Transcript 범위는 유지한다.
         텍스트 최대 길이, 빈 문자열로 삭제하는 정책과 KnowledgeChunk 재생성
         세부 범위는 TBD이다.
       requestBody:
@@ -1639,7 +1690,7 @@ paths:
         아닌 PRESERVED AI 대표질문이면 membership과 공개 대표질문을 같은
         transaction에서 즉시 제거한다. Evidence 참조가 없으면 hard delete하고,
         있으면 비공개 DISCARDED tombstone·KnowledgeChunk만 provenance로 남긴다.
-        해당 Evidence는 source_kind·label을 유지하고 link=null이며 마지막 Evidence를
+        해당 Evidence는 source_kind=QUESTION·label을 유지하고 link=null이며 마지막 Evidence를
         삭제하는 transaction에서 tombstone과 Chunk도 원자적으로 hard delete한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1668,10 +1719,15 @@ paths:
       summary: 저장된 요약 목록 조회
       description: |
         PROFESSOR와 STUDENT Course 멤버 모두 조회할 수 있다. 저장된 LIVE
-        요약은 요청자에게만, FINAL 요약은 Course 멤버에게 공개한다. 성공한
+        요약은 요청자에게만, FINAL 요약은 Course 멤버에게 공개한다. summary_type
+        query는 필수이고 응답은 필수 summary_status·summary_reason을 포함한다.
+        summary_type=LIVE에서 READY 또는 요청 전 LIVE의 정상 무요약 상태는
+        NOT_STARTED/null이다. summary_type=FINAL은 /record.summary.state의 상태·이유를
+        그대로 projection하고 NOT_STARTED를 사용하지 않는다. 성공한
         LIVE 요약도 반드시 저장한 뒤 Job을 SUCCEEDED로 변경하므로 연결이
         끊겨도 Job result URL로 복구할 수 있다. LIVE→PROCESSING에서 LIVE
-        Summary·Job을 삭제하며 이후 목록에 나타나지 않는다. 비멤버에게는 Session
+        Summary·Job을 삭제하며 이후 목록에 나타나지 않는다. 기존 ID의 단건·
+        polling HTTP status와 purge-scoped 멱등 재요청 응답은 TBD이다. 비멤버에게는 Session
         존재를 숨기고 404를 반환한다. 자동 FINAL
         요약은 최신 HQ TranscriptVersion이 RECORDING/FINALIZED이고 final Segment가
         1건 이상일 때만 생성하며 preserved LIVE canonical은 현재 source로 사용하지 않는다.
@@ -1679,7 +1735,8 @@ paths:
       parameters:
         - name: summary_type
           in: query
-          required: false
+          required: true
+          description: 상태를 모호하지 않게 하는 필수 Summary 유형 필터
           schema:
             $ref: "#/components/schemas/SummaryType"
         - $ref: "#/components/parameters/Cursor"
@@ -1713,8 +1770,9 @@ paths:
         REQUESTER_ONLY AIJob을 반환한다. PROFESSOR와 STUDENT Course 멤버에게
         동일하게 허용한다. 요청자는 Job을 polling한 뒤 result URL에서 저장된
         최종 Summary만 GET한다. 부분 문장·token은 저장·broadcast·streaming하지
-        않는다. LIVE→PROCESSING에서 Summary·Job·purge-on-session-end 멱등성
-        원장을 삭제해 구 202를 재생하지 않는다. 인증되지 않은 요청은 401,
+        않는다. LIVE→PROCESSING에서 Summary·Job을 삭제하고 늦은 Worker 결과를
+        fence하되 purge-on-session-end 멱등성 행 조기 삭제·구 202 재응답은 TBD이다.
+        인증되지 않은 요청은 401,
         비멤버는 Session 존재를 숨기는 404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1762,8 +1820,8 @@ paths:
       summary: 저장된 요약 단건 조회
       description: |
         FINAL 요약은 Course 멤버가 조회할 수 있다. 저장된 LIVE 요약은 요청자만 조회한다.
-        비요청자·비멤버·삭제된 LIVE Summary에는 리소스 존재를 공개하지
-        않고 404를 반환한다.
+        비요청자·비멤버에는 리소스 존재를 공개하지 않고 404를 반환한다.
+        Session 종료로 삭제된 기존 LIVE Summary ID의 HTTP status는 TBD이다.
       responses:
         "200":
           description: LectureSummary
@@ -1820,7 +1878,8 @@ paths:
         LIVE mode는 Session LIVE, REVIEW mode는 Session COMPLETED에서만 생성한다.
         PROCESSING을 포함해 mode와 상태가 다르면 409 SESSION_STATE_CONFLICT를
         반환한다. 대화는 생성자에게만 노출한다. LIVE Chat 멱등성 원장은
-        purge_on_session_end로 표시해 class 종료와 함께 삭제한다. 인증되지 않은
+        purge_on_session_end로 범위를 표시하되 class 종료 후 행 조기 삭제·
+        재요청 응답은 TBD이다. 인증되지 않은
         요청은 401, 비멤버는 Session 존재를 숨기는 404를 반환한다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1865,8 +1924,8 @@ paths:
       summary: 내 AI 대화 단건 조회
       description: |
         Chat 소유자이면서 현재도 Session의 Course 멤버인 사용자만 조회한다.
-        비소유자·비멤버·삭제된 LIVE Chat에는 존재를 공개하지 않고 404를
-        반환한다.
+        비소유자·비멤버에는 존재를 공개하지 않고 404를 반환한다. Session
+        종료로 삭제된 기존 LIVE Chat ID의 HTTP status는 TBD이다.
       responses:
         "200":
           description: Chat
@@ -1892,8 +1951,8 @@ paths:
       summary: AI 대화 메시지 목록 조회
       description: |
         현재도 Course 멤버인 대화 소유자만 sequence 오름차순으로 조회한다.
-        비소유자·비멤버·삭제된 LIVE Chat에는 Chat·Message 존재를 숨기고
-        404를 반환한다.
+        비소유자·비멤버에는 Chat·Message 존재를 숨기고 404를 반환한다.
+        Session 종료로 삭제된 기존 LIVE Chat·Message ID의 HTTP status는 TBD이다.
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - name: limit
@@ -1940,8 +1999,9 @@ paths:
         뒤 result URL에서 성공해 저장된 최종 Assistant Message만 GET한다. 부분
         Assistant·token은 저장·broadcast·streaming하지 않는다.
         같은 Chat에 RUNNING/PENDING 답변 Job이 있으면 409 CHAT_RESPONSE_IN_PROGRESS를
-        반환한다. 인증되지 않은 요청은 401, 비소유자·비멤버·삭제된 LIVE
-        Chat은 존재를 숨기는 404를 반환한다.
+        반환한다. 인증되지 않은 요청은 401, 비소유자·비멤버 Chat은 존재를
+        숨기는 404를 반환한다. Session 종료가 LIVE Chat을 먼저 삭제한 경쟁에서
+        기존 ID 요청의 HTTP status는 TBD이다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1985,8 +2045,9 @@ paths:
       summary: 저장된 Chat 메시지 단건 조회
       description: |
         현재도 Course 멤버인 Chat 소유자만 조회한다. CHAT_RESPONSE Job이
-        SUCCEEDED일 때 result.resource_url은 이 경로를 가리킨다. 비소유자·비멤버·
-        삭제된 LIVE Message에는 존재를 공개하지 않고 404를 반환한다.
+        SUCCEEDED일 때 result.resource_url은 이 경로를 가리킨다. 비소유자·비멤버에는
+        존재를 공개하지 않고 404를 반환한다. Session 종료로 삭제된 기존
+        LIVE Message ID의 HTTP status는 TBD이다.
       responses:
         "200":
           description: 저장된 USER 또는 최종 ASSISTANT Message
@@ -2014,8 +2075,9 @@ paths:
         개인 작업은 요청자, 공유 작업은 권한 있는 Course 멤버만 조회한다. 내부 스택,
         프롬프트 원문 또는 외부 모델 응답 원문은 오류에 포함하지 않는다. 개인 AI
         요청은 이 endpoint와 result URL을 요청자가 polling하며 별도 개인 스트림을 제공하지 않는다.
-        REQUESTER_ONLY Job의 비요청자·비멤버·삭제된 개인 LIVE Job에는 존재를
-        공개하지 않고 404를 반환한다.
+        REQUESTER_ONLY Job의 비요청자·비멤버에는 존재를 공개하지 않고
+        404를 반환한다. Session 종료로 삭제된 기존 개인 LIVE Job ID의 polling
+        HTTP status는 TBD이다.
       responses:
         "200":
           description: AI 작업 상태
@@ -2047,7 +2109,13 @@ paths:
         실행 token과 RUNNING 상태가 현재 실행과 모두 일치하지 않으면 반영하지 않는다. COMPLETED
         Session의 Job을 재시도해도 Session을 PROCESSING으로 되돌리지 않는다.
         RECORDING_TRANSCRIPTION 재시도는 현재 attempt에 귀속된 새 RECORDING/FINALIZING
-        TranscriptVersion을 만들고 이전 실패 version을 provenance로 보존한다.
+        TranscriptVersion을 만들고 이전 실패 version을 provenance로 보존한다. COMPLETED
+        후 성공하면 같은 SESSION_POSTPROCESSING coordinator 행을 attempt+1로 자동
+        requeue하고 Session 상태·completed_at을 유지한다. 복구 coordinator는 새 HQ
+        version의 Answer mapping·canonical Knowledge 연결을 멱등 재조정하고 새로 eligible한
+        FINAL_SUMMARY가 없으면 생성한다. 기존 ANSWER_ORGANIZATION Job·결과의 source를
+        변경하거나 자동 재생성하지 않는다. 별도 HQ 전용 endpoint·control은 추가하지
+        않고 이 기존 Course PROFESSOR 공용 retry 계약만 사용한다.
         retry_job_id에 예약된 LIVE_INCREMENTAL 클러스터링은 시스템 scheduler가 같은
         행을 재시도하며, 사용자가 이 endpoint를 호출하면 AI_JOB_RETRY_SYSTEM_MANAGED로
         거부한다. FINAL 클러스터링의 공개 재시도는 Session COMPLETED에서만 허용하고
@@ -2092,6 +2160,8 @@ paths:
         포함하지 않으며, 질문 초안은 동기 200 요청으로 처리하는 비 Job 기능이다.
         SESSION_POSTPROCESSING은 Session 종료 transaction에서
         SHARED·blocking PENDING coordinator로 생성되며 source terminal 전에는 claim하지 않는다.
+        COMPLETED 후 RECORDING_TRANSCRIPTION 복구 성공은 같은 coordinator를
+        attempt+1로 자동 requeue하며 사용자가 coordinator를 별도 retry할 필요가 없다.
         재시도는 별도 Job API의 권한 규칙을 따른다. 목록은 created_at DESC,
         id DESC로 정렬하고 job_type·status 필터를 cursor에 고정한다.
       parameters:
@@ -2580,9 +2650,11 @@ components:
         terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
         단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
         LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
-        purge_on_session_end로 표시하고 LIVE→PROCESSING transaction에서
-        결과·Job과 함께 삭제해, 삭제된 202·201 응답은 24시간 안이어도
-        재생하지 않는다. FINAL Summary와 mode=REVIEW Chat·관련 Job retry는
+        purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING transaction이 원
+        리소스·Job을 삭제하고 늦은 결과를 fence하는 것은 확정이지만,
+        멱등성 행을 조기 삭제할지 24시간 보존할지와 종료 후 같은 키에
+        기존 202·201을 재응답할지 별도 응답을 줄지는 TBD이다. FINAL Summary와
+        mode=REVIEW Chat·관련 Job retry는
         이 예외에 포함하지 않는다.
       schema:
         type: string
@@ -2599,9 +2671,10 @@ components:
         완료 시각부터 정확히 24시간 보관하고 재사용한다.
         단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
         LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
-        purge_on_session_end로 표시하고 LIVE→PROCESSING transaction에서
-        결과·Job과 함께 삭제한다. 삭제된 응답은 24시간 안이어도 재생하지
-        않는다. FINAL Summary와 mode=REVIEW Chat·관련 Job retry는 이 예외에
+        purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING이 원 리소스·
+        Job을 삭제하고 늦은 결과를 fence하되, 멱등성 행 조기 삭제·24시간
+        보존·종료 후 재응답은 TBD이다. FINAL Summary와 mode=REVIEW Chat·관련
+        Job retry는 이 예외에
         포함하지 않는다.
       schema:
         type: string
@@ -3962,11 +4035,15 @@ components:
           description: 첫 audio.start가 없었던 Session이면 null. 있으면 UPLOAD_PENDING Recording
         jobs:
           type: array
+          minItems: 1
+          maxItems: 2
           description: |
             종료 transaction에서 생성한 SHARED·blocking PENDING SESSION_POSTPROCESSING
-            coordinator를 포함한다. RECORDING_TRANSCRIPTION은 Recording upload complete
-            전에는 생성하지 않으며 그 응답에 별도로 포함한다. coordinator는
-            source terminal 전에 claim하지 않는다.
+            coordinator를 항상 포함하고, FINAL 대상이 1건 이상이면 같은 transaction에서
+            입력 상한을 고정한 SHARED·blocking FINAL QUESTION_CLUSTERING Job도 포함한다.
+            RECORDING_TRANSCRIPTION은 Recording upload complete 전에는 생성하지 않으며
+            그 응답에 별도로 포함한다. coordinator는 source terminal 전에 claim하지 않지만
+            FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다.
           items:
             $ref: "#/components/schemas/AIJob"
 
@@ -4471,6 +4548,7 @@ components:
         - answer_id
         - created_by_job_id
         - created_by_job_attempt
+        - created_in_generation
         - created_at
       properties:
         id:
@@ -4497,6 +4575,12 @@ components:
         created_by_job_attempt:
           type: integer
           minimum: 1
+        created_in_generation:
+          type: integer
+          minimum: 1
+          description: |
+            이 immutable 대표질문이 처음 생성된 Cluster generation.
+            이후 lifecycle_status=PRESERVED child로 이동해도 바뀌지 않는다.
         created_at:
           type: string
           format: date-time
@@ -4607,7 +4691,11 @@ components:
               format: date-time
 
     FinalQuestionCluster:
-      description: PROCESSING 후 원자 확정된 FINAL generation의 Cluster
+      description: |
+        PROCESSING 후 원자 확정된 FINAL generation의 Cluster. FINAL 성공은
+        eligible input 각각이 정확히 한 membership에 들어감을 보장한다.
+        분류 불가 input은 하나의 안정적인 `기타` Cluster에 들어가며 그
+        Cluster의 representative_question.content는 정확히 `기타`다.
       allOf:
         - $ref: "#/components/schemas/QuestionCluster"
         - type: object
@@ -4692,6 +4780,16 @@ components:
     QuestionClusterListResponse:
       type: object
       additionalProperties: false
+      description: |
+        scope=FINAL이면 eligible 학생 질문과 Answer cutoff에 포함된
+        AI 대표질문의 set과 전체 items의 membership set이 일치한다.
+        각 input은 정확히 한 번 등장하고 분류 불가 input은 하나의 `기타`
+        Cluster에 배치된다. 누락·중복·복수 `기타` Cluster는 성공 계약 위반이다.
+      x-final-membership-invariants:
+        eligible_input_cardinality: exactly-once
+        unclassifiable_input_target: single stable 기타 Cluster
+        fallback_representative_content: 기타
+        success_requires_set_equality: true
       required: [scope, clustering_state, generation, items, next_cursor]
       properties:
         scope:
@@ -4733,9 +4831,9 @@ components:
     QuestionClusterStudentMember:
       type: object
       additionalProperties: false
-      required: [member_kind, ordinal, question]
+      required: [source_kind, ordinal, question]
       properties:
-        member_kind:
+        source_kind:
           type: string
           const: STUDENT_QUESTION
         ordinal:
@@ -4747,11 +4845,11 @@ components:
     QuestionClusterRepresentativeMember:
       type: object
       additionalProperties: false
-      required: [member_kind, ordinal, representative_question]
+      required: [source_kind, ordinal, representative_question]
       properties:
-        member_kind:
+        source_kind:
           type: string
-          const: AI_REPRESENTATIVE_QUESTION
+          const: AI_REPRESENTATIVE
         ordinal:
           type: integer
           minimum: 0
@@ -4763,10 +4861,10 @@ components:
         - $ref: "#/components/schemas/QuestionClusterStudentMember"
         - $ref: "#/components/schemas/QuestionClusterRepresentativeMember"
       discriminator:
-        propertyName: member_kind
+        propertyName: source_kind
         mapping:
           STUDENT_QUESTION: "#/components/schemas/QuestionClusterStudentMember"
-          AI_REPRESENTATIVE_QUESTION: "#/components/schemas/QuestionClusterRepresentativeMember"
+          AI_REPRESENTATIVE: "#/components/schemas/QuestionClusterRepresentativeMember"
 
     QuestionClusterMemberListResponse:
       type: object
@@ -4975,7 +5073,10 @@ components:
           type: string
           const: TEXT
         target:
-          $ref: "#/components/schemas/AnswerTarget"
+          $ref: "#/components/schemas/AnswerTargetStudentQuestion"
+          description: |
+            COMPLETED Session의 미답변 status=OPEN 학생 질문만 허용한다.
+            AI 대표질문은 새 text-only Answer target이 아니다.
         text_content:
           type: string
           minLength: 1
@@ -4998,8 +5099,10 @@ components:
       properties:
         text_content:
           type: string
-          minLength: 1
-          description: 텍스트 최대 길이·삭제 정책은 TBD
+          description: |
+            텍스트 최대 길이와 빈 문자열·삭제 정책은 TBD이므로
+            이 PATCH schema는 길이 제약을 선결정하지 않는다.
+          x-empty-string-policy: TBD
 
     AnswerCompleteRequest:
       type: object
@@ -5565,8 +5668,12 @@ components:
         FAILED/SUMMARY_SOURCE_UNAVAILABLE이며 FINAL_SUMMARY Job을 생성하지 않는다.
         HQ source gate가 아직 terminal이 아닌 PROCESSING은 Job 없는 PENDING이
         정상이다. PROCESSING의 active Job은 attempt와 관계없이 PENDING·RUNNING이
-        정상이며, COMPLETED에서는 명시적 재시도 attempt>1만 정상이다. COMPLETED에서
-        최초 attempt=1이 PENDING·RUNNING이면 DATA_INTEGRITY_ERROR다. 반면
+        정상이며, COMPLETED에서는 명시적 Summary 재시도 attempt>1이 정상이다.
+        또한 HQ retry 성공 후 SESSION_POSTPROCESSING attempt>1 복구가 active이면
+        eligible source에 FINAL_SUMMARY Job이 아직 없거나 복구가 새로 생성한
+        attempt=1 Job이 PENDING·RUNNING인 것도 정상 PENDING이다. 복구 coordinator가
+        terminal이 된 뒤 eligible source에 Job이 없으면 DATA_INTEGRITY_ERROR다.
+        복구와 무관한 COMPLETED 최초 attempt=1 active Job은 DATA_INTEGRITY_ERROR다. 반면
         RECORDING/FINALIZED와 final Segment 1건 이상으로 생성
         자격이 확정됐는데 FINAL_SUMMARY Job이 없거나, SUCCEEDED Job의 Summary
         결과가 없거나, 필수 원장이 불일치하면 DATA_INTEGRITY_ERROR/reason=null이다.
@@ -5580,17 +5687,100 @@ components:
         - $ref: "#/components/schemas/FinalSummaryFailedState"
         - $ref: "#/components/schemas/FinalSummaryDataIntegrityErrorState"
 
+    SummaryListStatus:
+      type: string
+      enum:
+        [
+          NOT_STARTED,
+          PENDING,
+          AVAILABLE,
+          FAILED,
+          NOT_APPLICABLE,
+          DATA_INTEGRITY_ERROR,
+        ]
+      description: |
+        NOT_STARTED는 summary_type=LIVE의 READY 또는 요청 전 LIVE 정상 무요약
+        상태에만 사용한다. summary_type=FINAL은 FinalSummaryStatus 의미를
+        그대로 사용하고 NOT_STARTED를 사용하지 않는다.
+
+    SummaryListReason:
+      oneOf:
+        - $ref: "#/components/schemas/NoFinalTranscriptSummaryReason"
+        - $ref: "#/components/schemas/SummarySourceUnavailableReason"
+        - type: "null"
+      description: |
+        summary_status=NOT_APPLICABLE이면 NO_FINAL_TRANSCRIPT,
+        source unavailable FAILED이면 SUMMARY_SOURCE_UNAVAILABLE이다.
+        나머지 정상 조합과 Job 자체 실패는 null이다.
+
     SummaryListResponse:
       type: object
       additionalProperties: false
-      required: [items, next_cursor]
+      description: |
+        필수 summary_type query에 대한 목록과 aggregate 상태를 함께 반환한다.
+        LIVE의 READY·요청 전 LIVE 무요약은 NOT_STARTED/null이다.
+        FINAL은 /record.summary.state의 status·reason 조합을 그대로 projection한다.
+      x-summary-type-invariants:
+        LIVE:
+          not_started: READY or LIVE Session with no requested or stored Summary maps to NOT_STARTED with null reason
+        FINAL:
+          status_domain:
+            [PENDING, AVAILABLE, FAILED, NOT_APPLICABLE, DATA_INTEGRITY_ERROR]
+          forbidden_status: NOT_STARTED
+          projection_source: /record.summary.state
+      required: [summary_status, summary_reason, items, next_cursor]
       properties:
+        summary_status:
+          $ref: "#/components/schemas/SummaryListStatus"
+        summary_reason:
+          $ref: "#/components/schemas/SummaryListReason"
         items:
           type: array
           items:
             $ref: "#/components/schemas/LectureSummary"
         next_cursor:
           type: [string, "null"]
+      allOf:
+        - if:
+            properties:
+              summary_status:
+                const: NOT_STARTED
+            required: [summary_status]
+          then:
+            properties:
+              summary_reason:
+                type: "null"
+              items:
+                maxItems: 0
+        - if:
+            properties:
+              summary_status:
+                const: NOT_APPLICABLE
+            required: [summary_status]
+          then:
+            properties:
+              summary_reason:
+                $ref: "#/components/schemas/NoFinalTranscriptSummaryReason"
+        - if:
+            properties:
+              summary_status:
+                enum: [PENDING, AVAILABLE, DATA_INTEGRITY_ERROR]
+            required: [summary_status]
+          then:
+            properties:
+              summary_reason:
+                type: "null"
+        - if:
+            properties:
+              summary_status:
+                const: FAILED
+            required: [summary_status]
+          then:
+            properties:
+              summary_reason:
+                oneOf:
+                  - $ref: "#/components/schemas/SummarySourceUnavailableReason"
+                  - type: "null"
 
     ChatCreateRequest:
       type: object
@@ -5654,15 +5844,12 @@ components:
 
     ChatEvidenceSourceKind:
       type: string
-      enum:
-        - MATERIAL
-        - TRANSCRIPT_SEGMENT
-        - STUDENT_QUESTION
-        - AI_REPRESENTATIVE_QUESTION
-        - ANSWER
+      enum: [MATERIAL, TRANSCRIPT, QUESTION, ANSWER]
       description: |
-        KnowledgeChunk의 typed source FK에서 파생한 사용자 공개 유형.
-        내부 knowledge_chunk_id나 generic source ID를 노출하지 않는다.
+        사용자에게 공개하는 정확한 네 유형. 내부 Transcript Segment·학생 질문·
+        AI 대표질문 typed FK 구분을 공개 enum으로 노출하지 않고, 두 질문
+        유형은 모두 QUESTION으로 projection한다. knowledge_chunk_id나 generic source ID도
+        노출하지 않는다.
 
     ChatEvidenceBase:
       type: object
@@ -5706,50 +5893,45 @@ components:
                   pattern: "^/api/v1/materials/[^/?#]+/content(?:#page=[1-9][0-9]*)?$"
                 - type: "null"
 
-    TranscriptSegmentChatEvidence:
+    TranscriptChatEvidence:
       allOf:
         - $ref: "#/components/schemas/ChatEvidenceBase"
         - type: object
           properties:
             source_kind:
               type: string
-              const: TRANSCRIPT_SEGMENT
+              const: TRANSCRIPT
             link:
               oneOf:
                 - type: string
                   format: uri-reference
-                  pattern: "^/api/v1/transcript-segments/[^/?#]+$"
+                  pattern: '^/api/v1/sessions/[^/?#]+/transcript\?transcript_version_id=[^&#]+&start_sequence=[1-9][0-9]*&end_sequence=[1-9][0-9]*$'
+                  description: |
+                    Session·TranscriptVersion·inclusive stable sequence 범위를 고정한
+                    canonical 상대 경로. start_sequence는 end_sequence 이상이 아니어야
+                    하고 두 sequence는 같은 version의 final Segment여야 한다.
                 - type: "null"
 
-    StudentQuestionChatEvidence:
+    QuestionChatEvidence:
       allOf:
         - $ref: "#/components/schemas/ChatEvidenceBase"
         - type: object
           properties:
             source_kind:
               type: string
-              const: STUDENT_QUESTION
+              const: QUESTION
             link:
               oneOf:
                 - type: string
                   format: uri-reference
                   pattern: "^/api/v1/questions/[^/?#]+$"
-                - type: "null"
-
-    RepresentativeQuestionChatEvidence:
-      allOf:
-        - $ref: "#/components/schemas/ChatEvidenceBase"
-        - type: object
-          properties:
-            source_kind:
-              type: string
-              const: AI_REPRESENTATIVE_QUESTION
-            link:
-              oneOf:
                 - type: string
                   format: uri-reference
                   pattern: "^/api/v1/representative-questions/[^/?#]+$"
                 - type: "null"
+              description: |
+                학생 Question 또는 AI RepresentativeQuestion 안정 경로. 두 경로 모두
+                source_kind=QUESTION을 사용하고 하위 구분 enum을 노출하지 않는다.
 
     AnswerChatEvidence:
       allOf:
@@ -5773,23 +5955,21 @@ components:
         source가 공개에서 사라졌을 때만 link=null인 unavailable branch를 사용한다.
       oneOf:
         - $ref: "#/components/schemas/MaterialChatEvidence"
-        - $ref: "#/components/schemas/TranscriptSegmentChatEvidence"
-        - $ref: "#/components/schemas/StudentQuestionChatEvidence"
-        - $ref: "#/components/schemas/RepresentativeQuestionChatEvidence"
+        - $ref: "#/components/schemas/TranscriptChatEvidence"
+        - $ref: "#/components/schemas/QuestionChatEvidence"
         - $ref: "#/components/schemas/AnswerChatEvidence"
       discriminator:
         propertyName: source_kind
         mapping:
           MATERIAL: "#/components/schemas/MaterialChatEvidence"
-          TRANSCRIPT_SEGMENT: "#/components/schemas/TranscriptSegmentChatEvidence"
-          STUDENT_QUESTION: "#/components/schemas/StudentQuestionChatEvidence"
-          AI_REPRESENTATIVE_QUESTION: "#/components/schemas/RepresentativeQuestionChatEvidence"
+          TRANSCRIPT: "#/components/schemas/TranscriptChatEvidence"
+          QUESTION: "#/components/schemas/QuestionChatEvidence"
           ANSWER: "#/components/schemas/AnswerChatEvidence"
       examples:
-        - source_kind: TRANSCRIPT_SEGMENT
+        - source_kind: TRANSCRIPT
           label: 05:20~05:35 강의 내용
-          link: /api/v1/transcript-segments/segment_01HXYZ
-        - source_kind: AI_REPRESENTATIVE_QUESTION
+          link: /api/v1/sessions/session_01HXYZ/transcript?transcript_version_id=transcript_version_01HXYZ&start_sequence=42&end_sequence=47
+        - source_kind: QUESTION
           label: AI 대표질문
           link: null
 
@@ -5905,9 +6085,9 @@ components:
           role: ASSISTANT
           content: 음수 가중치가 있으면 벨만-포드 알고리즘을 사용할 수 있습니다.
           evidence:
-            - source_kind: TRANSCRIPT_SEGMENT
+            - source_kind: TRANSCRIPT
               label: 05:20~05:35 강의 내용
-              link: /api/v1/transcript-segments/segment_01HXYZ
+              link: /api/v1/sessions/session_01HXYZ/transcript?transcript_version_id=transcript_version_01HXYZ&start_sequence=42&end_sequence=47
           model_name: null
           prompt_version: prompt-v1
           created_at: "2026-07-13T10:00:02Z"
@@ -6000,8 +6180,10 @@ components:
           description: |
             AI_TIMEOUT, AI_SERVICE_UNAVAILABLE 등 provider 원문을 제거한 안전한 오류 코드.
             Session 10분 deadline이 생성·종료한 downstream Job은 SESSION_PROCESSING_TIMEOUT.
-            Session 종료가 중단한 LIVE clustering은 SESSION_ENDED, PRESERVED membership
-            취소가 stale 처리한 실행은 CLUSTER_REVISION_CHANGED이며 둘 다 retryable=false이다.
+            PRESERVED membership 취소가 stale 처리한 실행은
+            CLUSTER_REVISION_CHANGED, retryable=false이다. Session 종료가 중지한
+            LIVE clustering의 공개 terminal status·error를 CANCELLED/SUPERSEDED 또는
+            재시도 불가 FAILED 중 어떻게 표현할지는 TBD이다.
         message:
           type: string
           description: 프롬프트·모델 응답·내부 stack을 포함하지 않는 안전한 사용자 메시지
@@ -6070,12 +6252,18 @@ components:
       additionalProperties: false
       description: |
         RUNNING worker는 내부 heartbeat를 15초마다 보내 lease를 갱신하고 60초 미갱신 시
-        watchdog이 Job을 FAILED로 종료한다. HQ를 포함한 후처리 Job은 실행 시작 후
-        최대 5분이며, 이 lease는 Session WebSocket의 20초 ping과 별개다.
+        watchdog이 Job을 FAILED로 종료한다. RECORDING_TRANSCRIPTION을 제외한
+        일반 후처리 Job의 기본 실행 상한은 started_at+5분이다.
+        HQ STT RECORDING_TRANSCRIPTION 개별 Job timeout은 이 기본값에서 제외하며
+        정확한 상한은 TBD이다. 이 lease는 Session WebSocket의 20초 ping과 별개이고
+        Session 전체 ended_at+10분 deadline은 HQ에도 적용한다.
         Session 10분 deadline에 watchdog이 handoff를 보전하기 위해 생성하는 미생성
         downstream blocking Job은 FAILED, retryable=true, started_at=null, finished_at=now,
-        error.code=SESSION_PROCESSING_TIMEOUT이다. 단 eligible RECORDING/FINALIZED source의
-        누락 FINAL_SUMMARY Job은 합성하지 않고 Summary를 DATA_INTEGRITY_ERROR로 표시한다.
+        error.code=SESSION_PROCESSING_TIMEOUT이다. 누락된 FINAL QUESTION_CLUSTERING은
+        input_through_sequence=requested_sequence, base_revision=current_revision,
+        final_answered_through_at=Session.ended_at으로 원래 종료 상한을 복원한다. 단 eligible
+        RECORDING/FINALIZED source의 누락 FINAL_SUMMARY Job은 합성하지 않고 Summary를
+        DATA_INTEGRITY_ERROR로 표시한다.
       required:
         - id
         - session_id
@@ -6497,9 +6685,12 @@ components:
         Summary 본문을 embed하지 않고 상태와 안정적인 조회 경로만 반환하는
         compact index. HQ source gate 대기는 Job 없는 PENDING이 정상이다. 반면
         eligible RECORDING/FINALIZED source의 필수 Job 누락, SUCCEEDED Job의 결과
-        누락, COMPLETED에서 최초 attempt=1 Job이 active인 경우 또는 다른 필수
-        원장 불일치는 DATA_INTEGRITY_ERROR/reason=null로
+        누락 또는 다른 필수 원장 불일치는 DATA_INTEGRITY_ERROR/reason=null로
         감추고 summary_url을 null로 반환한다.
+        단 HQ retry 성공 후 SESSION_POSTPROCESSING attempt>1 복구가 active이면
+        eligible Job이 아직 없거나 새 attempt=1 FINAL_SUMMARY Job이 active인 상태는
+        PENDING이다. 복구 coordinator terminal 후에도 eligible Job이 없으면 무결성
+        오류이며, 복구와 무관한 COMPLETED 최초 attempt active도 무결성 오류다.
       required: [state, summary_url, summaries_url]
       properties:
         state:
@@ -7087,7 +7278,8 @@ x-recording-contract:
     failure_commit: RECORDING_TRANSCRIPTION failure or timeout removes or rolls back staged Segment and Gap rows, then atomically commits last_sequence 0, TranscriptVersion FAILED and Job FAILED
     failed_timeline: segments and gaps are both empty
     empty_timeline: segments is empty while gaps may contain final Gap entries
-    retry_version: each RECORDING_TRANSCRIPTION retry attempt creates a new RECORDING and FINALIZING TranscriptVersion while preserving prior failed versions
+    retry_version: each RECORDING_TRANSCRIPTION retry attempt uses the same Job row with attempt plus one and creates a new RECORDING and FINALIZING TranscriptVersion while preserving prior failed versions
+    completed_retry_success: automatically requeue the same SESSION_POSTPROCESSING coordinator row with attempt plus one without reverting Session COMPLETED; idempotently rebuild Answer mappings and canonical Knowledge links and create FINAL_SUMMARY if newly eligible, while preserving existing ANSWER_ORGANIZATION Jobs, results, and frozen sources
     answer_remap: SESSION_POSTPROCESSING later commits PENDING, SUCCEEDED or FAILED whole-range mapping; failure never rolls back HQ canonical and partial or unmapped detail enum is TBD
   playback:
     endpoint: GET /api/v1/recordings/{recording_id}/playback
@@ -7105,15 +7297,18 @@ x-recording-contract:
     - recording consent, role-based access, retention and deletion
     - permission-checked proxy playback versus opaque short-lived signed delivery URL
     - whether the preserved LIVE canonical is eligible as the completed record and Summary final source after RECORDING_TRANSCRIPTION failure or no-result deadline
+    - exact per-Job timeout for RECORDING_TRANSCRIPTION, which is excluded from the generic 5-minute postprocessing default while the 10-minute Session deadline remains fixed
     - partial or unmapped Answer remap detail enum and manual recovery policy
 
 x-contract-notes:
   worker_liveness:
     heartbeat_interval_seconds: 15
     lease_timeout_seconds: 60
-    postprocessing_job_timeout_seconds: 300
+    generic_postprocessing_job_timeout_seconds: 300
+    generic_timeout_excludes: [RECORDING_TRANSCRIPTION]
+    recording_transcription_job_timeout_seconds: TBD
     websocket_ping_seconds: 20
-    note: worker heartbeat and lease are internal execution liveness and are independent from WebSocket ping
+    note: worker heartbeat and lease are fixed internal execution liveness values independent from WebSocket ping; the Session-wide processing deadline remains 600 seconds even though the HQ per-Job timeout is TBD
   session_processing_deadline:
     starts_at: LectureSession.ended_at
     timeout_seconds: 600
@@ -7124,6 +7319,7 @@ x-contract-notes:
       started_at: null
       finished_at: watchdog transaction time
       error_code: SESSION_PROCESSING_TIMEOUT
+      missing_final_clustering_input: input_through_sequence is current requested_sequence, base_revision is current_revision, and final_answered_through_at is LectureSession.ended_at
       excludes: eligible RECORDING FINALIZED source missing FINAL_SUMMARY; project DATA_INTEGRITY_ERROR without synthesizing a Job
     summary_state_before_terminal:
       recording_finalized_missing_final_summary: DATA_INTEGRITY_ERROR with null reason; never synthesize a FINAL_SUMMARY Job
@@ -7138,6 +7334,18 @@ x-contract-notes:
     atomic_terminal: commit coordinator terminal, downstream blocking Job creation and outbox in one transaction before completion reevaluation
     watchdog_terminal: the 10-minute watchdog synthesizes applicable missing downstream blocking Jobs before failing the coordinator, except an eligible missing FINAL_SUMMARY which remains DATA_INTEGRITY_ERROR without a synthetic Job
     failure_isolation: Answer mapping or Knowledge relink failure never rolls back the committed HQ Transcript or canonical pointer
+    completed_hq_retry_recovery:
+      trigger: a retry of the same RECORDING_TRANSCRIPTION row succeeds after Session COMPLETED
+      requeue: automatically move the same SESSION_POSTPROCESSING row to attempt plus one
+      session_state: keep COMPLETED and preserve completed_at
+      idempotent_rebuild:
+        [
+          Answer mappings for the new canonical HQ version,
+          canonical Knowledge links,
+        ]
+      create_if_newly_eligible_and_missing: FINAL_SUMMARY
+      immutable_existing_outputs: never mutate or silently regenerate an existing ANSWER_ORGANIZATION Job, result, or frozen source
+      public_control: use only the already specified Course PROFESSOR generic AIJob retry endpoint for the failed RECORDING_TRANSCRIPTION; no separate HQ retry endpoint or control
   final_summary:
     create_job_only_when: latest HQ TranscriptVersion has source RECORDING, status FINALIZED and at least one final Segment
     recording_empty: no Job; NOT_APPLICABLE with NO_FINAL_TRANSCRIPT
@@ -7152,7 +7360,10 @@ x-contract-notes:
       source_gate_waiting_without_job: PENDING with null reason; normal during PROCESSING
       processing_any_attempt_pending_or_running: PENDING with null reason
       completed_explicit_retry_attempt_greater_than_one_pending_or_running: PENDING with null reason
-      completed_initial_attempt_pending_or_running: DATA_INTEGRITY_ERROR with null reason and null summary_url
+      completed_active_hq_recovery_missing_final_summary_job: PENDING with null reason
+      completed_hq_recovery_created_initial_attempt_pending_or_running: PENDING with null reason
+      completed_hq_recovery_terminal_and_eligible_source_missing_job: DATA_INTEGRITY_ERROR with null reason and null summary_url
+      completed_initial_attempt_pending_or_running_unrelated_to_hq_recovery: DATA_INTEGRITY_ERROR with null reason and null summary_url
       succeeded_job_with_matching_summary: AVAILABLE with null reason and non-null summary_url
       failed_job: FAILED with null reason
       recording_empty_without_job: NOT_APPLICABLE with NO_FINAL_TRANSCRIPT
@@ -7195,15 +7406,22 @@ x-contract-notes:
     live_identity: expose a stable logical Cluster ID across LIVE generations; physical generation rows are internal and FINAL full rebuild allocates new logical IDs
     representative_refresh: create immutable representative Questions only for affected Clusters; representative generation is part of Job success
     coalescing: Questions committed while a Job is active or retry-reserved remain pending and are batched by the next fresh Job
-    session_end: fail active or retry-reserved LIVE Job with SESSION_ENDED and retryable false, fence late results, and stop LIVE reruns
+    session_end: fence active or retry-reserved LIVE execution and retries, reject late results, and stop LIVE reruns; public terminal representation as CANCELLED or SUPERSEDED versus nonretryable FAILED is TBD
     final_creation: when eligible input exists, the same LIVE-to-PROCESSING transaction creates the SHARED blocking FINAL Job and outbox without waiting for Recording, HQ Transcript or the coordinator; zero-input semantics remain TBD
     final_input: student Questions through the fixed captured requested sequence plus AI representative Questions whose Answer completed by the cutoff; initial cutoff is Session ended_at and an explicit retry of a failed FINAL Job recaptures it at retry acceptance
+    watchdog_recovery: a missing eligible FINAL ledger is synthesized as FAILED and retryable with input_through_sequence equal to current requested_sequence, base_revision equal to current_revision, and final_answered_through_at equal to Session ended_at
     final_mode: rebuild every eligible input placement from scratch and create an is_final generation
+    final_success_invariant: every eligible input appears in exactly one membership; omissions and duplicates reject success
+    final_unclassifiable_input: place it in one stable fallback Cluster whose public representative content is exactly 기타
     result: the current successful Job points to a QUESTION_CLUSTER_GENERATION list aggregate; a replaced generation returns null result with SUPERSEDED
     events: every externally visible watermark, active or retry Job, revision, generation, or last Job transition commits clustering.updated with the post-commit state
     answer_independence: an Answer for a representative Question does not mark its child Questions answered
     discarded_representatives: exclude unanswered replaced or cancelled-PRESERVED representatives from public Cluster, direct lookup and RAG immediately; hard delete when Evidence count is zero, otherwise retain an internal DISCARDED tombstone and KnowledgeChunk only for provenance with Evidence link null; the transaction deleting the last Evidence atomically hard deletes the tombstone and Chunk
     public_representative_lifecycle: [ACTIVE, PRESERVED]
+    representative_public_provenance: created_in_generation is required, integer at least one, and immutable across PRESERVED movement
+    membership_public_discriminator:
+      property: source_kind
+      values: [STUDENT_QUESTION, AI_REPRESENTATIVE]
     tbd: similarity threshold, model, prompt, quality score, retry backoff and maximum attempts, post-completion text Answer rebuild policy, zero-input FINAL Job and generation semantics, cursor expiry or restart during generation replacement, preload page count, and large mind-map layout
   answer_organization:
     trigger: completed VOICE Answers expose WAITING_SOURCE without a Job during PROCESSING; after source selection SESSION_POSTPROCESSING creates one SHARED blocking ANSWER_ORGANIZATION Job for each
@@ -7212,6 +7430,17 @@ x-contract-notes:
     retry: failed Job only, same row and fixed source with attempt plus one; a successful Job is not regenerated in MVP
     timeout: synthesize a FAILED Job for every applicable Answer before the 10-minute completion reconciliation
     tbd: organization format, maximum length, model, prompt, quality criteria, and whether/how to reindex the result as a KnowledgeChunk including producer and transaction ownership
+  completed_text_answers:
+    create_new_text_only: unanswered STUDENT_QUESTION only
+    forbidden_new_targets:
+      [
+        FINAL or review-only representative Question,
+        unanswered ACTIVE representative Question,
+        any other representative Question,
+      ]
+    update_existing_completed_text_content: completed Answer targeting a student Question or an answer-completed PRESERVED representative Question
+    immutable_on_update:
+      [target, target_text_snapshot, original voice Transcript range]
   record_manifest:
     bounded_embeds: [session, authorized_recording_metadata]
     state_indexes: [transcript, final_summary, question_clustering]
@@ -7238,7 +7467,7 @@ x-contract-notes:
     pagination: opaque keyset cursor with default limit 20 and maximum 100 on each dedicated list endpoint
     question_link_sort: RECENT using created_at DESC and id DESC
     count_semantics: value at the record response transaction and not a cross-request list snapshot token
-    transcript_timeline: selected_version_id non-null requires the same value in the transcript_version_id query; null requires the query-free base URL
+    transcript_timeline: selected_version_id non-null requires the same value in the transcript_version_id query; a stable range anchor additionally requires paired start_sequence and end_sequence on that same final version
   chat_evidence:
     public_fields: [source_kind, label, link]
     hidden_fields:
@@ -7249,22 +7478,15 @@ x-contract-notes:
         pagination_cursor,
         array_position,
       ]
-    source_kinds:
-      [
-        MATERIAL,
-        TRANSCRIPT_SEGMENT,
-        STUDENT_QUESTION,
-        AI_REPRESENTATIVE_QUESTION,
-        ANSWER,
-      ]
+    source_kinds: [MATERIAL, TRANSCRIPT, QUESTION, ANSWER]
+    internal_question_distinctions_are_not_public_enum: true
     link_rule: each source_kind is a discriminated branch whose non-null link must match its anchored public relative path; null only when no safe navigation target remains
-    unavailable_representative: keep source_kind and label with link null for an internal DISCARDED tombstone; direct lookup remains 404
+    unavailable_representative: keep source_kind QUESTION and label with link null for an internal DISCARDED tombstone; direct lookup remains 404
     discarded_cleanup: deleting the last Evidence atomically hard deletes the DISCARDED representative tombstone and KnowledgeChunk in the same transaction
     stable_targets:
       material: "/api/v1/materials/{material_id}/content with optional #page={page_number} when page_number is non-null"
-      transcript: "/api/v1/transcript-segments/{start_segment_id}"
-      student_question: "/api/v1/questions/{question_id}"
-      representative_question: "/api/v1/representative-questions/{representative_question_id}"
+      transcript: "/api/v1/sessions/{session_id}/transcript?transcript_version_id={transcript_version_id}&start_sequence={start_sequence}&end_sequence={end_sequence}"
+      question: "/api/v1/questions/{question_id} or /api/v1/representative-questions/{representative_question_id}; both use source_kind QUESTION"
       answer: "/api/v1/answers/{answer_id}"
   chat_message_provenance:
     USER: job_id, model_name and prompt_version are null; evidence is empty
@@ -7275,7 +7497,7 @@ x-contract-notes:
     targets:
       [
         material content,
-        transcript segment,
+        transcript version and stable sequence range,
         student question,
         AI representative question,
         answer,
@@ -7294,7 +7516,7 @@ x-contract-notes:
       mismatch: 409 SESSION_STATE_CONFLICT
     job_endpoint: GET /api/v1/jobs/{job_id}
     result: use AIJob.result.resource_url to fetch the stored Summary or final Assistant Message
-    visibility: requester and current Course member only; conceal nonowner, nonrequester, nonmember, deleted resources with 404
+    visibility: requester and current Course member only; conceal nonowner, nonrequester, and nonmember with 404; the owner-facing status for resources deleted by LIVE end purge is TBD
     persisted_generation_output: successful final Summary or Assistant Message only
     partial_output: never persisted or shared
     websocket_events: none; no SSE, streaming HTTP or personal WebSocket
@@ -7309,8 +7531,9 @@ x-contract-notes:
           requester-only LIVE_SUMMARY jobs,
           requester-only CHAT_RESPONSE jobs belonging to LIVE chats,
         ]
-      idempotency: delete records marked purge_on_session_end in the same transaction so stale 202 or 201 responses are not replayed
-      late_worker_results: rejected by missing Job and run-token fence
+      idempotency: mark related records purge_on_session_end, but early row deletion versus 24-hour retention and the post-purge replay response are TBD
+      old_resource_and_job_polling_status: TBD
+      late_worker_results: rejected by Job, target, Session state, attempt, and run-token fences
       unaffected:
         [FINAL summaries, REVIEW chats, related jobs and idempotency records]
     chat_turn_transaction:

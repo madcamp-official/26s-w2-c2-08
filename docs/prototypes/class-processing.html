@@ -13,19 +13,40 @@
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
       Static prototype · 가능한 서버 시나리오:
-      <a href="?role=professor&amp;scenario=uploading">업로드 중</a> ·
-      <a href="?role=professor&amp;scenario=transcribing">HQ STT 중</a> ·
-      <a href="?role=professor&amp;scenario=organizing">AI 정리 중</a> ·
-      <a href="?role=professor&amp;scenario=finishing-with-failure"
+      <a data-scenario-link href="?role=professor&amp;scenario=uploading"
+        >업로드 중</a
+      >
+      ·
+      <a data-scenario-link href="?role=professor&amp;scenario=upload-failed"
+        >업로드 실패</a
+      >
+      ·
+      <a data-scenario-link href="?role=professor&amp;scenario=transcribing"
+        >HQ STT 중</a
+      >
+      ·
+      <a data-scenario-link href="?role=professor&amp;scenario=empty"
+        >문장 없음</a
+      >
+      ·
+      <a data-scenario-link href="?role=professor&amp;scenario=organizing"
+        >AI 정리 중</a
+      >
+      ·
+      <a
+        data-scenario-link
+        href="?role=professor&amp;scenario=finishing-with-failure"
         >부분 실패</a
       >
     </div>
     <main class="container page-main" id="mainContent">
-      <header class="subpage-heading">
+      <header class="subpage-heading" data-processing-header>
         <div>
-          <p class="eyebrow">CLASS_PROCESSING_STATE · PROCESSING</p>
+          <p class="eyebrow" data-session-state-label>
+            CLASS_PROCESSING_STATE · PROCESSING
+          </p>
           <h1 id="processingTitle">그래프 탐색과 최단 경로</h1>
-          <p>
+          <p data-session-time-label>
             2026년 7월 12일 10:00 시작 · 10:52 종료 ·
             <span data-role-label>교수자</span> 화면
           </p>
@@ -41,9 +62,9 @@
       <section
         id="processingView"
         data-demo-state="processing"
-        aria-labelledby="processingStatusTitle"
+        aria-label="class 기록 상태"
       >
-        <div data-show-state="processing">
+        <div data-show-state="processing normal">
           <div class="processing-overview" aria-live="polite">
             <div>
               <span class="status-chip status-chip--warning">PROCESSING</span>
@@ -92,18 +113,31 @@
                   <p>전송할 원본 녹음을 마감하고 있습니다.</p>
                 </div>
                 <div data-show-state="in-progress" hidden>
-                  <strong>업로드 중 · 서버 확인 38%</strong>
+                  <strong data-professor-only>업로드 중 · 서버 확인 38%</strong>
+                  <strong data-student-only>원본 녹음 업로드 중</strong>
                   <div
                     class="recording-player__track"
                     style="--recording-progress: 38%"
+                    data-professor-only
                   >
                     <span></span>
                   </div>
-                  <p>업로드가 끝날 때까지 Session은 PROCESSING을 유지합니다.</p>
+                  <p data-professor-only>
+                    업로드가 끝날 때까지 Session은 PROCESSING을 유지합니다.
+                  </p>
+                  <p data-student-only>
+                    publisher가 원본 녹음을 저장하고 있습니다. 정확한 offset은
+                    publisher에게만 표시합니다.
+                  </p>
                 </div>
                 <div data-show-state="interrupted" hidden role="alert">
                   <strong>업로드 연결이 중단됐습니다</strong>
-                  <p>서버가 확인한 위치부터 이어 보내야 합니다.</p>
+                  <p data-professor-only>
+                    서버가 확인한 위치부터 이어 보내야 합니다.
+                  </p>
+                  <p data-student-only>
+                    publisher의 업로드 재개를 기다리고 있습니다.
+                  </p>
                   <button
                     class="button button--secondary"
                     type="button"
@@ -159,6 +193,16 @@
                   <p>
                     현재 canonical은 LIVE version 1이며 HQ version은 아직
                     없습니다.
+                  </p>
+                </div>
+                <div data-show-state="source-unavailable" hidden>
+                  <span class="badge">RECORDING version 없음</span>
+                  <h3>
+                    원본 녹음을 저장하지 못해 HQ STT를 시작하지 않았습니다
+                  </h3>
+                  <p>
+                    LIVE canonical version 1은 보존됩니다. 완료 기록의 final
+                    source 인정 여부는 아직 미정입니다.
                   </p>
                 </div>
                 <div data-show-state="finalizing">
@@ -352,10 +396,21 @@
                     </p>
                     <p>ANSWER_ORGANIZATION · RUNNING · attempt 1 · blocking</p>
                   </div>
+                  <div data-show-state="running-live-fallback" hidden>
+                    <p>
+                      canonical mapping · 없음 또는 FAILED · immutable LIVE
+                      version 1 sequence 128~130 fallback 고정
+                    </p>
+                    <p>ANSWER_ORGANIZATION · RUNNING · attempt 1 · blocking</p>
+                  </div>
                   <div data-show-state="failed" hidden>
                     <p>canonical mapping · FAILED · 원본 LIVE 범위 fallback</p>
                     <p>ANSWER_ORGANIZATION · FAILED · attempt 1</p>
                     <p>교수자 text와 원본 범위는 계속 열람할 수 있습니다.</p>
+                  </div>
+                  <div data-show-state="data-error" hidden role="alert">
+                    <p>Answer source 또는 Job 원장을 확인할 수 없습니다.</p>
+                    <p>DATA_INTEGRITY_ERROR · 내부 식별자와 원문은 숨김</p>
                   </div>
                   <div data-show-state="succeeded" hidden>
                     <p>
@@ -394,14 +449,25 @@
                     <small>materials · list_url</small><strong>2</strong>
                   </div>
                   <div class="record-manifest__item">
+                    <small>recording · authorized metadata</small
+                    ><strong data-manifest-recording>UPLOADED</strong>
+                  </div>
+                  <div class="record-manifest__item">
                     <small>transcript timeline_url</small
-                    ><strong>129 + gap 1</strong>
+                    ><strong data-manifest-transcript
+                      >LIVE v1 · 129 + gap 1</strong
+                    >
                   </div>
                   <div class="record-manifest__item">
-                    <small>questions · list_url</small><strong>24</strong>
+                    <small>final_summary · state</small
+                    ><strong data-manifest-summary>PENDING</strong>
                   </div>
                   <div class="record-manifest__item">
-                    <small>answers · list_url</small><strong>3</strong>
+                    <small>questions / CURRENT·FINAL clusters</small
+                    ><strong data-manifest-clusters>24 / 4·RUNNING</strong>
+                  </div>
+                  <div class="record-manifest__item">
+                    <small>answers / shared jobs</small><strong>3 / 7</strong>
                   </div>
                 </div>
                 <button
@@ -415,7 +481,10 @@
 
               <section
                 class="panel record-section"
+                id="storedRecordRegion"
+                data-demo-state="normal"
                 data-page-region
+                data-page-success-state="normal"
                 aria-labelledby="storedRecordTitle"
               >
                 <div class="record-section__heading">
@@ -426,61 +495,206 @@
                     </p>
                   </div>
                 </div>
-                <div class="record-preview">
-                  <details open>
-                    <summary>강의자료 · 2개</summary>
-                    <p>그래프-탐색.pdf · 보충-예제.pdf · 읽기 전용</p>
-                  </details>
-                  <details open>
-                    <summary>LIVE canonical · version 1</summary>
-                    <p>
-                      저장 Segment 129개와 임시 Gap을 timeline cursor로
-                      조회합니다.
+                <div data-show-state="normal page-error">
+                  <div class="record-preview">
+                    <details open>
+                      <summary>강의자료 · 2개</summary>
+                      <p>그래프-탐색.pdf · 보충-예제.pdf · 읽기 전용</p>
+                    </details>
+                    <details open>
+                      <summary data-transcript-preview-title>
+                        LIVE canonical · version 1
+                      </summary>
+                      <p data-transcript-preview-copy>
+                        저장 Segment 129개와 임시 Gap을 timeline cursor로
+                        조회합니다.
+                      </p>
+                    </details>
+                    <details>
+                      <summary>원본 질문 24개 · Answer 3개</summary>
+                      <p>
+                        Final clustering 실패와 무관하게 각 목록 경로에서
+                        조회합니다.
+                      </p>
+                    </details>
+                    <details
+                      id="finalClusterPreview"
+                      data-demo-state="running"
+                      open
+                    >
+                      <summary>Final Cluster</summary>
+                      <p data-show-state="running">
+                        성공한 final_generation이 생긴 뒤에만 중앙 대표질문과
+                        typed child를 표시합니다.
+                      </p>
+                      <div data-show-state="succeeded" hidden>
+                        <p>
+                          is_final=true · finalized_at 10:54:22 · ordinal 1 / 4
+                        </p>
+                        <div class="record-cluster-map">
+                          <div class="record-cluster-map__center">
+                            <span class="badge"
+                              >AI 대표질문 · 중앙 ·
+                              created_in_generation=7</span
+                            >
+                            <strong
+                              >음수 가중치와 최단 경로는 어떤
+                              관계인가요?</strong
+                            >
+                          </div>
+                          <ul
+                            class="record-cluster-map__branches"
+                            aria-label="최종 대표질문의 하위 질문"
+                          >
+                            <li>
+                              <small>source_kind=STUDENT_QUESTION</small
+                              ><br />음수 간선은 왜 문제가 되나요?
+                            </li>
+                            <li>
+                              <small
+                                >source_kind=AI_REPRESENTATIVE ·
+                                created_in_generation=6 · 답변 보존</small
+                              ><br />벨만-포드는 어떻게 다른가요?
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                      <p data-show-state="failed" hidden role="alert">
+                        마지막 FINAL Job이 FAILED입니다. 기존 질문과 Answer
+                        목록은 그대로 열 수 있습니다.
+                      </p>
+                    </details>
+                  </div>
+                  <div class="record-pagination">
+                    <p data-page-status role="status">
+                      첫 cursor 페이지를 불러왔습니다.
                     </p>
-                  </details>
-                  <details>
-                    <summary>원본 질문 24개 · Answer 3개</summary>
-                    <p>
-                      Final clustering 실패와 무관하게 각 목록 경로에서
-                      조회합니다.
-                    </p>
-                  </details>
-                  <details>
-                    <summary>Final Cluster</summary>
-                    <p data-final-cluster-preview>
-                      성공한 final_generation이 생긴 뒤에만 중앙 대표질문과
-                      typed child를 표시합니다.
-                    </p>
-                  </details>
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-load-more
+                      data-show-state="normal"
+                    >
+                      다음 페이지 더 보기
+                    </button>
+                  </div>
+                  <p
+                    class="notice notice--warning"
+                    data-show-state="page-error"
+                    hidden
+                    role="alert"
+                  >
+                    이미 불러온 기록은 유지했습니다. 다음 cursor 페이지만 다시
+                    요청할 수 있습니다.
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-page-retry
+                    >
+                      같은 cursor 재시도
+                    </button>
+                  </p>
+                  <p class="record-page-extra" data-page-extra hidden>
+                    다음 cursor의 저장 질문을 기존 항목 아래에 추가했습니다.
+                  </p>
                 </div>
-                <div class="record-pagination">
-                  <p data-page-status role="status">
-                    첫 cursor 페이지를 불러왔습니다.
+                <div data-show-state="loading" hidden aria-busy="true">
+                  <div class="skeleton skeleton--title"></div>
+                  <p>이 기록 영역의 첫 cursor 페이지를 불러오는 중입니다.</p>
+                </div>
+                <div data-show-state="error" hidden role="alert">
+                  <h3>저장 기록 첫 페이지를 불러오지 못했습니다</h3>
+                  <p>
+                    처리 Job과 다른 저장 기록은 유지합니다. 이 공개 조회 경로만
+                    다시 요청합니다.
                   </p>
                   <button
-                    class="button button--ghost"
+                    class="button button--secondary"
                     type="button"
-                    data-load-more
+                    data-record-region-retry
                   >
-                    다음 페이지 더 보기
+                    이 영역 다시 조회
                   </button>
                 </div>
-                <p class="record-page-extra" data-page-extra hidden>
-                  다음 cursor의 저장 질문을 기존 항목 아래에 추가했습니다.
-                </p>
               </section>
 
               <section class="panel">
                 <h2>Worker 장애·제한 시간</h2>
                 <p>
-                  Worker heartbeat 15초, lease 60초, Job 5분, Session 10분
-                  기준은 서버가 판정합니다. 브라우저가 자체 타이머로 실패를
+                  Worker heartbeat 15초, lease 60초, HQ STT를 제외한 일반 Job
+                  5분, Session 10분 기준은 서버가 판정합니다. HQ STT 개별
+                  timeout은 아직 미정입니다. 브라우저가 자체 타이머로 실패를
                   만들지 않고 서버의 FAILED와 안전한 오류만 표시합니다.
                 </p>
               </section>
             </aside>
           </div>
         </div>
+
+        <section
+          class="panel course-page-loading"
+          data-show-state="loading"
+          hidden
+          aria-busy="true"
+        >
+          <div class="skeleton skeleton--title"></div>
+          <span class="sr-only">class 기록 manifest 로딩 중</span>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="error"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <h2>기록 정리 상태를 불러오지 못했습니다</h2>
+            <button
+              class="button button--primary"
+              type="button"
+              data-manifest-retry
+              data-state-target="#processingView"
+            >
+              manifest 다시 조회
+            </button>
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="forbidden"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <h2>Course 접근 권한이 없습니다</h2>
+            <a class="button button--primary" href="dashboard.html"
+              >대시보드로 이동</a
+            >
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="expired"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <h2>로그인이 만료되었습니다</h2>
+            <a class="button button--primary" href="main.html">다시 로그인</a>
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="not-found"
+          hidden
+          role="alert"
+        >
+          <div class="state-panel__content">
+            <h2>class 기록을 찾을 수 없습니다</h2>
+            <a class="button button--primary" href="dashboard.html"
+              >대시보드로 이동</a
+            >
+          </div>
+        </section>
 
         <section
           class="state-panel completion-card"

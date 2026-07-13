@@ -45,8 +45,10 @@
           <div class="record-availability">
             <span class="status-chip status-chip--success">COMPLETED</span>
             <span class="badge">PDF 3 / 10</span>
-            <span class="badge">RECORDING v2 canonical</span>
-            <span class="badge">부분 실패 1</span>
+            <span class="badge" data-recording-availability
+              >RECORDING v2 canonical</span
+            >
+            <span class="badge" data-record-health>부분 실패 있음</span>
           </div>
           <div class="record-admin-actions">
             <button
@@ -95,13 +97,15 @@
             </div>
             <div class="record-manifest__item">
               <small>Transcript · selected version</small
-              ><strong>132 + gap 1</strong>
+              ><strong data-manifest-transcript>132 + gap 1</strong>
             </div>
             <div class="record-manifest__item">
-              <small>questions / final clusters</small><strong>24 / 4</strong>
+              <small>questions / final clusters</small
+              ><strong data-manifest-question-clusters>24 / 4</strong>
             </div>
             <div class="record-manifest__item">
-              <small>answers / shared jobs</small><strong>3 / 7</strong>
+              <small>answers / shared jobs</small
+              ><strong data-manifest-answers-jobs>3 / 7</strong>
             </div>
           </section>
           <p class="record-data-note">
@@ -274,6 +278,7 @@
                 <div
                   class="recording-player"
                   data-recording-player
+                  data-recording-duration="52:14"
                   data-demo-state="checking"
                   data-query-state="playback"
                   data-query-default="checking"
@@ -373,11 +378,86 @@
                     </button>
                   </div>
                 </div>
+                <div
+                  class="recording-seek-status"
+                  data-recording-seek-status
+                  data-demo-state="idle"
+                  data-query-state="seek"
+                  data-query-default="idle"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <p class="sr-only" data-seek-announcement>
+                    Transcript 녹음 위치 이동을 기다립니다.
+                  </p>
+                  <div data-show-state="idle">
+                    <strong>Transcript 위치 이동 대기</strong>
+                    <p>
+                      문장 또는 Answer의 음성 링크를 선택해도 재생은 자동으로
+                      시작하지 않습니다.
+                    </p>
+                  </div>
+                  <div data-show-state="seeking" hidden aria-busy="true">
+                    <strong
+                      ><span data-seek-label>10:31</span> 위치 확인 중</strong
+                    >
+                    <p>현재 권한과 stable recording offset을 확인합니다.</p>
+                    <div
+                      class="record-admin-actions"
+                      aria-label="정적 위치 이동 결과 fixture"
+                    >
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-seek-outcome="active"
+                      >
+                        이동 성공 fixture
+                      </button>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-seek-outcome="seek-error"
+                      >
+                        이동 실패 fixture
+                      </button>
+                    </div>
+                  </div>
+                  <div data-show-state="active" hidden>
+                    <strong
+                      ><span data-seek-label>10:31</span> 위치 이동 완료</strong
+                    >
+                    <p>재생은 시작하지 않았습니다. 사용자가 직접 시작합니다.</p>
+                    <button
+                      class="button button--primary"
+                      type="button"
+                      data-seek-play
+                    >
+                      이 위치에서 재생
+                    </button>
+                  </div>
+                  <div data-show-state="seek-error" hidden role="alert">
+                    <strong
+                      ><span data-seek-label>10:31</span> 위치로 이동하지
+                      못했습니다</strong
+                    >
+                    <p>
+                      player와 완료 기록은 유지하며 같은 offset만 재시도합니다.
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-seek-retry
+                    >
+                      같은 위치 다시 시도
+                    </button>
+                  </div>
+                </div>
               </section>
 
               <section
                 class="panel record-section"
                 id="profSummary"
+                data-record-summary
                 data-demo-state="normal"
                 data-query-state="summary"
                 data-query-default="normal"
@@ -386,11 +466,13 @@
                 <div class="record-section__heading">
                   <div>
                     <h2 id="profSummaryTitle">FINAL 강의 요약</h2>
-                    <p>
+                    <p data-summary-source>
                       최신 HQ RECORDING FINALIZED source에 고정된 결과입니다.
                     </p>
                   </div>
-                  <span class="record-region-status">FINAL · AVAILABLE</span>
+                  <span class="record-region-status" data-summary-status
+                    >FINAL · AVAILABLE</span
+                  >
                 </div>
                 <div data-show-state="normal">
                   <h3>다익스트라 알고리즘의 핵심</h3>
@@ -439,6 +521,11 @@
                 class="panel record-section"
                 id="profTranscript"
                 data-page-region
+                data-page-success-state="finalized"
+                data-record-transcript
+                data-final-segments="132"
+                data-final-gaps="1"
+                data-total-items="133"
                 data-demo-state="finalized"
                 data-query-state="transcript"
                 data-query-default="finalized"
@@ -447,12 +534,14 @@
                 <div class="record-section__heading">
                   <div>
                     <h2 id="profTranscriptTitle">Final Transcript</h2>
-                    <p>
+                    <p data-transcript-meta>
                       RECORDING · version 2 · canonical · FINALIZED · 기술적
                       완료
                     </p>
                   </div>
-                  <span class="record-region-status">SEGMENT 132 · GAP 1</span>
+                  <span class="record-region-status" data-transcript-count
+                    >SEGMENT 132 · GAP 1</span
+                  >
                 </div>
                 <div data-show-state="finalized page-error">
                   <ol class="record-timeline" id="professorFinalTranscript">
@@ -484,6 +573,7 @@
                         class="button button--ghost"
                         type="button"
                         data-recording-seek
+                        data-seek-default
                         data-recording-label="10:31"
                         aria-label="10분 31초 문장부터 녹음 재생"
                       >
@@ -511,13 +601,14 @@
                   </ol>
                   <div class="record-pagination">
                     <p data-page-status role="status">
-                      <span data-loaded-count data-loaded-complete="3">2</span>
+                      <span data-loaded-count data-loaded-complete="4">3</span>
                       / 133 항목
                     </p>
                     <button
                       class="button button--secondary"
                       type="button"
                       data-load-more
+                      data-show-state="finalized"
                     >
                       Transcript 더 보기
                     </button>
@@ -576,6 +667,7 @@
                 class="panel record-section"
                 id="profQuestions"
                 data-page-region
+                data-page-success-state="normal"
                 data-demo-state="normal"
                 data-query-state="questions"
                 data-query-default="normal"
@@ -632,6 +724,7 @@
                     class="button button--secondary"
                     type="button"
                     data-load-more
+                    data-show-state="normal"
                   >
                     질문 더 보기
                   </button>
@@ -663,6 +756,11 @@
                 class="panel record-section"
                 id="profClusters"
                 data-page-region
+                data-page-success-state="normal"
+                data-record-clusters
+                data-question-count="24"
+                data-final-cluster-count="4"
+                data-finalized-at="10:54:22"
                 data-demo-state="normal"
                 data-query-state="clusters"
                 data-query-default="normal"
@@ -673,49 +771,194 @@
                     <h2 id="profClustersTitle">최종 질문 마인드맵</h2>
                     <p>is_final=true · ordinal ASC, id ASC</p>
                   </div>
-                  <span class="record-region-status">
+                  <span class="record-region-status" data-cluster-status>
                     FINAL · SUCCEEDED · attempt 1 · 10:54:22
                   </span>
                 </div>
-                <article
-                  class="record-cluster"
+                <div
+                  class="record-cluster-list"
+                  data-page-scope="cluster-list"
                   data-show-state="normal page-error"
                 >
-                  <div class="record-cluster-map">
-                    <div class="record-cluster-map__center">
-                      <span class="badge">AI 대표질문 · 중앙</span>
-                      <h3>음수 가중치와 최단 경로는 어떤 관계인가요?</h3>
-                    </div>
-                    <ul
-                      class="record-cluster-map__branches"
-                      aria-label="대표질문의 하위 질문"
+                  <div
+                    class="record-cluster-items"
+                    role="list"
+                    aria-label="최종 Cluster 목록"
+                  >
+                    <article
+                      class="record-cluster"
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 1 / 4"
                     >
-                      <li>
-                        <small>STUDENT_QUESTION</small><br />음수 간선은 왜
-                        문제가 되나요?
-                      </li>
-                      <li>
-                        <small>AI_REPRESENTATIVE_QUESTION · 답변 보존</small
-                        ><br />
-                        벨만-포드는 어떻게 다른가요?
-                      </li>
-                      <li class="record-page-extra" data-page-extra hidden>
-                        <small>STUDENT_QUESTION</small><br />음수 사이클은
-                        어떻게 찾나요?
-                      </li>
-                    </ul>
+                      <div data-page-scope="cluster-children">
+                        <div class="record-cluster-map">
+                          <div class="record-cluster-map__center">
+                            <span class="badge"
+                              >AI 대표질문 · 중앙 ·
+                              created_in_generation=7</span
+                            >
+                            <h3>음수 가중치와 최단 경로는 어떤 관계인가요?</h3>
+                          </div>
+                          <ul
+                            class="record-cluster-map__branches"
+                            aria-label="대표질문의 하위 질문"
+                          >
+                            <li>
+                              <small>source_kind=STUDENT_QUESTION</small
+                              ><br />음수 간선은 왜 문제가 되나요?
+                            </li>
+                            <li>
+                              <small
+                                >source_kind=AI_REPRESENTATIVE ·
+                                created_in_generation=6 · 답변 보존</small
+                              ><br />
+                              벨만-포드는 어떻게 다른가요?
+                            </li>
+                            <li
+                              class="record-page-extra"
+                              data-page-extra
+                              hidden
+                            >
+                              <small>source_kind=STUDENT_QUESTION</small
+                              ><br />음수 사이클은 어떻게 찾나요?
+                            </li>
+                          </ul>
+                        </div>
+                        <div class="record-pagination">
+                          <p data-page-status role="status">
+                            child
+                            <span data-loaded-count data-loaded-complete="3"
+                              >2</span
+                            >
+                            / 3
+                          </p>
+                          <button
+                            class="button button--ghost"
+                            type="button"
+                            data-load-more
+                          >
+                            이 Cluster 질문 더 보기
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                    <article
+                      class="record-cluster record-page-extra"
+                      data-page-extra
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 2 / 4"
+                      hidden
+                    >
+                      <div class="record-cluster-map">
+                        <div class="record-cluster-map__center">
+                          <span class="badge"
+                            >AI 대표질문 · 중앙 · created_in_generation=7</span
+                          >
+                          <h3>
+                            우선순위 큐 구현에 따라 성능은 어떻게 달라지나요?
+                          </h3>
+                        </div>
+                        <ul
+                          class="record-cluster-map__branches"
+                          aria-label="대표질문의 하위 질문"
+                        >
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small><br />힙
+                            대신 배열을 쓰면 얼마나 느려지나요?
+                          </li>
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small
+                            ><br />이진 힙과 피보나치 힙은 언제 다른가요?
+                          </li>
+                        </ul>
+                      </div>
+                    </article>
+                    <article
+                      class="record-cluster record-page-extra"
+                      data-page-extra
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 3 / 4"
+                      hidden
+                    >
+                      <div class="record-cluster-map">
+                        <div class="record-cluster-map__center">
+                          <span class="badge"
+                            >AI 대표질문 · 중앙 · created_in_generation=7</span
+                          >
+                          <h3>
+                            방향·무방향 그래프의 경로 탐색은 어떻게 다른가요?
+                          </h3>
+                        </div>
+                        <ul
+                          class="record-cluster-map__branches"
+                          aria-label="대표질문의 하위 질문"
+                        >
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small
+                            ><br />방향 그래프에서도 같은 방식인가요?
+                          </li>
+                        </ul>
+                      </div>
+                    </article>
+                    <article
+                      class="record-cluster record-page-extra"
+                      data-page-extra
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 4 / 4 · 기타 질문"
+                      hidden
+                    >
+                      <div class="record-cluster-map">
+                        <div class="record-cluster-map__center">
+                          <span class="badge">fallback Cluster · 중앙</span>
+                          <h3>기타 질문</h3>
+                        </div>
+                        <ul
+                          class="record-cluster-map__branches"
+                          aria-label="기타 질문 Cluster의 하위 질문"
+                        >
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small
+                            ><br />시험 범위는 어디까지인가요?
+                          </li>
+                        </ul>
+                      </div>
+                    </article>
                   </div>
                   <div class="record-pagination">
-                    <p data-page-status role="status">child 2 / 3</p>
+                    <p data-page-status role="status">
+                      <span data-loaded-count data-loaded-complete="4">1</span>
+                      / 4 Cluster
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-load-more
+                      data-show-state="normal"
+                    >
+                      Cluster 더 보기
+                    </button>
+                  </div>
+                  <p
+                    class="notice notice--warning"
+                    data-show-state="page-error"
+                    hidden
+                    role="alert"
+                  >
+                    다음 Cluster cursor를 불러오지 못했습니다. 첫 Cluster와 그
+                    child는 유지합니다.
                     <button
                       class="button button--ghost"
                       type="button"
-                      data-load-more
+                      data-page-retry
                     >
-                      이 Cluster 질문 더 보기
+                      Cluster cursor 재시도
                     </button>
-                  </div>
-                </article>
+                  </p>
+                </div>
                 <p
                   class="notice notice--warning"
                   data-show-state="cluster-failed"
@@ -751,6 +994,7 @@
                 class="panel record-section"
                 id="profAnswers"
                 data-page-region
+                data-record-answers
                 data-demo-state="normal"
                 data-query-state="answers"
                 data-query-default="normal"
@@ -761,7 +1005,9 @@
                     <h2 id="profAnswersTitle">교수자 Answer</h2>
                     <p>각 Answer는 snapshot 질문 하나만 target으로 가집니다.</p>
                   </div>
-                  <span class="record-region-status">3 ANSWERS</span>
+                  <span class="record-region-status" data-answer-count
+                    >3 ANSWERS</span
+                  >
                 </div>
                 <article class="record-answer">
                   <span class="badge">AI 대표질문 snapshot · VOICE</span>
@@ -789,9 +1035,15 @@
                     >
                       HQ 재매핑 범위 · sequence 126~128
                     </button>
-                    <span class="badge"
-                      >원본 LIVE · sequence 128~130 · 변경 불가</span
+                    <button
+                      class="range-link"
+                      type="button"
+                      data-recording-seek
+                      data-recording-label="10:46"
+                      aria-label="원본 LIVE Answer 음성 sequence 128부터 재생"
                     >
+                      원본 LIVE 음성 · sequence 128~130
+                    </button>
                   </div>
                   <strong>AI로 정리한 답변</strong>
                   <p>
@@ -832,6 +1084,10 @@
                   >
                     교수자 text 수정
                   </button>
+                  <p class="notice notice--warning">
+                    AI 답변 정리 실패 · immutable 원본 LIVE 범위와 교수자 text는
+                    유지됩니다.
+                  </p>
                 </article>
                 <p
                   class="notice notice--warning"
@@ -839,7 +1095,7 @@
                   hidden
                   role="alert"
                 >
-                  Answer 1의 AI 정리가 실패했습니다. 교수자 text와 원본 LIVE
+                  Answer 3의 AI 정리가 실패했습니다. 교수자 text와 원본 LIVE
                   범위는 유지합니다.
                   <button
                     class="button button--secondary"
@@ -884,6 +1140,7 @@
               <section
                 class="panel record-section"
                 id="profJobs"
+                data-record-jobs
                 data-demo-state="partial-failure"
                 data-query-state="jobs"
                 data-query-default="partial-failure"
@@ -893,35 +1150,95 @@
                   <div>
                     <h2 id="profJobsTitle">공유 후처리 Job</h2>
                     <p>
-                      COMPLETED를 유지한 채 FAILED+retryable만 같은 행으로
-                      재시도합니다.
+                      공개 retry가 정의된 FINAL clustering·Summary·Answer만 같은
+                      행으로 재시도합니다. HQ 복구는 system이 조정합니다.
                     </p>
                   </div>
                 </div>
                 <ul class="record-job-list">
-                  <li class="record-job-card">
+                  <li class="record-job-card" data-recording-job>
                     <div>
-                      <h3>RECORDING_TRANSCRIPTION · SUCCEEDED</h3>
-                      <p>attempt 1 · blocks_session_completion=true</p>
+                      <h3>
+                        RECORDING_TRANSCRIPTION ·
+                        <span data-recording-job-status>SUCCEEDED</span>
+                      </h3>
+                      <p data-recording-job-meta>
+                        attempt 1 · blocks_session_completion=true · public
+                        retry control 없음
+                      </p>
                     </div>
                   </li>
-                  <li class="record-job-card">
+                  <li class="record-job-card" data-record-job data-cluster-job>
                     <div>
-                      <h3>QUESTION_CLUSTERING · FINAL · SUCCEEDED</h3>
-                      <p>attempt 1 · finalized_at 10:54:22</p>
+                      <h3>
+                        QUESTION_CLUSTERING · FINAL ·
+                        <span data-job-status data-cluster-job-status
+                          >SUCCEEDED</span
+                        >
+                      </h3>
+                      <p
+                        data-job-attempt
+                        data-cluster-job-meta
+                        data-attempt="1"
+                      >
+                        attempt 1 · finalized_at 10:54:22
+                      </p>
                     </div>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-shared-job-retry="FINAL 질문 정리"
+                      data-record-state-target="#profClusters"
+                      data-record-state="cluster-retrying"
+                      hidden
+                    >
+                      FINAL clustering 재시도
+                    </button>
+                  </li>
+                  <li class="record-job-card" data-record-job data-summary-job>
+                    <div>
+                      <h3>
+                        FINAL_SUMMARY ·
+                        <span data-job-status data-summary-job-status
+                          >SUCCEEDED</span
+                        >
+                      </h3>
+                      <p
+                        data-job-attempt
+                        data-summary-job-meta
+                        data-attempt="1"
+                      >
+                        attempt 1
+                      </p>
+                    </div>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-shared-job-retry="FINAL Summary"
+                      data-record-state-target="#profSummary"
+                      data-record-state="retrying"
+                      hidden
+                    >
+                      FINAL Summary 재시도
+                    </button>
                   </li>
                   <li
                     class="record-job-card"
                     data-record-job
+                    data-answer-job
+                    data-answer-label="Answer 3"
+                    data-default-status="FAILED"
+                    data-default-meta="attempt 1 · Answer 3 · retryable"
                     data-show-state="partial-failure retrying"
                   >
                     <div>
                       <h3>
                         ANSWER_ORGANIZATION ·
-                        <span data-job-status>FAILED</span>
+                        <span data-job-status data-answer-job-status
+                          >FAILED</span
+                        >
                       </h3>
-                      <p data-job-attempt data-attempt="1">
+                      <p data-job-attempt data-answer-job-meta data-attempt="1">
                         attempt 1 · Answer 3 · retryable
                       </p>
                     </div>
@@ -929,6 +1246,8 @@
                       class="button button--secondary"
                       type="button"
                       data-shared-job-retry="Answer 3 AI 정리"
+                      data-record-state-target="#profAnswers"
+                      data-record-state="organization-retrying"
                     >
                       Answer 3 정리 재시도
                     </button>
@@ -965,140 +1284,151 @@
                   data-review-log
                   role="log"
                   aria-label="복습 AI 대화"
+                  aria-live="polite"
+                  aria-relevant="additions text"
                 >
                   <li class="record-chat-message" data-role="assistant">
                     완료 기록을 근거로 복습을 도와드릴게요.
                   </li>
-                </ul>
-                <div class="ai-state-card" data-show-state="empty">
-                  <p>
-                    USER Message와 Job을 함께 저장한 뒤 상태를 polling합니다.
-                  </p>
-                </div>
-                <div
-                  class="ai-state-card"
-                  data-show-state="pending"
-                  hidden
-                  aria-busy="true"
-                >
-                  <strong
-                    >CHAT_RESPONSE · PENDING ·
-                    <span data-review-attempt>attempt 1</span></strong
+                  <li class="ai-state-card" data-show-state="empty">
+                    <p>
+                      USER Message와 Job을 함께 저장한 뒤 상태를 polling합니다.
+                    </p>
+                  </li>
+                  <li
+                    class="ai-state-card"
+                    data-show-state="pending"
+                    hidden
+                    aria-busy="true"
                   >
-                  <p>생성 중 부분 문장은 저장·표시·공유하지 않습니다.</p>
-                  <div class="record-admin-actions">
-                    <button
-                      class="button button--primary"
-                      type="button"
-                      data-review-outcome="complete"
+                    <strong
+                      >CHAT_RESPONSE · PENDING ·
+                      <span data-review-attempt>attempt 1</span></strong
                     >
-                      저장 결과 완료
-                    </button>
+                    <p>생성 중 부분 문장은 저장·표시·공유하지 않습니다.</p>
+                    <div class="record-admin-actions">
+                      <button
+                        class="button button--primary"
+                        type="button"
+                        data-review-outcome="complete"
+                      >
+                        저장 결과 완료
+                      </button>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-review-outcome="no-evidence"
+                      >
+                        근거 없음 완료
+                      </button>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-review-outcome="failed"
+                      >
+                        실패 fixture
+                      </button>
+                    </div>
+                  </li>
+                  <li class="ai-state-card" data-show-state="complete" hidden>
+                    <strong>저장된 최종 답변</strong>
+                    <p>
+                      음수 간선은 이미 확정한 거리의 전제를 깨뜨릴 수 있습니다.
+                    </p>
+                    <div class="record-evidence" aria-label="답변 근거">
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-source-kind="MATERIAL"
+                        data-public-link="/api/v1/materials/material_public/content#page=12"
+                      >
+                        강의자료 · 12쪽
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-source-kind="TRANSCRIPT"
+                        data-public-link="/api/v1/sessions/session_graph_20260712/transcript?transcript_version_id=transcript_version_recording_v2&amp;start_sequence=127&amp;end_sequence=127"
+                      >
+                        Transcript · 10:31
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-source-kind="QUESTION"
+                        data-public-link="/api/v1/representative-questions/representative_question_public"
+                      >
+                        AI 대표질문 · 음수 가중치
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-evidence-state="error"
+                        data-source-kind="ANSWER"
+                        data-public-link="/api/v1/answers/answer_public"
+                      >
+                        교수자 Answer · 이동 재시도
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-source-kind="QUESTION"
+                        disabled
+                      >
+                        폐기된 AI 대표질문 · 이동할 수 없음
+                      </button>
+                    </div>
+                  </li>
+                  <li
+                    class="ai-state-card"
+                    data-show-state="no-evidence"
+                    hidden
+                  >
+                    <strong>저장 완료 · 근거 없음</strong>
+                    <p>현재 완료 기록만으로 확인할 수 없습니다.</p>
+                  </li>
+                  <li
+                    class="ai-state-card"
+                    data-show-state="failed"
+                    hidden
+                    role="alert"
+                  >
+                    <strong
+                      >CHAT_RESPONSE 실패 ·
+                      <span data-review-attempt>attempt 1</span></strong
+                    >
+                    <p>기존 USER Message와 대화는 유지합니다.</p>
                     <button
                       class="button button--secondary"
                       type="button"
-                      data-review-outcome="no-evidence"
+                      data-review-retry
                     >
-                      근거 없음 완료
+                      같은 Job 재시도
                     </button>
-                    <button
-                      class="button button--ghost"
-                      type="button"
-                      data-review-outcome="failed"
-                    >
-                      실패 fixture
-                    </button>
-                  </div>
-                </div>
-                <div class="ai-state-card" data-show-state="complete" hidden>
-                  <strong>저장된 최종 답변</strong>
-                  <p>
-                    음수 간선은 이미 확정한 거리의 전제를 깨뜨릴 수 있습니다.
-                  </p>
-                  <div class="record-evidence" aria-label="답변 근거">
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-source-kind="MATERIAL"
-                      data-public-link="/api/v1/materials/material_public/content#page=12"
-                    >
-                      강의자료 · 12쪽
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-source-kind="TRANSCRIPT_SEGMENT"
-                      data-public-link="/api/v1/transcript-segments/segment_public"
-                    >
-                      Transcript · 10:31
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-source-kind="STUDENT_QUESTION"
-                      data-public-link="/api/v1/questions/question_public"
-                    >
-                      학생 질문 · 음수 간선
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-evidence-state="error"
-                      data-source-kind="ANSWER"
-                      data-public-link="/api/v1/answers/answer_public"
-                    >
-                      교수자 Answer · 이동 재시도
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-source-kind="AI_REPRESENTATIVE_QUESTION"
-                      disabled
-                    >
-                      폐기된 AI 대표질문 · 이동할 수 없음
-                    </button>
-                  </div>
-                </div>
-                <div class="ai-state-card" data-show-state="no-evidence" hidden>
-                  <strong>저장 완료 · 근거 없음</strong>
-                  <p>현재 완료 기록만으로 확인할 수 없습니다.</p>
-                </div>
-                <div
-                  class="ai-state-card"
-                  data-show-state="failed"
-                  hidden
-                  role="alert"
-                >
-                  <strong
-                    >CHAT_RESPONSE 실패 ·
-                    <span data-review-attempt>attempt 1</span></strong
-                  >
-                  <p>기존 USER Message와 대화는 유지합니다.</p>
-                  <button
-                    class="button button--secondary"
-                    type="button"
-                    data-review-retry
-                  >
-                    같은 Job 재시도
-                  </button>
-                </div>
+                  </li>
+                </ul>
                 <form data-review-form novalidate>
                   <div class="field">
                     <label for="profReviewInput">완료 기록에 관해 질문</label>
                     <textarea
                       id="profReviewInput"
                       data-review-input
+                      aria-describedby="profReviewCount profReviewError"
                       placeholder="예: 음수 간선이 왜 문제인지 다시 설명해줘"
                     ></textarea>
-                    <span class="record-codepoint-count" data-review-count
+                    <span
+                      class="record-codepoint-count"
+                      id="profReviewCount"
+                      data-review-count
                       >0 / 2,000자</span
                     >
                     <p
                       class="field__error"
+                      id="profReviewError"
                       data-review-error
                       role="alert"
                       hidden
@@ -1211,9 +1541,12 @@
             <label for="titleEditInput">제목</label>
             <input
               id="titleEditInput"
-              required
+              data-auto-title="알고리즘 · 2026년 7월 12일 10:00 class"
               value="그래프 탐색과 최단 경로"
             />
+            <p class="field__help">
+              비워 저장하면 서버 자동 제목으로 되돌립니다.
+            </p>
           </div>
           <div class="dialog__actions">
             <button
@@ -1281,8 +1614,8 @@
           <div>
             <h2 id="textAnswerTitle">텍스트 Answer 추가</h2>
             <p>
-              학생 질문 하나만 target으로 선택하며 저장 시 snapshot을
-              보존합니다.
+              미답변 학생 질문 하나를 target으로 선택하고 snapshot을 보존합니다.
+              AI 대표질문에는 새 text-only Answer를 만들지 않습니다.
             </p>
           </div>
           <button
@@ -1298,8 +1631,9 @@
           <div class="field">
             <label for="textAnswerTarget">답변할 질문</label>
             <select id="textAnswerTarget">
-              <option>힙 대신 배열을 쓰면 얼마나 느려지나요?</option>
-              <option>방향 그래프에서도 같은 방식인가요?</option>
+              <option data-target-kind="STUDENT_QUESTION">
+                힙 대신 배열을 쓰면 얼마나 느려지나요?
+              </option>
             </select>
           </div>
           <div class="field">

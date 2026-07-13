@@ -944,6 +944,11 @@
   background: var(--color-surface);
   cursor: pointer;
 }
+[data-recording-seek].is-active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-soft);
+  box-shadow: var(--shadow-focus);
+}
 .record-job-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -971,6 +976,10 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.record-chat-log .ai-state-card {
+  width: 100%;
+  min-width: 0;
 }
 .record-chat-message {
   width: fit-content;
@@ -1011,6 +1020,8 @@
 .record-manifest__item strong,
 .record-manifest__item small {
   display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .record-manifest__item strong {
   margin-top: 4px;
@@ -1082,6 +1093,27 @@
   height: 100%;
   border-radius: inherit;
   background: var(--color-brand);
+}
+.recording-seek-status {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed rgb(98 87 232 / 42%);
+  border-radius: var(--radius-md);
+  background: #f8f7f2;
+}
+.recording-seek-status strong,
+.recording-seek-status p {
+  margin: 0;
+}
+.recording-seek-status p {
+  margin-top: 6px;
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.recording-seek-status .record-admin-actions,
+.recording-seek-status > [data-show-state] > .button {
+  margin-top: var(--space-3);
 }
 .record-timeline {
   display: grid;
@@ -1160,6 +1192,11 @@
   gap: var(--space-3);
   align-items: center;
 }
+.record-cluster-list,
+.record-cluster-items {
+  display: grid;
+  gap: var(--space-3);
+}
 .record-cluster-map__center {
   padding: var(--space-4);
   border: 2px solid var(--color-brand);
@@ -1225,9 +1262,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .recording-player__controls .button,
+  .recording-seek-status .button,
   .record-pagination .button,
   .record-admin-actions .button {
     width: 100%;
+  }
+  .record-chat-log {
+    max-height: none;
   }
 }
 

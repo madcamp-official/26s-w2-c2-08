@@ -1005,9 +1005,10 @@
                     data-answer-target-kind="representative"
                     data-answer-target-id="rep-7-12"
                     data-answer-target-status="open"
+                    data-created-in-generation="7"
                   >
                     <small
-                      >AI 대표질문 · ACTIVE ·
+                      >AI 대표질문 · ACTIVE · created_in_generation=7 ·
                       <span data-answer-status-label>OPEN</span></small
                     >
                     <p data-answer-target-text>
@@ -1076,7 +1077,9 @@
                       data-answer-target-status="answered"
                     >
                       <div class="live-node-meta">
-                        <span>REPRESENTATIVE_QUESTION · PRESERVED</span
+                        <span
+                          >source_kind=AI_REPRESENTATIVE ·
+                          created_in_generation=6 · PRESERVED</span
                         ><span>ANSWERED</span>
                       </div>
                       <p>음수 가중치가 있을 때 사용할 알고리즘은 무엇인가요?</p>
@@ -1597,11 +1600,11 @@
                       <li>
                         <a
                           class="live-evidence-link"
-                          href="/api/v1/transcript-segments/segment-live-126"
+                          href="/api/v1/sessions/session_graph_live/transcript?transcript_version_id=transcript_version_live_v1&amp;start_sequence=126&amp;end_sequence=126"
                         >
                           <strong>LIVE Transcript · 10:12–10:27</strong>
                           <small
-                            >source_kind: TRANSCRIPT_SEGMENT · 안정적인 Segment
+                            >source_kind: TRANSCRIPT · session/version/sequence
                             이동</small
                           >
                         </a>
@@ -1694,8 +1697,9 @@
             <div data-live-private-purged hidden>
               <p class="notice notice--info">
                 Session이 PROCESSING으로 전환되어 개인 LIVE
-                Summary·Chat·Message·Evidence·Job을 삭제했습니다. 이전 ID의
-                404는 재시도하지 않습니다.
+                Summary·Chat·Message·Evidence·Job을 삭제했습니다. 이전 ID
+                polling·단건 조회와 멱등 재요청의 정확한 응답은 아직 미정이며 이
+                Prototype은 추가 요청을 보내지 않습니다.
               </p>
             </div>
           </section>

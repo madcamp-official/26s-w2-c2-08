@@ -45,8 +45,10 @@
           <div class="record-availability">
             <span class="status-chip status-chip--success">COMPLETED</span>
             <span class="badge">PDF 2</span>
-            <span class="badge">RECORDING v2 canonical</span>
-            <span class="badge">개인 REVIEW AI</span>
+            <span class="badge" data-recording-availability
+              >RECORDING v2 canonical</span
+            >
+            <span class="badge" data-record-health>공유 Job 정상 종료</span>
           </div>
         </div>
         <a class="button button--secondary" href="course-student.html"
@@ -78,10 +80,11 @@
             </div>
             <div class="record-manifest__item">
               <small>Transcript · selected version</small
-              ><strong>96 + gap 1</strong>
+              ><strong data-manifest-transcript>96 + gap 1</strong>
             </div>
             <div class="record-manifest__item">
-              <small>questions / final clusters</small><strong>17 / 3</strong>
+              <small>questions / final clusters</small
+              ><strong data-manifest-question-clusters>17 / 3</strong>
             </div>
             <div class="record-manifest__item">
               <small>answers / shared jobs</small><strong>2 / 6</strong>
@@ -181,6 +184,7 @@
                 <div
                   class="recording-player"
                   data-recording-player
+                  data-recording-duration="51:08"
                   data-demo-state="checking"
                   data-query-state="playback"
                   data-query-default="checking"
@@ -282,11 +286,86 @@
                     </button>
                   </div>
                 </div>
+                <div
+                  class="recording-seek-status"
+                  data-recording-seek-status
+                  data-demo-state="idle"
+                  data-query-state="seek"
+                  data-query-default="idle"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <p class="sr-only" data-seek-announcement>
+                    Transcript 녹음 위치 이동을 기다립니다.
+                  </p>
+                  <div data-show-state="idle">
+                    <strong>Transcript 위치 이동 대기</strong>
+                    <p>
+                      문장 또는 Answer의 음성 링크를 선택해도 재생은 자동으로
+                      시작하지 않습니다.
+                    </p>
+                  </div>
+                  <div data-show-state="seeking" hidden aria-busy="true">
+                    <strong
+                      ><span data-seek-label>10:35</span> 위치 확인 중</strong
+                    >
+                    <p>현재 권한과 stable recording offset을 확인합니다.</p>
+                    <div
+                      class="record-admin-actions"
+                      aria-label="정적 위치 이동 결과 fixture"
+                    >
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-seek-outcome="active"
+                      >
+                        이동 성공 fixture
+                      </button>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-seek-outcome="seek-error"
+                      >
+                        이동 실패 fixture
+                      </button>
+                    </div>
+                  </div>
+                  <div data-show-state="active" hidden>
+                    <strong
+                      ><span data-seek-label>10:35</span> 위치 이동 완료</strong
+                    >
+                    <p>재생은 시작하지 않았습니다. 사용자가 직접 시작합니다.</p>
+                    <button
+                      class="button button--primary"
+                      type="button"
+                      data-seek-play
+                    >
+                      이 위치에서 재생
+                    </button>
+                  </div>
+                  <div data-show-state="seek-error" hidden role="alert">
+                    <strong
+                      ><span data-seek-label>10:35</span> 위치로 이동하지
+                      못했습니다</strong
+                    >
+                    <p>
+                      player와 완료 기록은 유지하며 같은 offset만 재시도합니다.
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-seek-retry
+                    >
+                      같은 위치 다시 시도
+                    </button>
+                  </div>
+                </div>
               </section>
 
               <section
                 class="panel record-section"
                 id="studentSummary"
+                data-record-summary
                 data-demo-state="normal"
                 data-query-state="summary"
                 data-query-default="normal"
@@ -295,11 +374,13 @@
                 <div class="record-section__heading">
                   <div>
                     <h2 id="studentSummaryTitle">FINAL 강의 요약</h2>
-                    <p>
+                    <p data-summary-source>
                       최신 HQ RECORDING FINALIZED source에 고정된 결과입니다.
                     </p>
                   </div>
-                  <span class="record-region-status">FINAL · AVAILABLE</span>
+                  <span class="record-region-status" data-summary-status
+                    >FINAL · AVAILABLE</span
+                  >
                 </div>
                 <div data-show-state="normal">
                   <h3>CNN의 특징 추출</h3>
@@ -335,6 +416,11 @@
                 class="panel record-section"
                 id="studentTranscript"
                 data-page-region
+                data-page-success-state="finalized"
+                data-record-transcript
+                data-final-segments="96"
+                data-final-gaps="1"
+                data-total-items="97"
                 data-demo-state="finalized"
                 data-query-state="transcript"
                 data-query-default="finalized"
@@ -343,12 +429,14 @@
                 <div class="record-section__heading">
                   <div>
                     <h2 id="studentTranscriptTitle">Final Transcript</h2>
-                    <p>
+                    <p data-transcript-meta>
                       RECORDING · version 2 · canonical · FINALIZED · 기술적
                       완료
                     </p>
                   </div>
-                  <span class="record-region-status">SEGMENT 96 · GAP 1</span>
+                  <span class="record-region-status" data-transcript-count
+                    >SEGMENT 96 · GAP 1</span
+                  >
                 </div>
                 <div data-show-state="finalized page-error">
                   <ol class="record-timeline" id="studentFinalTranscript">
@@ -378,6 +466,7 @@
                         class="button button--ghost"
                         type="button"
                         data-recording-seek
+                        data-seek-default
                         data-recording-label="10:35"
                         aria-label="10분 35초 문장부터 녹음 재생"
                       >
@@ -405,13 +494,14 @@
                   </ol>
                   <div class="record-pagination">
                     <p data-page-status role="status">
-                      <span data-loaded-count data-loaded-complete="3">2</span>
+                      <span data-loaded-count data-loaded-complete="4">3</span>
                       / 97 항목
                     </p>
                     <button
                       class="button button--secondary"
                       type="button"
                       data-load-more
+                      data-show-state="finalized"
                     >
                       Transcript 더 보기
                     </button>
@@ -469,6 +559,7 @@
                 class="panel record-section"
                 id="studentQuestions"
                 data-page-region
+                data-page-success-state="normal"
                 data-demo-state="normal"
                 data-query-state="questions"
                 data-query-default="normal"
@@ -498,7 +589,9 @@
                   <li class="record-question">
                     <div class="split">
                       <strong>필터 값은 어떻게 학습하나요?</strong>
-                      <span class="badge">OPEN · 궁금해요 8</span>
+                      <span class="badge"
+                        >ANSWERED · TEXT Answer · 궁금해요 8</span
+                      >
                     </div>
                   </li>
                   <li
@@ -521,6 +614,7 @@
                     class="button button--secondary"
                     type="button"
                     data-load-more
+                    data-show-state="normal"
                   >
                     질문 더 보기
                   </button>
@@ -552,6 +646,11 @@
                 class="panel record-section"
                 id="studentClusters"
                 data-page-region
+                data-page-success-state="normal"
+                data-record-clusters
+                data-question-count="17"
+                data-final-cluster-count="3"
+                data-finalized-at="15:01:04"
                 data-demo-state="normal"
                 data-query-state="clusters"
                 data-query-default="normal"
@@ -562,49 +661,166 @@
                     <h2 id="studentClustersTitle">최종 질문 마인드맵</h2>
                     <p>is_final=true · ordinal ASC, id ASC</p>
                   </div>
-                  <span class="record-region-status">
+                  <span class="record-region-status" data-cluster-status>
                     FINAL · SUCCEEDED · attempt 1 · 15:01:04
                   </span>
                 </div>
-                <article
-                  class="record-cluster"
+                <div
+                  class="record-cluster-list"
+                  data-page-scope="cluster-list"
                   data-show-state="normal page-error"
                 >
-                  <div class="record-cluster-map">
-                    <div class="record-cluster-map__center">
-                      <span class="badge">AI 대표질문 · 중앙</span>
-                      <h3>Pooling은 정보를 줄이면서 무엇을 보존하나요?</h3>
-                    </div>
-                    <ul
-                      class="record-cluster-map__branches"
-                      aria-label="대표질문의 하위 질문"
+                  <div
+                    class="record-cluster-items"
+                    role="list"
+                    aria-label="최종 Cluster 목록"
+                  >
+                    <article
+                      class="record-cluster"
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 1 / 3"
                     >
-                      <li>
-                        <small>STUDENT_QUESTION</small><br />Pooling을 반복하면
-                        정보가 사라지지 않나요?
-                      </li>
-                      <li>
-                        <small>AI_REPRESENTATIVE_QUESTION · 답변 보존</small
-                        ><br />
-                        Max Pooling과 Average Pooling은 어떻게 다른가요?
-                      </li>
-                      <li class="record-page-extra" data-page-extra hidden>
-                        <small>STUDENT_QUESTION</small><br />Stride도 같은
-                        역할인가요?
-                      </li>
-                    </ul>
+                      <div data-page-scope="cluster-children">
+                        <div class="record-cluster-map">
+                          <div class="record-cluster-map__center">
+                            <span class="badge"
+                              >AI 대표질문 · 중앙 ·
+                              created_in_generation=5</span
+                            >
+                            <h3>
+                              Pooling은 정보를 줄이면서 무엇을 보존하나요?
+                            </h3>
+                          </div>
+                          <ul
+                            class="record-cluster-map__branches"
+                            aria-label="대표질문의 하위 질문"
+                          >
+                            <li>
+                              <small>source_kind=STUDENT_QUESTION</small
+                              ><br />Pooling을 반복하면 정보가 사라지지 않나요?
+                            </li>
+                            <li>
+                              <small
+                                >source_kind=AI_REPRESENTATIVE ·
+                                created_in_generation=4 · 답변 보존</small
+                              ><br />
+                              Max Pooling과 Average Pooling은 어떻게 다른가요?
+                            </li>
+                            <li
+                              class="record-page-extra"
+                              data-page-extra
+                              hidden
+                            >
+                              <small>source_kind=STUDENT_QUESTION</small
+                              ><br />Stride도 같은 역할인가요?
+                            </li>
+                          </ul>
+                        </div>
+                        <div class="record-pagination">
+                          <p data-page-status role="status">
+                            child
+                            <span data-loaded-count data-loaded-complete="3"
+                              >2</span
+                            >
+                            / 3
+                          </p>
+                          <button
+                            class="button button--ghost"
+                            type="button"
+                            data-load-more
+                          >
+                            이 Cluster 질문 더 보기
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                    <article
+                      class="record-cluster record-page-extra"
+                      data-page-extra
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 2 / 3"
+                      hidden
+                    >
+                      <div class="record-cluster-map">
+                        <div class="record-cluster-map__center">
+                          <span class="badge"
+                            >AI 대표질문 · 중앙 · created_in_generation=5</span
+                          >
+                          <h3>합성곱 필터는 무엇을 학습하나요?</h3>
+                        </div>
+                        <ul
+                          class="record-cluster-map__branches"
+                          aria-label="대표질문의 하위 질문"
+                        >
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small
+                            ><br />필터 값은 어떻게 학습하나요?
+                          </li>
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small
+                            ><br />필터 수는 어떻게 정하나요?
+                          </li>
+                        </ul>
+                      </div>
+                    </article>
+                    <article
+                      class="record-cluster record-page-extra"
+                      data-page-extra
+                      data-cluster-item
+                      role="listitem"
+                      aria-label="Cluster 3 / 3 · 기타 질문"
+                      hidden
+                    >
+                      <div class="record-cluster-map">
+                        <div class="record-cluster-map__center">
+                          <span class="badge">fallback Cluster · 중앙</span>
+                          <h3>기타 질문</h3>
+                        </div>
+                        <ul
+                          class="record-cluster-map__branches"
+                          aria-label="기타 질문 Cluster의 하위 질문"
+                        >
+                          <li>
+                            <small>source_kind=STUDENT_QUESTION</small
+                            ><br />과제 예제 코드는 어디에 있나요?
+                          </li>
+                        </ul>
+                      </div>
+                    </article>
                   </div>
                   <div class="record-pagination">
-                    <p data-page-status role="status">child 2 / 3</p>
+                    <p data-page-status role="status">
+                      <span data-loaded-count data-loaded-complete="3">1</span>
+                      / 3 Cluster
+                    </p>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-load-more
+                      data-show-state="normal"
+                    >
+                      Cluster 더 보기
+                    </button>
+                  </div>
+                  <p
+                    class="notice notice--warning"
+                    data-show-state="page-error"
+                    hidden
+                    role="alert"
+                  >
+                    다음 Cluster cursor를 불러오지 못했습니다. 첫 Cluster와 그
+                    child는 유지합니다.
                     <button
                       class="button button--ghost"
                       type="button"
-                      data-load-more
+                      data-page-retry
                     >
-                      이 Cluster 질문 더 보기
+                      Cluster cursor 재시도
                     </button>
-                  </div>
-                </article>
+                  </p>
+                </div>
                 <p
                   class="notice notice--warning"
                   data-show-state="cluster-failed"
@@ -630,6 +846,7 @@
                 class="panel record-section"
                 id="studentAnswers"
                 data-page-region
+                data-record-answers
                 data-demo-state="normal"
                 data-query-state="answers"
                 data-query-default="normal"
@@ -664,15 +881,26 @@
                     >
                       HQ 재매핑 범위 · sequence 86~88
                     </button>
-                    <span class="badge"
-                      >원본 LIVE · sequence 88~90 · 변경 불가</span
+                    <button
+                      class="range-link"
+                      type="button"
+                      data-recording-seek
+                      data-recording-label="10:50"
+                      aria-label="원본 LIVE Answer 음성 sequence 88부터 재생"
                     >
+                      원본 LIVE 음성 · sequence 88~90
+                    </button>
                   </div>
-                  <strong>AI로 정리한 답변</strong>
-                  <p>
-                    Pooling은 특징의 강한 반응을 남기며 공간 크기와 계산량을
-                    줄입니다.
-                  </p>
+                  <div
+                    data-show-state="normal organization-succeeded"
+                    data-answer-organization-result
+                  >
+                    <strong>AI로 정리한 답변</strong>
+                    <p>
+                      Pooling은 특징의 강한 반응을 남기며 공간 크기와 계산량을
+                      줄입니다.
+                    </p>
+                  </div>
                 </article>
                 <article class="record-answer">
                   <span class="badge">STUDENT_QUESTION snapshot · TEXT</span>
@@ -719,9 +947,10 @@
               <section
                 class="panel record-section"
                 id="studentJobs"
-                data-demo-state="partial-failure"
+                data-record-jobs
+                data-demo-state="success"
                 data-query-state="jobs"
-                data-query-default="partial-failure"
+                data-query-default="success"
                 aria-labelledby="studentJobsTitle"
               >
                 <div class="record-section__heading">
@@ -733,25 +962,52 @@
                   </div>
                 </div>
                 <ul class="record-job-list">
-                  <li class="record-job-card">
+                  <li class="record-job-card" data-recording-job>
                     <div>
-                      <h3>RECORDING_TRANSCRIPTION · SUCCEEDED</h3>
-                      <p>attempt 1 · blocks_session_completion=true</p>
+                      <h3>
+                        RECORDING_TRANSCRIPTION ·
+                        <span data-recording-job-status>SUCCEEDED</span>
+                      </h3>
+                      <p data-recording-job-meta>
+                        attempt 1 · blocks_session_completion=true · public
+                        retry control 없음
+                      </p>
                     </div>
                   </li>
-                  <li class="record-job-card">
+                  <li class="record-job-card" data-cluster-job>
                     <div>
-                      <h3>QUESTION_CLUSTERING · FINAL · SUCCEEDED</h3>
-                      <p>attempt 1 · finalized_at 15:01:04</p>
+                      <h3>
+                        QUESTION_CLUSTERING · FINAL ·
+                        <span data-cluster-job-status>SUCCEEDED</span>
+                      </h3>
+                      <p data-cluster-job-meta>
+                        attempt 1 · finalized_at 15:01:04
+                      </p>
+                    </div>
+                  </li>
+                  <li class="record-job-card" data-summary-job>
+                    <div>
+                      <h3>
+                        FINAL_SUMMARY ·
+                        <span data-summary-job-status>SUCCEEDED</span>
+                      </h3>
+                      <p data-summary-job-meta>attempt 1</p>
                     </div>
                   </li>
                   <li
                     class="record-job-card"
-                    data-show-state="partial-failure retrying"
+                    data-answer-job
+                    data-answer-label="Answer 1"
+                    data-default-status="SUCCEEDED"
+                    data-default-meta="attempt 1 · Answer 1"
+                    data-show-state="success partial-failure retrying"
                   >
                     <div>
-                      <h3>ANSWER_ORGANIZATION · FAILED</h3>
-                      <p>attempt 1 · Answer 2 · 교수자 재시도 가능</p>
+                      <h3>
+                        ANSWER_ORGANIZATION ·
+                        <span data-answer-job-status>SUCCEEDED</span>
+                      </h3>
+                      <p data-answer-job-meta>attempt 1 · Answer 1</p>
                     </div>
                   </li>
                 </ul>
@@ -762,7 +1018,7 @@
                   일부 실패가 저장된 완료 기록과 성공 결과를 가리지 않습니다.
                 </p>
                 <p data-show-state="retrying" hidden aria-busy="true">
-                  교수자가 Answer 2 정리를 재시도 중입니다 · attempt 2.
+                  교수자가 Answer 1 정리를 재시도 중입니다 · attempt 2.
                 </p>
               </section>
 
@@ -789,127 +1045,134 @@
                   data-review-log
                   role="log"
                   aria-label="복습 AI 대화"
+                  aria-live="polite"
+                  aria-relevant="additions text"
                 >
                   <li class="record-chat-message" data-role="assistant">
                     완료 기록을 근거로 복습을 도와드릴게요.
                   </li>
-                </ul>
-                <div class="ai-state-card" data-show-state="empty">
-                  <p>
-                    USER Message와 Job을 함께 저장한 뒤 상태를 polling합니다.
-                  </p>
-                </div>
-                <div
-                  class="ai-state-card"
-                  data-show-state="pending"
-                  hidden
-                  aria-busy="true"
-                >
-                  <strong
-                    >CHAT_RESPONSE · PENDING ·
-                    <span data-review-attempt>attempt 1</span></strong
+                  <li class="ai-state-card" data-show-state="empty">
+                    <p>
+                      USER Message와 Job을 함께 저장한 뒤 상태를 polling합니다.
+                    </p>
+                  </li>
+                  <li
+                    class="ai-state-card"
+                    data-show-state="pending"
+                    hidden
+                    aria-busy="true"
                   >
-                  <p>생성 중 부분 문장은 저장·표시·공유하지 않습니다.</p>
-                  <div class="record-admin-actions">
-                    <button
-                      class="button button--primary"
-                      type="button"
-                      data-review-outcome="complete"
+                    <strong
+                      >CHAT_RESPONSE · PENDING ·
+                      <span data-review-attempt>attempt 1</span></strong
                     >
-                      저장 결과 완료
-                    </button>
+                    <p>생성 중 부분 문장은 저장·표시·공유하지 않습니다.</p>
+                    <div class="record-admin-actions">
+                      <button
+                        class="button button--primary"
+                        type="button"
+                        data-review-outcome="complete"
+                      >
+                        저장 결과 완료
+                      </button>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-review-outcome="no-evidence"
+                      >
+                        근거 없음 완료
+                      </button>
+                      <button
+                        class="button button--ghost"
+                        type="button"
+                        data-review-outcome="failed"
+                      >
+                        실패 fixture
+                      </button>
+                    </div>
+                  </li>
+                  <li class="ai-state-card" data-show-state="complete" hidden>
+                    <strong>저장된 최종 답변</strong>
+                    <p>
+                      Pooling은 특징 맵 크기를 줄이면서 강한 지역 반응을
+                      남깁니다.
+                    </p>
+                    <div class="record-evidence" aria-label="답변 근거">
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-source-kind="MATERIAL"
+                        data-public-link="/api/v1/materials/material_public/content#page=14"
+                      >
+                        강의자료 · 14쪽
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-source-kind="TRANSCRIPT"
+                        data-public-link="/api/v1/sessions/session_cnn_20260712/transcript?transcript_version_id=transcript_version_recording_v2&amp;start_sequence=87&amp;end_sequence=87"
+                      >
+                        Transcript · 10:35
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-source-kind="QUESTION"
+                        data-public-link="/api/v1/questions/question_public"
+                      >
+                        학생 질문 · Pooling
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-evidence-link
+                        data-evidence-state="error"
+                        data-source-kind="ANSWER"
+                        data-public-link="/api/v1/answers/answer_public"
+                      >
+                        교수자 Answer · 이동 재시도
+                      </button>
+                      <button
+                        class="record-evidence-link"
+                        type="button"
+                        data-source-kind="MATERIAL"
+                        disabled
+                      >
+                        분리된 자료 · 이동할 수 없음
+                      </button>
+                    </div>
+                  </li>
+                  <li
+                    class="ai-state-card"
+                    data-show-state="no-evidence"
+                    hidden
+                  >
+                    <strong>저장 완료 · 근거 없음</strong>
+                    <p>현재 완료 기록만으로 확인할 수 없습니다.</p>
+                  </li>
+                  <li
+                    class="ai-state-card"
+                    data-show-state="failed"
+                    hidden
+                    role="alert"
+                  >
+                    <strong
+                      >CHAT_RESPONSE 실패 ·
+                      <span data-review-attempt>attempt 1</span></strong
+                    >
+                    <p>기존 USER Message와 대화는 유지합니다.</p>
                     <button
                       class="button button--secondary"
                       type="button"
-                      data-review-outcome="no-evidence"
+                      data-review-retry
                     >
-                      근거 없음 완료
+                      같은 Job 재시도
                     </button>
-                    <button
-                      class="button button--ghost"
-                      type="button"
-                      data-review-outcome="failed"
-                    >
-                      실패 fixture
-                    </button>
-                  </div>
-                </div>
-                <div class="ai-state-card" data-show-state="complete" hidden>
-                  <strong>저장된 최종 답변</strong>
-                  <p>
-                    Pooling은 특징 맵 크기를 줄이면서 강한 지역 반응을 남깁니다.
-                  </p>
-                  <div class="record-evidence" aria-label="답변 근거">
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-source-kind="MATERIAL"
-                      data-public-link="/api/v1/materials/material_public/content#page=14"
-                    >
-                      강의자료 · 14쪽
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-source-kind="TRANSCRIPT_SEGMENT"
-                      data-public-link="/api/v1/transcript-segments/segment_public"
-                    >
-                      Transcript · 10:35
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-source-kind="STUDENT_QUESTION"
-                      data-public-link="/api/v1/questions/question_public"
-                    >
-                      학생 질문 · Pooling
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-evidence-link
-                      data-evidence-state="error"
-                      data-source-kind="ANSWER"
-                      data-public-link="/api/v1/answers/answer_public"
-                    >
-                      교수자 Answer · 이동 재시도
-                    </button>
-                    <button
-                      class="record-evidence-link"
-                      type="button"
-                      data-source-kind="MATERIAL"
-                      disabled
-                    >
-                      분리된 자료 · 이동할 수 없음
-                    </button>
-                  </div>
-                </div>
-                <div class="ai-state-card" data-show-state="no-evidence" hidden>
-                  <strong>저장 완료 · 근거 없음</strong>
-                  <p>현재 완료 기록만으로 확인할 수 없습니다.</p>
-                </div>
-                <div
-                  class="ai-state-card"
-                  data-show-state="failed"
-                  hidden
-                  role="alert"
-                >
-                  <strong
-                    >CHAT_RESPONSE 실패 ·
-                    <span data-review-attempt>attempt 1</span></strong
-                  >
-                  <p>기존 USER Message와 대화는 유지합니다.</p>
-                  <button
-                    class="button button--secondary"
-                    type="button"
-                    data-review-retry
-                  >
-                    같은 Job 재시도
-                  </button>
-                </div>
+                  </li>
+                </ul>
                 <form data-review-form novalidate>
                   <div class="field">
                     <label for="studentReviewInput"
@@ -918,13 +1181,18 @@
                     <textarea
                       id="studentReviewInput"
                       data-review-input
+                      aria-describedby="studentReviewCount studentReviewError"
                       placeholder="예: Pooling을 쉽게 다시 설명해줘"
                     ></textarea>
-                    <span class="record-codepoint-count" data-review-count
+                    <span
+                      class="record-codepoint-count"
+                      id="studentReviewCount"
+                      data-review-count
                       >0 / 2,000자</span
                     >
                     <p
                       class="field__error"
+                      id="studentReviewError"
                       data-review-error
                       role="alert"
                       hidden
