@@ -1776,7 +1776,7 @@ Session이 `COMPLETED`이면 교수자는 `status=OPEN`인 학생 질문 또는 
 
 삭제 대상 개인 Job이 `RUNNING`이어도 행 자체와 결과 target이 없어지고 run token도 더 이상 현재 Job에서 조회되지 않으므로 늦은 Worker 결과는 저장되지 않는다. 결과 commit은 Job ID·attempt·run token·`RUNNING`뿐 아니라 Summary 또는 Chat target과 Session mode/state가 모두 존재·일치해야 한다. 따라서 purge 뒤 도착한 성공 응답이 삭제된 결과를 되살릴 수 없다.
 
-종료된 LIVE 클러스터링 Worker의 늦은 결과는 Job이 더 이상 `RUNNING`이 아니고 Session도 `LIVE`가 아니며 run token도 제거됐으므로 commit되지 않는다. 이 실패 Job은 재시도하지 않는다. PROCESSING coordinator는 FINAL 대상이 1건 이상이면 별도의 `FINAL`, `input_through_sequence = requested_sequence`, `base_revision = current_revision`, `final_answered_through_at = ended_at`, `SHARED`, `blocks_session_completion=true` 클러스터링 Job을 생성한다. 대상 0건의 Job·빈 generation 표현은 18절 미정 정책을 따른다. 이 Job이 실패한 뒤 교수자가 명시적으로 retry하면 학생 질문 `input_through_sequence`는 유지하고 `base_revision = current_revision`, `final_answered_through_at = now()`로 재캡처한다. 그 새 상한까지 완료된 AI 대표질문 text Answer는 retry 입력에 포함한다. 성공한 FINAL은 자동으로 다시 만들지 않으며, 성공 후 text Answer에 따른 FINAL 마인드맵 재생성은 별도 미정이다.
+종료된 LIVE 클러스터링 Worker의 늦은 결과는 Job이 더 이상 `RUNNING`이 아니고 Session도 `LIVE`가 아니며 run token도 제거됐으므로 commit되지 않는다. 이 실패 Job은 재시도하지 않는다. 같은 LIVE→PROCESSING 종료 transaction은 FINAL 대상이 1건 이상이면 별도의 `FINAL`, `input_through_sequence = requested_sequence`, `base_revision = current_revision`, `final_answered_through_at = ended_at`, `SHARED`, `blocks_session_completion=true` 클러스터링 Job과 queue·event outbox를 생성한다. 이 Job은 Recording upload·HQ source·coordinator와 무관하게 즉시 실행할 수 있다. 대상 0건의 Job·빈 generation 표현은 18절 미정 정책을 따른다. 이 Job이 실패한 뒤 교수자가 명시적으로 retry하면 학생 질문 `input_through_sequence`는 유지하고 `base_revision = current_revision`, `final_answered_through_at = now()`로 재캡처한다. 그 새 상한까지 완료된 AI 대표질문 text Answer는 retry 입력에 포함한다. 성공한 FINAL은 자동으로 다시 만들지 않으며, 성공 후 text Answer에 따른 FINAL 마인드맵 재생성은 별도 미정이다.
 
 Recording 저장 gate는 blocking Job 개수와 별도로 평가한다. Recording이
 `UPLOAD_PENDING`이나 `UPLOADING`인 동안은 다른 blocking Job이 모두 terminal이어도
@@ -1795,8 +1795,8 @@ TranscriptVersion을 만든다. HQ worker는 비canonical version에 Segment·fi
 즉시 `SUMMARY_SOURCE_UNAVAILABLE`로 확정한다. Recording은 있지만 HQ `FAILED` 또는 HQ 결과 없는
 deadline이어도 `SUMMARY_SOURCE_UNAVAILABLE`이며, 보존된 LIVE 포인터는 final source
 정책이 정해질 때까지 자동 FINAL Summary에 사용하지 않는다. Transcript와 독립적인
-final clustering은 계속 예약한다. HQ mapping이 없거나 실패해도 Answer organization은 원본 LIVE 범위로 계속 예약한다. coordinator의 terminal 전이 transaction은 실행 가능한
-FINAL Summary·final clustering·Answer organization 등 모든 필수 downstream blocking Job과 queue outbox를
+LIVE→PROCESSING transaction에서 이미 생성한 final clustering은 독립 실행을 계속한다. HQ mapping이 없거나 실패해도 Answer organization은 원본 LIVE 범위로 계속 예약한다. coordinator의 terminal 전이 transaction은 실행 가능한
+FINAL Summary·Answer organization 등 source 의존 downstream blocking Job과 queue outbox를
 먼저 생성한 뒤 coordinator를 `SUCCEEDED` 또는 `FAILED`로 끝낸다. 따라서 HQ Job이
 terminal이 된 순간과 downstream Job 생성 사이에 Session이 먼저 `COMPLETED`가 되는
 구간이 없다. HQ 실패는 기존 PDF·질문·Answer·LIVE version 조회를 유지하고, 재연결

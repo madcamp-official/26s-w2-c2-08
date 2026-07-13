@@ -745,10 +745,11 @@ paths:
         이미 확정한 HQ Transcript·canonical을 rollback하지 않는다. FINAL_SUMMARY는
         최신 HQ source가 RECORDING/FINALIZED이고 final Segment가 1건 이상일 때만
         생성하며 preserved LIVE canonical은 현재 자동 final source로 사용하지 않는다.
-        coordinator는 종료 시점 requested sequence 이하의 학생 실제 질문과 ended_at까지
-        COMPLETED Answer가 있는 AI 대표질문을 현재 중앙 여부와 무관하게 snapshot한
-        FINAL QUESTION_CLUSTERING blocking Job도 생성한다.
-        같은 LIVE→PROCESSING transaction은 모든 개인 LIVE Summary,
+        같은 LIVE→PROCESSING transaction은 FINAL 대상이 1건 이상이면 종료 시점 requested
+        sequence 이하의 학생 실제 질문과 ended_at까지 COMPLETED Answer가 있는 AI 대표질문을
+        현재 중앙 여부와 무관하게 snapshot한 FINAL QUESTION_CLUSTERING blocking Job을 즉시
+        생성한다. 이 Job은 Recording upload·HQ Transcript·coordinator를 기다리지 않고 독립
+        실행한다. 대상 0건의 Job·빈 generation 표현은 TBD이다. 같은 transaction은 모든 개인 LIVE Summary,
         mode=LIVE Chat·Message·Evidence, REQUESTER_ONLY LIVE_SUMMARY Job, LIVE Chat에
         귀속된 REQUESTER_ONLY CHAT_RESPONSE Job과 purge_on_session_end로 표시한
         멱등성 원장을 삭제한다. 늦은 Worker 결과는 삭제된 Job·run token을
@@ -3830,7 +3831,7 @@ components:
           type: string
           minLength: 6
           maxLength: 6
-          pattern: '^[A-Z]{6}$'
+          pattern: "^[A-Z]{6}$"
           description: 현재 사용자가 이 Course의 PROFESSOR일 때만 제공하는 정규화된 참여 코드
         current_session:
           oneOf:
@@ -4390,7 +4391,13 @@ components:
             true이면 end_ms는 반드시 non-null이다.
         reason:
           type: string
-          enum: [SERVER_STATE_LOST, SEQUENCE_GAP, CLIENT_DISCONNECTED, BACKPRESSURE_DROP]
+          enum:
+            [
+              SERVER_STATE_LOST,
+              SEQUENCE_GAP,
+              CLIENT_DISCONNECTED,
+              BACKPRESSURE_DROP,
+            ]
         created_at:
           type: string
           format: date-time
@@ -5696,7 +5703,7 @@ components:
               oneOf:
                 - type: string
                   format: uri-reference
-                  pattern: '^/api/v1/materials/[^/?#]+/content(?:#page=[1-9][0-9]*)?$'
+                  pattern: "^/api/v1/materials/[^/?#]+/content(?:#page=[1-9][0-9]*)?$"
                 - type: "null"
 
     TranscriptSegmentChatEvidence:
@@ -5711,7 +5718,7 @@ components:
               oneOf:
                 - type: string
                   format: uri-reference
-                  pattern: '^/api/v1/transcript-segments/[^/?#]+$'
+                  pattern: "^/api/v1/transcript-segments/[^/?#]+$"
                 - type: "null"
 
     StudentQuestionChatEvidence:
@@ -5726,7 +5733,7 @@ components:
               oneOf:
                 - type: string
                   format: uri-reference
-                  pattern: '^/api/v1/questions/[^/?#]+$'
+                  pattern: "^/api/v1/questions/[^/?#]+$"
                 - type: "null"
 
     RepresentativeQuestionChatEvidence:
@@ -5741,7 +5748,7 @@ components:
               oneOf:
                 - type: string
                   format: uri-reference
-                  pattern: '^/api/v1/representative-questions/[^/?#]+$'
+                  pattern: "^/api/v1/representative-questions/[^/?#]+$"
                 - type: "null"
 
     AnswerChatEvidence:
@@ -5756,7 +5763,7 @@ components:
               oneOf:
                 - type: string
                   format: uri-reference
-                  pattern: '^/api/v1/answers/[^/?#]+$'
+                  pattern: "^/api/v1/answers/[^/?#]+$"
                 - type: "null"
 
     ChatEvidence:
@@ -5954,7 +5961,7 @@ components:
                         resource_url:
                           type: string
                           format: uri-reference
-                          pattern: '^/api/v1/chat-messages/[^/?#]+$'
+                          pattern: "^/api/v1/chat-messages/[^/?#]+$"
 
     AIJobResourceType:
       type: string
@@ -6020,7 +6027,8 @@ components:
     QuestionClusteringJobContext:
       type: object
       additionalProperties: false
-      required: [mode, input_through_sequence, base_revision, final_answered_through_at]
+      required:
+        [mode, input_through_sequence, base_revision, final_answered_through_at]
       properties:
         mode:
           $ref: "#/components/schemas/QuestionClusteringMode"
@@ -6230,7 +6238,7 @@ components:
                       resource_url:
                         type: string
                         format: uri-reference
-                        pattern: '^/api/v1/chat-messages/[^/?#]+$'
+                        pattern: "^/api/v1/chat-messages/[^/?#]+$"
         - if:
             properties:
               job_type:
@@ -6262,7 +6270,7 @@ components:
                       resource_url:
                         type: string
                         format: uri-reference
-                        pattern: '^/api/v1/summaries/[^/?#]+$'
+                        pattern: "^/api/v1/summaries/[^/?#]+$"
         - if:
             properties:
               job_type:
@@ -6283,7 +6291,7 @@ components:
                       resource_url:
                         type: string
                         format: uri-reference
-                        pattern: '^/api/v1/summaries/[^/?#]+$'
+                        pattern: "^/api/v1/summaries/[^/?#]+$"
         - if:
             properties:
               job_type:
@@ -6304,7 +6312,7 @@ components:
                       resource_url:
                         type: string
                         format: uri-reference
-                        pattern: '^/api/v1/chat-messages/[^/?#]+$'
+                        pattern: "^/api/v1/chat-messages/[^/?#]+$"
         - if:
             properties:
               job_type:
@@ -6454,7 +6462,7 @@ components:
           type: string
           format: uri-reference
           description: 첫 cursor 없는 TranscriptVersion 목록 경로
-          pattern: '^/api/v1/sessions/[^/?#]+/transcript/versions$'
+          pattern: "^/api/v1/sessions/[^/?#]+/transcript/versions$"
       oneOf:
         - title: Transcript 없음
           properties:
@@ -6469,7 +6477,7 @@ components:
             timeline_url:
               type: string
               format: uri-reference
-              pattern: '^/api/v1/sessions/[^/?#]+/transcript$'
+              pattern: "^/api/v1/sessions/[^/?#]+/transcript$"
         - title: Transcript 있음
           properties:
             state:
@@ -6692,7 +6700,16 @@ components:
           uniqueItems: true
           items:
             type: string
-            enum: [SESSION, RECORDING, TRANSCRIPT, QUESTIONS, CLUSTERS, ANSWERS, JOBS]
+            enum:
+              [
+                SESSION,
+                RECORDING,
+                TRANSCRIPT,
+                QUESTIONS,
+                CLUSTERS,
+                ANSWERS,
+                JOBS,
+              ]
 
     TranscriptStatusPayload:
       type: object
@@ -7179,6 +7196,7 @@ x-contract-notes:
     representative_refresh: create immutable representative Questions only for affected Clusters; representative generation is part of Job success
     coalescing: Questions committed while a Job is active or retry-reserved remain pending and are batched by the next fresh Job
     session_end: fail active or retry-reserved LIVE Job with SESSION_ENDED and retryable false, fence late results, and stop LIVE reruns
+    final_creation: when eligible input exists, the same LIVE-to-PROCESSING transaction creates the SHARED blocking FINAL Job and outbox without waiting for Recording, HQ Transcript or the coordinator; zero-input semantics remain TBD
     final_input: student Questions through the fixed captured requested sequence plus AI representative Questions whose Answer completed by the cutoff; initial cutoff is Session ended_at and an explicit retry of a failed FINAL Job recaptures it at retry acceptance
     final_mode: rebuild every eligible input placement from scratch and create an is_final generation
     result: the current successful Job points to a QUESTION_CLUSTER_GENERATION list aggregate; a replaced generation returns null result with SUPERSEDED
@@ -7197,16 +7215,48 @@ x-contract-notes:
   record_manifest:
     bounded_embeds: [session, authorized_recording_metadata]
     state_indexes: [transcript, final_summary, question_clustering]
-    collection_indexes: [materials, questions, current_clusters, final_clusters, answers, shared_jobs]
-    excluded_embeds: [summary_content, materials, transcript_segments, transcript_gaps, questions, clusters, answers, jobs]
+    collection_indexes:
+      [
+        materials,
+        questions,
+        current_clusters,
+        final_clusters,
+        answers,
+        shared_jobs,
+      ]
+    excluded_embeds:
+      [
+        summary_content,
+        materials,
+        transcript_segments,
+        transcript_gaps,
+        questions,
+        clusters,
+        answers,
+        jobs,
+      ]
     pagination: opaque keyset cursor with default limit 20 and maximum 100 on each dedicated list endpoint
     question_link_sort: RECENT using created_at DESC and id DESC
     count_semantics: value at the record response transaction and not a cross-request list snapshot token
     transcript_timeline: selected_version_id non-null requires the same value in the transcript_version_id query; null requires the query-free base URL
   chat_evidence:
     public_fields: [source_kind, label, link]
-    hidden_fields: [knowledge_chunk_id, storage_key, internal_path, pagination_cursor, array_position]
-    source_kinds: [MATERIAL, TRANSCRIPT_SEGMENT, STUDENT_QUESTION, AI_REPRESENTATIVE_QUESTION, ANSWER]
+    hidden_fields:
+      [
+        knowledge_chunk_id,
+        storage_key,
+        internal_path,
+        pagination_cursor,
+        array_position,
+      ]
+    source_kinds:
+      [
+        MATERIAL,
+        TRANSCRIPT_SEGMENT,
+        STUDENT_QUESTION,
+        AI_REPRESENTATIVE_QUESTION,
+        ANSWER,
+      ]
     link_rule: each source_kind is a discriminated branch whose non-null link must match its anchored public relative path; null only when no safe navigation target remains
     unavailable_representative: keep source_kind and label with link null for an internal DISCARDED tombstone; direct lookup remains 404
     discarded_cleanup: deleting the last Evidence atomically hard deletes the DISCARDED representative tombstone and KnowledgeChunk in the same transaction
@@ -7222,7 +7272,14 @@ x-contract-notes:
   evidence_target_reads:
     unauthenticated: 401
     unauthorized_or_unavailable: 404 without revealing whether the resource exists
-    targets: [material content, transcript segment, student question, AI representative question, answer]
+    targets:
+      [
+        material content,
+        transcript segment,
+        student question,
+        AI representative question,
+        answer,
+      ]
   material_content:
     readable_statuses: [UPLOADED, PROCESSING, READY]
     unavailable: FAILED, detached, unauthorized, or missing returns 404 MATERIAL_NOT_FOUND
@@ -7243,12 +7300,27 @@ x-contract-notes:
     websocket_events: none; no SSE, streaming HTTP or personal WebSocket
     live_end_transaction:
       transition: LIVE to PROCESSING
-      purge: [LIVE summaries, LIVE chats, LIVE chat messages, LIVE chat evidence, requester-only LIVE_SUMMARY jobs, requester-only CHAT_RESPONSE jobs belonging to LIVE chats]
+      purge:
+        [
+          LIVE summaries,
+          LIVE chats,
+          LIVE chat messages,
+          LIVE chat evidence,
+          requester-only LIVE_SUMMARY jobs,
+          requester-only CHAT_RESPONSE jobs belonging to LIVE chats,
+        ]
       idempotency: delete records marked purge_on_session_end in the same transaction so stale 202 or 201 responses are not replayed
       late_worker_results: rejected by missing Job and run-token fence
-      unaffected: [FINAL summaries, REVIEW chats, related jobs and idempotency records]
+      unaffected:
+        [FINAL summaries, REVIEW chats, related jobs and idempotency records]
     chat_turn_transaction:
-      commit_together: [normalized USER Message, immutable-target REQUESTER_ONLY CHAT_RESPONSE Job, outbox, terminal 202 idempotency response]
+      commit_together:
+        [
+          normalized USER Message,
+          immutable-target REQUESTER_ONLY CHAT_RESPONSE Job,
+          outbox,
+          terminal 202 idempotency response,
+        ]
       public_inverse: USER Message response_job_id equals Job id
       immutable_target: Job target is the exact USER Message for every attempt
       successful_result: Job result is the stored final ASSISTANT Message
@@ -7267,7 +7339,8 @@ x-contract-notes:
       invalid_response: 422 VALIDATION_ERROR with field, stable reason, max_length and actual_length
   text_input_validation:
     order: [trim-surrounding-whitespace, unicode-nfc, unicode-code-point-length]
-    maxima: { question_content: 300, question_draft: 500, chat_user_content: 2000 }
+    maxima:
+      { question_content: 300, question_draft: 500, chat_user_content: 2000 }
     empty_reason: EMPTY_AFTER_NORMALIZATION
     too_long_reason: MAX_LENGTH_EXCEEDED
     details: [field, reason, max_length, actual_length]
