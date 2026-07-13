@@ -148,11 +148,7 @@ function removePartial(reason) {
 }
 
 function shouldWarnBeforeLeave() {
-  return (
-    !endingSession &&
-    publisherState?.dataset.demoState === "active" &&
-    recordingState?.dataset.demoState === "recording"
-  );
+  return !endingSession && publisherState?.dataset.demoState === "active";
 }
 
 function handleBeforeUnload(event) {
@@ -182,8 +178,26 @@ function materialDisplayName(originalName) {
   );
   if (!names.has(originalName)) return originalName;
   let suffix = 1;
-  while (names.has(`${stem}(${suffix})${extension}`)) suffix += 1;
-  return `${stem}(${suffix})${extension}`;
+  while (names.has(`${stem} (${suffix})${extension}`)) suffix += 1;
+  return `${stem} (${suffix})${extension}`;
+}
+
+function ensureMaterialOpenAction(row) {
+  let actions = row.querySelector(":scope > .cluster");
+  const deleteButton = row.querySelector("[data-material-delete]");
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = "cluster";
+    if (deleteButton) actions.append(deleteButton);
+    row.append(actions);
+  }
+  if (!actions.querySelector("a")) {
+    const link = document.createElement("a");
+    link.className = "button button--ghost";
+    link.href = "/api/v1/materials/material-uploaded/content";
+    link.textContent = "원본 열기";
+    actions.prepend(link);
+  }
 }
 
 function createMaterialRow(name, status = "uploaded") {
@@ -208,8 +222,28 @@ function createMaterialRow(name, status = "uploaded") {
   remove.type = "button";
   remove.dataset.materialDelete = "";
   remove.textContent = `${name} 삭제`;
-  row.append(copy, remove);
+  const actions = document.createElement("div");
+  actions.className = "cluster";
+  actions.append(remove);
+  row.append(copy, actions);
+  ensureMaterialOpenAction(row);
   return row;
+}
+
+function detachMaterialEvidence(name) {
+  document.querySelectorAll("[data-evidence-material-name]").forEach((link) => {
+    if (link.dataset.evidenceMaterialName !== name) return;
+    const replacement = document.createElement("span");
+    replacement.className = "live-evidence-link";
+    replacement.setAttribute("aria-disabled", "true");
+    const label = document.createElement("strong");
+    const meta = document.createElement("small");
+    label.textContent = link.querySelector("strong")?.textContent || name;
+    meta.textContent =
+      "source_kind: MATERIAL · label snapshot 유지 · link: null";
+    replacement.append(label, meta);
+    link.replaceWith(replacement);
+  });
 }
 
 function setMaterialError(message) {
@@ -234,7 +268,52 @@ function applyMaterialFixture() {
       count += 1;
     }
   }
+  if (fixture === "all-ready" && materialList) {
+    materialList.querySelectorAll("[data-material-row]").forEach((row) => {
+      row.dataset.materialStatus = "ready";
+      const meta = row.querySelector("small");
+      if (meta) meta.textContent = "READY · 새 AI 검색 근거로 사용";
+      row.querySelector("[data-material-retry]")?.remove();
+      ensureMaterialOpenAction(row);
+    });
+  }
   updateMaterialCount();
+}
+
+function initializeAnswerFixture() {
+  const state = answerState?.dataset.demoState;
+  const target = document.querySelector("[data-answer-target]");
+  if (!target) return;
+  if (state === "completed") {
+    updateTargetStatus(target, "answered");
+    setAnswerControlsDisabled(false);
+    return;
+  }
+  if (!["waiting", "candidate", "not-ready"].includes(state)) return;
+  const snapshot = normalizeLiveInput(
+    target.querySelector("[data-answer-target-text]")?.textContent || "",
+  );
+  const sequence = latestFinalSequence();
+  activeAnswer = {
+    target,
+    targetId: target.dataset.answerTargetId,
+    targetKind: target.dataset.answerTargetKind,
+    snapshot,
+    captureStartedAfterSequence: sequence,
+  };
+  document.querySelectorAll("[data-answer-snapshot]").forEach((item) => {
+    item.textContent = snapshot;
+  });
+  document.querySelectorAll("[data-answer-boundary]").forEach((item) => {
+    item.textContent = `sequence ${sequence} 이후`;
+  });
+  updateTargetStatus(target, "selected");
+  if (state === "candidate") {
+    const finals = document.querySelectorAll('[data-transcript-kind="final"]');
+    const lastFinal = finals[finals.length - 1];
+    if (lastFinal) lastFinal.dataset.transcriptKind = "candidate";
+  }
+  setAnswerControlsDisabled(true);
 }
 
 document.addEventListener("click", (event) => {
@@ -275,11 +354,19 @@ document.addEventListener("click", (event) => {
     }
   }
   if (micAllow) {
-    setDemoState(publisherState, "active");
-    setDemoState(audioState, "listening");
-    setDemoState(recordingState, "recording");
-    setDemoState(sttState, "listening");
-    announce("한 마이크 입력을 실시간 PCM과 로컬 녹음으로 분기했습니다.");
+    if (publisherState.dataset.demoState === "conflict") {
+      setDemoState(audioState, "error");
+      showToast(
+        "다른 publisher가 전송 중이라 Audio를 시작할 수 없습니다.",
+        "error",
+      );
+    } else {
+      setDemoState(publisherState, "active");
+      setDemoState(audioState, "listening");
+      setDemoState(recordingState, "recording");
+      setDemoState(sttState, "listening");
+      announce("한 마이크 입력을 실시간 PCM과 로컬 녹음으로 분기했습니다.");
+    }
   }
   if (micDeny) {
     setDemoState(audioState, "denied");
@@ -340,6 +427,7 @@ document.addEventListener("click", (event) => {
   }
   if (materialDeleteConfirm && pendingMaterialRow) {
     const name = pendingMaterialRow.dataset.materialName;
+    detachMaterialEvidence(name);
     pendingMaterialRow.remove();
     pendingMaterialRow = null;
     closeDialog(materialDialog);
@@ -357,6 +445,7 @@ document.addEventListener("click", (event) => {
     row.querySelector("small").textContent =
       "PROCESSING · 같은 Material Job attempt 2 · LIVE 기능 차단 없음";
     materialRetry.remove();
+    ensureMaterialOpenAction(row);
     showToast("같은 Material 행의 attempt를 증가해 재시도합니다.", "success");
   }
   if (leavePreview) openDialog(leaveDialog, leavePreview);
@@ -384,6 +473,7 @@ document.addEventListener("click", (event) => {
         "#liveView [data-show-state='normal'] input, #liveView [data-show-state='normal'] textarea, #liveView [data-show-state='normal'] button",
       )
       .forEach((control) => (control.disabled = true));
+    setDemoState(document.querySelector("#liveView"), "processing");
     window.setTimeout(() => {
       setDemoState(recordingState, "ready-upload");
     }, 300);
@@ -409,36 +499,47 @@ document
   .querySelector("[data-material-upload]")
   ?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const file = materialInput.files?.[0];
-    if (!file) {
+    const files = [...(materialInput.files || [])];
+    if (files.length === 0) {
       setMaterialError("업로드할 PDF를 선택해 주세요.");
       return;
     }
-    if (updateMaterialCount() >= 10) {
+    const remaining = 10 - updateMaterialCount();
+    if (files.length > remaining) {
       setMaterialError(
-        "강의자료는 최대 10개까지 연결할 수 있습니다. 기존 자료를 삭제해 주세요.",
+        `남은 자리는 ${remaining}개입니다. 강의자료는 최대 10개까지 연결할 수 있습니다.`,
       );
       return;
     }
-    const pdf =
-      file.type === "application/pdf" ||
-      file.name.toLowerCase().endsWith(".pdf");
-    if (!pdf) {
-      setMaterialError("내용과 형식이 유효한 PDF 파일만 업로드할 수 있습니다.");
+    const invalidType = files.find(
+      (file) =>
+        !file.name.toLowerCase().endsWith(".pdf") ||
+        !["", "application/pdf"].includes(file.type),
+    );
+    if (invalidType) {
+      setMaterialError(
+        `${invalidType.name}: 내용과 형식이 유효한 PDF 파일만 업로드할 수 있습니다.`,
+      );
       return;
     }
-    if (file.size > 100_000_000) {
+    const tooLarge = files.find((file) => file.size > 100_000_000);
+    if (tooLarge) {
       setMaterialError(
-        "PDF 한 개는 100 MB(100,000,000 bytes) 이하여야 합니다.",
+        `${tooLarge.name}: PDF 한 개는 100 MB(100,000,000 bytes) 이하여야 합니다.`,
       );
       return;
     }
     setMaterialError("");
-    const displayName = materialDisplayName(file.name);
-    materialList.append(createMaterialRow(displayName));
+    files.forEach((file) => {
+      const displayName = materialDisplayName(file.name);
+      materialList.append(createMaterialRow(displayName));
+    });
     materialInput.value = "";
     updateMaterialCount();
-    showToast(`${displayName}을 UPLOADED 상태로 추가했습니다.`, "success");
+    showToast(
+      `${files.length}개 PDF를 UPLOADED 상태로 추가했습니다.`,
+      "success",
+    );
   });
 
 document
@@ -466,8 +567,8 @@ if (["reconnecting", "resync"].includes(eventState?.dataset.demoState)) {
   removePartial("재연결 초기 상태에서 저장되지 않은 partial만 제거했습니다.");
 }
 
-if (isCapturing()) setAnswerControlsDisabled(true);
 applyMaterialFixture();
+initializeAnswerFixture();
 
 if (new URLSearchParams(window.location.search).get("leave") === "warning") {
   openDialog(leaveDialog, document.querySelector("[data-leave-preview]"));

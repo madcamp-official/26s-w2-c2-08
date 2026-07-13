@@ -141,6 +141,13 @@
               >
                 상태 불일치
               </button>
+              <button
+                type="button"
+                data-state="processing"
+                aria-pressed="false"
+              >
+                PROCESSING
+              </button>
             </div>
           </div>
           <div class="realtime-control">
@@ -693,9 +700,50 @@
                       >LIVE_INCREMENTAL</span
                     >
                   </div>
-                  <div class="live-job-meta">
-                    <span>last job: job-cluster-007</span><span>RUNNING</span
-                    ><span>attempt 1</span><span>active job 1개</span>
+                  <div class="live-job-meta" data-show-state="normal">
+                    <span>last job: job-cluster-006</span><span>SUCCEEDED</span
+                    ><span>attempt 1</span><span>active_job_id: null</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="unclustered"
+                    hidden
+                  >
+                    <span>last job: job-cluster-006</span><span>SUCCEEDED</span
+                    ><span>새 질문은 아직 미배치</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="clustering-pending"
+                    hidden
+                  >
+                    <span>active job: job-cluster-007</span><span>PENDING</span
+                    ><span>attempt 1</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="clustering-running"
+                    hidden
+                  >
+                    <span>active job: job-cluster-007</span><span>RUNNING</span
+                    ><span>attempt 1</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="clustering-retry-reserved"
+                    hidden
+                  >
+                    <span>last job: job-cluster-007 · FAILED</span
+                    ><span>active_job_id: null</span
+                    ><span>retry job: same row · attempt 2 예약</span>
+                  </div>
+                  <div
+                    class="live-job-meta"
+                    data-show-state="cluster-failed"
+                    hidden
+                  >
+                    <span>last job: job-cluster-007</span><span>FAILED</span
+                    ><span>attempt 1</span><span>active_job_id: null</span>
                   </div>
                   <p data-show-state="clustering-retry-reserved" hidden>
                     retry_job_id가 있으므로 새 Job을 만들지 않고 들어온 질문을
@@ -942,6 +990,7 @@
                 <input
                   id="liveMaterialInput"
                   type="file"
+                  multiple
                   accept="application/pdf,.pdf"
                   aria-describedby="liveMaterialHelp liveMaterialError"
                 />
@@ -1035,7 +1084,9 @@
                   <small>READY · 새 AI 검색 근거로 사용 · 18.4 MB</small>
                 </div>
                 <div class="cluster">
-                  <a class="button button--ghost" href="#materialsTitle"
+                  <a
+                    class="button button--ghost"
+                    href="/api/v1/materials/material-graph/content"
                     >원본 열기</a
                   ><button
                     class="button button--danger"
@@ -1049,22 +1100,28 @@
               <li
                 class="live-material-row"
                 data-material-row
-                data-material-name="그래프 탐색 자료(1).pdf"
+                data-material-name="그래프 탐색 자료 (1).pdf"
                 data-material-status="processing"
               >
                 <div>
-                  <strong>그래프 탐색 자료(1).pdf</strong>
+                  <strong>그래프 탐색 자료 (1).pdf</strong>
                   <small
                     >PROCESSING · 아직 AI 근거 아님 · LIVE 기능 차단 없음</small
                   >
                 </div>
-                <button
-                  class="button button--danger"
-                  type="button"
-                  data-material-delete
-                >
-                  그래프 탐색 자료(1).pdf 삭제
-                </button>
+                <div class="cluster">
+                  <a
+                    class="button button--ghost"
+                    href="/api/v1/materials/material-processing/content"
+                    >원본 열기</a
+                  ><button
+                    class="button button--danger"
+                    type="button"
+                    data-material-delete
+                  >
+                    그래프 탐색 자료 (1).pdf 삭제
+                  </button>
+                </div>
               </li>
               <li
                 class="live-material-row"
@@ -1294,6 +1351,7 @@
                       <li>
                         <a
                           class="live-evidence-link"
+                          data-evidence-material-name="그래프 탐색 자료.pdf"
                           href="/api/v1/materials/material-graph/content#page=12"
                         >
                           <strong>그래프 탐색 자료.pdf · 12쪽</strong>
@@ -1474,6 +1532,25 @@
             <p>서버 Session 상태에 맞는 화면으로 이동합니다.</p>
             <a class="button button--primary" href="course-professor.html"
               >Course에서 상태 확인</a
+            >
+          </div>
+        </section>
+        <section
+          class="state-panel auth-expired"
+          data-show-state="processing"
+          hidden
+        >
+          <div class="state-panel__content">
+            <span class="state-panel__icon" aria-hidden="true">…</span>
+            <h2>class 기록을 정리하고 있습니다</h2>
+            <p>
+              개인 LIVE AI와 새 입력을 삭제·차단했습니다. 이전 LIVE 화면으로
+              돌아가지 않습니다.
+            </p>
+            <a
+              class="button button--primary"
+              href="class-processing.html?role=professor"
+              >기록 정리 상태 보기</a
             >
           </div>
         </section>
