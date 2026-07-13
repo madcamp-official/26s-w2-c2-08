@@ -88,6 +88,10 @@ function initLiveAi(root, announce) {
   const chatForm = root.querySelector("[data-live-chat-form]");
   const chatInput = root.querySelector("[data-live-chat-input]");
 
+  if (chat) {
+    chat.setAttribute("role", "log");
+    chat.setAttribute("aria-label", "개인 AI 대화와 처리 상태");
+  }
   if (chat?.dataset.demoState === "pending") setChatLocked(chatForm, true);
 
   root.addEventListener("click", (event) => {
