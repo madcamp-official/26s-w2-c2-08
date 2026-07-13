@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
     <script type="module" src="assets/js/prototype.js"></script>
+    <script type="module" src="assets/js/course-detail.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
@@ -108,7 +109,9 @@
             <div class="course-hero__main">
               <div class="cluster">
                 <span class="role-badge">이 Course의 교수자</span
-                ><span class="status-chip status-chip--live"
+                ><span
+                  class="status-chip status-chip--live"
+                  data-session-hero-status
                   >진행 중 class</span
                 >
               </div>
@@ -121,23 +124,77 @@
                 <p>교수자 권한이 확인된 이 화면에서만 복호화해 표시합니다.</p>
                 <div class="join-code-box">
                   <div>
-                    <small>목 예시 · 실제 규격 아님</small
-                    ><strong id="professorJoinCode">A7K9Q2</strong>
+                    <small>영문 대문자 6자 · 만료 없음</small
+                    ><strong id="professorJoinCode">ALGORT</strong>
                   </div>
-                  <button
-                    class="button button--secondary"
-                    type="button"
-                    data-copy="#professorJoinCode"
-                    data-copy-success="예시 참여 코드를 복사했습니다."
-                  >
-                    복사
-                  </button>
+                  <div class="cluster">
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-copy="#professorJoinCode"
+                      data-copy-success="참여 코드를 복사했습니다."
+                    >
+                      복사</button
+                    ><button
+                      class="button button--secondary"
+                      type="button"
+                      data-join-code-rotate
+                    >
+                      새 코드 발급
+                    </button>
+                  </div>
                 </div>
               </section>
               <p class="notice notice--info" role="note">
-                참여 코드는 암호화 저장되며 길이·alphabet·회전 UI는 아직
-                미정입니다.
+                Course를 처음 만든 owner만 코드를 바꿀 수 있습니다. 새 코드가
+                발급되면 이전 코드는 즉시 무효가 되며 변경 이력은 남지 않습니다.
               </p>
+              <section
+                class="panel"
+                id="courseDeleteAction"
+                data-demo-state="blocked"
+                aria-labelledby="courseDeleteTitle"
+                aria-live="polite"
+              >
+                <h2 id="courseDeleteTitle">Course 관리</h2>
+                <p data-show-state="blocked">
+                  active class가 있는 Course의 삭제 정책은 미정입니다. 이
+                  Prototype에서는 삭제를 실행하지 않습니다.
+                </p>
+                <button
+                  class="button button--danger button--block"
+                  type="button"
+                  data-show-state="blocked"
+                  disabled
+                >
+                  active class 삭제 정책 미정
+                </button>
+                <p data-show-state="safe" hidden>
+                  active class가 없는 안전한 목 상태에서만 삭제 성공 흐름을
+                  확인합니다.
+                </p>
+                <button
+                  class="button button--danger button--block"
+                  type="button"
+                  data-course-delete
+                  data-show-state="safe"
+                  hidden
+                >
+                  Course 삭제
+                </button>
+                <p data-show-state="unknown" hidden>
+                  현재 class 상태를 확인한 뒤 삭제 가능 여부를 판단합니다.
+                </p>
+                <button
+                  class="button button--danger button--block"
+                  type="button"
+                  data-show-state="unknown"
+                  disabled
+                  hidden
+                >
+                  상태 확인 후 삭제
+                </button>
+              </section>
             </aside>
           </section>
 
@@ -159,6 +216,7 @@
                   class="state-switcher"
                   data-state-switcher
                   data-state-target="#currentSession"
+                  data-session-switcher
                   aria-label="현재 class 상태 선택"
                 >
                   <button type="button" data-state="live" aria-pressed="true">
@@ -196,10 +254,14 @@
               <article class="current-session__card" data-show-state="live">
                 <div>
                   <span class="status-chip status-chip--live">진행 중</span>
-                  <h3>그래프 탐색과 최단 경로</h3>
+                  <h3 id="liveSessionTitle" data-session-title>
+                    그래프 탐색과 최단 경로
+                  </h3>
                   <p>
-                    <time datetime="2026-07-12">2026년 7월 12일</time> · 43분째
-                    진행 중
+                    <time datetime="2026-07-12T14:00:00+09:00"
+                      >2026년 7월 12일 14:00</time
+                    >
+                    · 43분째 진행 중
                   </p>
                 </div>
                 <footer class="current-session__footer">
@@ -207,12 +269,22 @@
                     <span>STT 연결됨</span><span>참여 64명</span
                     ><span>질문 12개</span>
                   </div>
-                  <a
-                    class="button button--primary"
-                    href="class-live-professor.html"
-                  >
-                    실시간 class 입장
-                  </a>
+                  <div class="cluster">
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-title-edit
+                      data-title-target="liveSessionTitle"
+                      data-session-state="LIVE"
+                    >
+                      제목 수정</button
+                    ><a
+                      class="button button--primary"
+                      href="class-live-professor.html"
+                    >
+                      실시간 class 입장
+                    </a>
+                  </div>
                 </footer>
               </article>
               <article
@@ -222,7 +294,7 @@
               >
                 <div>
                   <span class="status-chip status-chip--info">시작 전</span>
-                  <h3>동적 계획법</h3>
+                  <h3 id="readySessionTitle" data-session-title>동적 계획법</h3>
                   <p>
                     <time datetime="2026-07-14">2026년 7월 14일</time> · PDF
                     준비 상태를 확인하세요.
@@ -231,12 +303,31 @@
                 <footer class="current-session__footer">
                   <span class="current-session__meta"
                     >class 시작 전 자료 준비 화면으로 이동합니다.</span
-                  ><a
-                    class="button button--primary"
-                    href="class-create.html?stage=ready&materials=mixed"
                   >
-                    class 준비하기
-                  </a>
+                  <div class="cluster">
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-title-edit
+                      data-title-target="readySessionTitle"
+                      data-session-state="READY"
+                    >
+                      제목 수정</button
+                    ><button
+                      class="button button--danger"
+                      type="button"
+                      data-session-delete
+                      data-title-target="readySessionTitle"
+                      data-session-state="READY"
+                    >
+                      class 삭제</button
+                    ><a
+                      class="button button--primary"
+                      href="class-create.html?stage=ready&materials=mixed"
+                    >
+                      class 준비하기
+                    </a>
+                  </div>
                 </footer>
               </article>
               <article
@@ -246,18 +337,31 @@
               >
                 <div>
                   <span class="status-chip status-chip--warning">정리 중</span>
-                  <h3>그리디 알고리즘</h3>
+                  <h3 id="processingSessionTitle" data-session-title>
+                    그리디 알고리즘
+                  </h3>
                   <p>Transcript 확정과 최종 요약 작업을 진행하고 있습니다.</p>
                 </div>
                 <footer class="current-session__footer">
                   <span class="current-session__meta"
                     >저장된 기록은 준비되는 대로 먼저 볼 수 있습니다.</span
-                  ><a
-                    class="button button--secondary"
-                    href="class-processing.html?role=professor"
                   >
-                    정리 상태 보기
-                  </a>
+                  <div class="cluster">
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-title-edit
+                      data-title-target="processingSessionTitle"
+                      data-session-state="PROCESSING"
+                    >
+                      제목 수정</button
+                    ><a
+                      class="button button--secondary"
+                      href="class-processing.html?role=professor"
+                    >
+                      정리 상태 보기
+                    </a>
+                  </div>
                 </footer>
               </article>
               <div class="state-panel" data-show-state="none" hidden>
@@ -307,33 +411,15 @@
               class="panel course-side-panel"
               id="classActions"
               data-demo-state="limited"
-              data-query-state="action"
-              data-query-default="limited"
               aria-labelledby="classActionTitle"
+              aria-live="polite"
             >
               <div>
                 <h2 id="classActionTitle">class 관리</h2>
                 <p>
-                  새 class는 시작 전 상태로 만들며, 한 Course의 `LIVE` class는
-                  최대 하나입니다.
+                  한 Course에는 `READY`, `LIVE`, `PROCESSING`을 합쳐 active
+                  class가 최대 하나만 존재합니다.
                 </p>
-              </div>
-              <div
-                class="state-switcher"
-                data-state-switcher
-                data-state-target="#classActions"
-                aria-label="class 생성 가능 상태 선택"
-              >
-                <button type="button" data-state="limited" aria-pressed="true">
-                  LIVE 있음
-                </button>
-                <button
-                  type="button"
-                  data-state="available"
-                  aria-pressed="false"
-                >
-                  생성 가능
-                </button>
               </div>
               <button
                 class="button button--primary button--block"
@@ -350,16 +436,9 @@
                 role="note"
                 data-show-state="limited"
               >
-                현재 진행 중인 class를 종료한 뒤 새 class를 시작할 수 있습니다.
+                현재 active class가 `COMPLETED`되거나 `READY` class가 삭제된
+                뒤에만 새 class를 만들 수 있습니다.
               </p>
-              <button
-                class="button button--secondary button--block"
-                type="button"
-                data-toast="진행 중 class에 먼저 입장해 종료할 수 있습니다."
-                data-show-state="limited"
-              >
-                진행 중 class 확인
-              </button>
               <a
                 class="button button--primary button--block"
                 href="class-create.html"
@@ -373,7 +452,23 @@
                 data-show-state="available"
                 hidden
               >
-                진행 중인 class가 없어 새 class를 만들 수 있습니다.
+                `current_session=null`이므로 새 class를 만들 수 있습니다.
+              </p>
+              <button
+                class="button button--primary button--block"
+                type="button"
+                data-show-state="unknown"
+                disabled
+                hidden
+              >
+                현재 class 확인 중
+              </button>
+              <p
+                class="notice notice--warning"
+                data-show-state="unknown"
+                hidden
+              >
+                현재 class 조회가 끝나기 전에는 새 class를 만들지 않습니다.
               </p>
             </aside>
           </div>
@@ -392,7 +487,10 @@
                   <h2 id="historyTitle">완료 class 기록</h2>
                   <span class="badge">8</span>
                 </div>
-                <p>날짜 내림차순으로 확정된 class 기록을 확인합니다.</p>
+                <p>
+                  실제 시작 시각 내림차순으로 표시하고, 시각이 같으면 Session ID
+                  내림차순으로 순서를 고정합니다.
+                </p>
               </div>
               <div
                 class="state-switcher"
@@ -416,53 +514,143 @@
               </div>
             </div>
             <div class="history-list" data-show-state="normal">
-              <article class="history-row">
+              <article
+                class="history-row"
+                data-session-row
+                data-started-at="2026-07-10T15:30:00+09:00"
+                data-session-id="f2000000-0000-4000-8000-000000000002"
+              >
                 <div>
-                  <time datetime="2026-07-10">7월 10일</time
-                  ><strong>분할 정복</strong>
+                  <time datetime="2026-07-10T15:30:00+09:00"
+                    >7월 10일 · 15:30</time
+                  ><strong id="completedSessionTitleF2" data-session-title
+                    >분할 정복 심화</strong
+                  ><small>동일 시각 tie-break · Session …F2</small>
                 </div>
                 <p class="history-row__summary">
                   PDF 2개 · final Transcript · 질문 9개
                 </p>
-                <a
-                  class="icon-button"
-                  aria-label="분할 정복 기록 열기"
-                  href="class-ended-professor.html"
-                >
-                  ↗
-                </a>
+                <div class="cluster">
+                  <button
+                    class="icon-button"
+                    type="button"
+                    data-title-edit
+                    data-title-target="completedSessionTitleF2"
+                    data-session-state="COMPLETED"
+                    aria-label="분할 정복 심화 class 제목 수정"
+                  >
+                    ✎</button
+                  ><button
+                    class="icon-button"
+                    type="button"
+                    data-session-delete
+                    data-title-target="completedSessionTitleF2"
+                    data-session-state="COMPLETED"
+                    aria-label="분할 정복 심화 class 삭제"
+                  >
+                    ×</button
+                  ><a
+                    class="icon-button"
+                    data-session-record-link
+                    data-date-label="2026년 7월 10일 15시 30분"
+                    aria-label="분할 정복 심화 · 2026년 7월 10일 15시 30분 기록 열기"
+                    href="class-ended-professor.html?session=f2"
+                  >
+                    ↗
+                  </a>
+                </div>
               </article>
-              <article class="history-row">
+              <article
+                class="history-row"
+                data-session-row
+                data-started-at="2026-07-10T15:30:00+09:00"
+                data-session-id="a1000000-0000-4000-8000-000000000001"
+              >
                 <div>
-                  <time datetime="2026-07-08">7월 8일</time
-                  ><strong>정렬 알고리즘</strong>
+                  <time datetime="2026-07-10T15:30:00+09:00"
+                    >7월 10일 · 15:30</time
+                  ><strong id="completedSessionTitleA1" data-session-title
+                    >분할 정복 기초</strong
+                  ><small>동일 시각 tie-break · Session …A1</small>
                 </div>
                 <p class="history-row__summary">
                   PDF 1개 · final Transcript · 질문 14개
                 </p>
-                <a
-                  class="icon-button"
-                  aria-label="정렬 알고리즘 기록 열기"
-                  href="class-ended-professor.html"
-                >
-                  ↗
-                </a>
+                <div class="cluster">
+                  <button
+                    class="icon-button"
+                    type="button"
+                    data-title-edit
+                    data-title-target="completedSessionTitleA1"
+                    data-session-state="COMPLETED"
+                    aria-label="분할 정복 기초 class 제목 수정"
+                  >
+                    ✎</button
+                  ><button
+                    class="icon-button"
+                    type="button"
+                    data-session-delete
+                    data-title-target="completedSessionTitleA1"
+                    data-session-state="COMPLETED"
+                    aria-label="분할 정복 기초 class 삭제"
+                  >
+                    ×</button
+                  ><a
+                    class="icon-button"
+                    data-session-record-link
+                    data-date-label="2026년 7월 10일 15시 30분"
+                    aria-label="분할 정복 기초 · 2026년 7월 10일 15시 30분 기록 열기"
+                    href="class-ended-professor.html?session=a1"
+                  >
+                    ↗
+                  </a>
+                </div>
               </article>
-              <article class="history-row">
+              <article
+                class="history-row"
+                data-session-row
+                data-started-at="2026-07-08T13:00:00+09:00"
+                data-session-id="81000000-0000-4000-8000-000000000008"
+              >
                 <div>
-                  <time datetime="2026-07-05">7월 5일</time
-                  ><strong>시간 복잡도</strong>
+                  <time datetime="2026-07-08T13:00:00+09:00"
+                    >7월 8일 · 13:00</time
+                  ><strong id="completedSessionTitle08" data-session-title
+                    >정렬 알고리즘</strong
+                  ><small>Session ID …08</small>
                 </div>
                 <p class="history-row__summary">
                   PDF 3개 · final Transcript · 질문 7개
                 </p>
-                <a
-                  class="icon-button"
-                  aria-label="시간 복잡도 기록 열기"
-                  href="class-ended-professor.html"
-                >
-                  ↗
-                </a>
+                <div class="cluster">
+                  <button
+                    class="icon-button"
+                    type="button"
+                    data-title-edit
+                    data-title-target="completedSessionTitle08"
+                    data-session-state="COMPLETED"
+                    aria-label="정렬 알고리즘 class 제목 수정"
+                  >
+                    ✎</button
+                  ><button
+                    class="icon-button"
+                    type="button"
+                    data-session-delete
+                    data-title-target="completedSessionTitle08"
+                    data-session-state="COMPLETED"
+                    aria-label="정렬 알고리즘 class 삭제"
+                  >
+                    ×</button
+                  ><a
+                    class="icon-button"
+                    data-session-record-link
+                    data-date-label="2026년 7월 8일 13시"
+                    aria-label="정렬 알고리즘 · 2026년 7월 8일 13시 기록 열기"
+                    href="class-ended-professor.html?session=08"
+                  >
+                    ↗
+                  </a>
+                </div>
               </article>
             </div>
             <div
@@ -572,6 +760,269 @@
         </section>
       </section>
     </main>
+
+    <div
+      class="dialog-backdrop"
+      id="joinCodeRotateDialog"
+      role="presentation"
+      hidden
+    >
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="joinCodeRotateTitle"
+        aria-describedby="joinCodeRotateDescription"
+      >
+        <div
+          id="joinCodeRotateFlow"
+          data-demo-state="confirm"
+          aria-live="polite"
+        >
+          <div data-show-state="confirm">
+            <header class="dialog__header">
+              <div>
+                <h2 id="joinCodeRotateTitle">새 참여 코드를 발급할까요?</h2>
+                <p id="joinCodeRotateDescription">
+                  새 코드가 저장되는 즉시 이전 코드는 무효가 됩니다. 이미 참여한
+                  학생의 멤버십에는 영향이 없습니다.
+                </p>
+              </div>
+              <button
+                class="icon-button"
+                type="button"
+                data-dialog-close
+                aria-label="참여 코드 발급 창 닫기"
+              >
+                ×
+              </button>
+            </header>
+            <p class="notice notice--info">
+              Course를 처음 만든 owner만 실행할 수 있고, 참여 코드는 만료되지
+              않으며 변경 이력은 저장하지 않습니다.
+            </p>
+            <div class="dialog__actions">
+              <button
+                class="button button--ghost"
+                type="button"
+                data-dialog-close
+              >
+                취소</button
+              ><button
+                class="button button--secondary"
+                type="button"
+                data-join-code-fail
+              >
+                실패 목 응답</button
+              ><button
+                class="button button--primary"
+                type="button"
+                data-join-code-confirm
+              >
+                새 코드 발급
+              </button>
+            </div>
+          </div>
+          <div data-show-state="error" hidden role="alert">
+            <header class="dialog__header">
+              <div>
+                <h2 id="joinCodeRotateErrorTitle">
+                  새 코드를 발급하지 못했습니다
+                </h2>
+                <p id="joinCodeRotateErrorDescription">
+                  기존 코드 <strong data-join-code-current>ALGORT</strong>를
+                  그대로 유지합니다.
+                </p>
+              </div>
+              <button
+                class="icon-button"
+                type="button"
+                data-dialog-close
+                aria-label="참여 코드 오류 창 닫기"
+              >
+                ×
+              </button>
+            </header>
+            <p class="notice notice--danger">
+              실패한 요청은 이전 코드를 무효화하거나 새 코드를 표시하지
+              않습니다.
+            </p>
+            <div class="dialog__actions">
+              <button
+                class="button button--ghost"
+                type="button"
+                data-dialog-close
+              >
+                기존 코드 사용</button
+              ><button
+                class="button button--secondary"
+                type="button"
+                data-join-code-retry
+              >
+                다시 확인
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div
+      class="dialog-backdrop"
+      id="titleEditDialog"
+      role="presentation"
+      hidden
+    >
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titleEditDialogTitle"
+        aria-describedby="titleEditDialogDescription"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="titleEditDialogTitle">class 제목 수정</h2>
+            <p id="titleEditDialogDescription">
+              <strong data-title-edit-state>READY</strong> 상태에서도 날짜와
+              상태 시각은 바꾸지 않고 제목만 수정합니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="class 제목 수정 창 닫기"
+          >
+            ×
+          </button>
+        </header>
+        <form data-title-edit-form>
+          <div class="field">
+            <label for="sessionTitleEdit">새 class 제목</label
+            ><input
+              id="sessionTitleEdit"
+              name="title"
+              type="text"
+              autocomplete="off"
+              aria-describedby="sessionTitleEditHelp"
+            />
+            <p class="field__help" id="sessionTitleEditHelp">
+              비워 저장하면 서버 자동 제목을 사용합니다. 정확한 자동 제목
+              문자열은 아직 미정이므로 Prototype에는 형식 미정으로 표시합니다.
+            </p>
+          </div>
+          <div class="dialog__actions">
+            <button
+              class="button button--ghost"
+              type="button"
+              data-dialog-close
+            >
+              취소</button
+            ><button class="button button--primary" type="submit">
+              제목 저장
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div
+      class="dialog-backdrop"
+      id="sessionDeleteDialog"
+      role="presentation"
+      hidden
+    >
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sessionDeleteTitle"
+        aria-describedby="sessionDeleteDescription"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="sessionDeleteTitle">class를 삭제할까요?</h2>
+            <p id="sessionDeleteDescription">
+              <strong data-session-delete-name>선택한 class</strong>의
+              <span data-session-delete-state>READY</span> 기록을 삭제합니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="class 삭제 창 닫기"
+          >
+            ×
+          </button>
+        </header>
+        <p class="notice notice--danger">
+          이 동작은 `READY`와 `COMPLETED`에서만 제공합니다. `LIVE`와
+          `PROCESSING`에는 삭제 control 자체가 없습니다.
+        </p>
+        <div class="dialog__actions">
+          <button class="button button--ghost" type="button" data-dialog-close>
+            취소</button
+          ><button
+            class="button button--danger"
+            type="button"
+            data-session-delete-confirm
+          >
+            class 삭제
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div
+      class="dialog-backdrop"
+      id="courseDeleteDialog"
+      role="presentation"
+      hidden
+    >
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="courseDeleteDialogTitle"
+        aria-describedby="courseDeleteDialogDescription"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="courseDeleteDialogTitle">알고리즘 Course를 삭제할까요?</h2>
+            <p id="courseDeleteDialogDescription">
+              이 Dialog는 `current_session=null`인 안전한 목 fixture에서만
+              열립니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="Course 삭제 창 닫기"
+          >
+            ×
+          </button>
+        </header>
+        <p class="notice notice--danger">
+          Course에는 종료·보관 상태나 owner 이전이 없습니다. active class가 있는
+          경우의 삭제 정책은 미정이라 이 성공 fixture를 제공하지 않습니다.
+        </p>
+        <div class="dialog__actions">
+          <button class="button button--ghost" type="button" data-dialog-close>
+            취소</button
+          ><button
+            class="button button--danger"
+            type="button"
+            data-course-delete-confirm
+          >
+            삭제 성공 목 응답
+          </button>
+        </div>
+      </section>
+    </div>
+
     <div
       class="toast-region"
       data-toast-region

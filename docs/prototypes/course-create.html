@@ -30,9 +30,7 @@
         </a>
         <nav class="primary-nav" aria-label="주요 메뉴">
           <a href="dashboard.html">홈</a>
-          <a href="dashboard.html#ownedCoursesTitle" aria-current="page"
-            >내 Course</a
-          >
+          <a href="dashboard.html#ownedCoursesTitle">내 Course</a>
           <a href="index.html">Prototype 목록</a>
         </nav>
         <div class="header-actions">
@@ -81,8 +79,8 @@
           <p class="eyebrow">COURSE_CREATE_PAGE · PRE-T-01</p>
           <h1>한 학기 수업방을 시작합니다.</h1>
           <p>
-            Course를 만든 사용자는 이 Course에서 교수자가 됩니다. 계정 전체의
-            역할은 바뀌지 않습니다.
+            로그인한 사용자는 누구나 Course를 만들 수 있습니다. 생성자는 이
+            Course에서 교수자가 되며 계정 전체의 역할은 바뀌지 않습니다.
           </p>
         </div>
         <div
@@ -193,13 +191,14 @@
               <h2>생성 후 이렇게 동작해요</h2>
               <ul>
                 <li>생성자는 해당 Course의 교수자로 등록됩니다.</li>
-                <li>서버가 학생 참여용 고유 코드를 발급합니다.</li>
+                <li>서버가 영문 대문자 6자리 참여 코드를 발급합니다.</li>
                 <li>참여 코드는 교수자 화면에서만 표시됩니다.</li>
               </ul>
             </section>
             <p class="notice notice--info" role="note">
-              참여 코드의 길이와 사용 문자는 아직 미정입니다. 이 화면은 특정
-              형식을 제품 규칙으로 확정하지 않습니다.
+              참여 코드는 구분자 없는 영문 대문자 6자리이며 만료되지 않습니다.
+              Course를 처음 만든 교수자는 나중에 새 코드를 발급해 기존 코드를
+              즉시 폐기할 수 있습니다.
             </p>
           </aside>
         </div>
@@ -222,8 +221,10 @@
             <span class="result-card__icon" aria-hidden="true">✓</span>
             <h2>알고리즘 Course를 만들었습니다</h2>
             <p>
-              김도현님은 이 Course에서 <strong>교수자</strong>입니다. 아래
-              코드는 형식 검토를 위한 목 예시입니다.
+              김도현님은 이 Course의 <strong>유일한 교수자 owner</strong>입니다.
+              아래 구분자 없는 영문 대문자 6자리 코드를 학생에게 공유하세요.
+              코드는 만료되지 않으며 생성자인 김도현님만 나중에 새 코드로 교체할
+              수 있습니다.
             </p>
             <div class="result-summary">
               <div><small>Course</small><strong>알고리즘</strong></div>
@@ -231,14 +232,14 @@
             </div>
             <div class="join-code-box">
               <div>
-                <small>예시 참여 코드 · 실제 규격 아님</small>
-                <strong id="createdJoinCode">A7K9Q2</strong>
+                <small>참여 코드 · 구분자 없음 · 만료 없음</small>
+                <strong id="createdJoinCode">ALGORT</strong>
               </div>
               <button
                 class="button button--secondary"
                 type="button"
                 data-copy="#createdJoinCode"
-                data-copy-success="예시 참여 코드를 복사했습니다."
+                data-copy-success="참여 코드를 복사했습니다."
               >
                 코드 복사
               </button>

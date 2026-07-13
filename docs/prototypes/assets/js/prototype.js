@@ -168,7 +168,16 @@ function initDemoForms() {
       }
 
       const target = document.querySelector(form.dataset.stateTarget);
-      setDemoState(target, form.dataset.successState || "success");
+      const successState = form.dataset.successState || "success";
+      setDemoState(target, successState);
+      const successPanel = getOwnedStateItems(target).find((item) =>
+        item.dataset.showState.split(" ").includes(successState),
+      );
+      const successHeading = successPanel?.querySelector("h1, h2");
+      if (successHeading) {
+        successHeading.tabIndex = -1;
+        successHeading.focus();
+      }
       showToast(
         form.dataset.successToast || "목 결과를 표시했습니다.",
         "success",
@@ -268,9 +277,15 @@ function initTranscriptRangeLinks() {
     });
     const first = target.querySelector(`[data-sequence="${start}"]`);
     if (first) {
+      const reduceMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
       first.tabIndex = -1;
       first.focus({ preventScroll: true });
-      first.scrollIntoView({ block: "center", behavior: "smooth" });
+      first.scrollIntoView({
+        block: "center",
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
     }
     showToast(
       `Transcript sequence ${start}~${end} 범위를 표시했습니다.`,
@@ -306,7 +321,26 @@ function initStateActions() {
     const action = event.target.closest("[data-state-action]");
     if (!action) return;
     const target = document.querySelector(action.dataset.stateTarget);
-    setDemoState(target, action.dataset.state);
+    const state = action.dataset.state;
+    setDemoState(target, state);
+
+    if (!action.closest("[hidden]")) return;
+    const statePanel = getOwnedStateItems(target).find(
+      (item) =>
+        !item.hidden && item.dataset.showState.split(" ").includes(state),
+    );
+    if (!statePanel) return;
+
+    const focusTarget =
+      statePanel.querySelector("[data-state-focus]") ||
+      statePanel.querySelector(
+        "form input:not([disabled]), form select:not([disabled]), form textarea:not([disabled])",
+      ) ||
+      statePanel.querySelector("h1, h2, h3") ||
+      statePanel.querySelector(focusableSelector) ||
+      statePanel;
+    if (!focusTarget.matches(focusableSelector)) focusTarget.tabIndex = -1;
+    focusTarget.focus();
   });
 }
 

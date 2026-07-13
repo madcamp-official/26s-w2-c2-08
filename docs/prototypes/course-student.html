@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
     <script type="module" src="assets/js/prototype.js"></script>
+    <script type="module" src="assets/js/course-detail.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
@@ -105,7 +106,9 @@
               <div class="cluster">
                 <span class="role-badge role-badge--student"
                   >이 Course의 학생</span
-                ><span class="status-chip status-chip--live"
+                ><span
+                  class="status-chip status-chip--live"
+                  data-session-hero-status
                   >진행 중 class</span
                 >
               </div>
@@ -148,6 +151,7 @@
                   class="state-switcher"
                   data-state-switcher
                   data-state-target="#studentCurrentSession"
+                  data-session-switcher
                   aria-label="학생 현재 class 상태 선택"
                 >
                   <button type="button" data-state="live" aria-pressed="true">
@@ -218,15 +222,10 @@
                   </p>
                 </div>
                 <footer class="current-session__footer">
-                  <span class="current-session__meta"
-                    >학생은 class를 직접 시작할 수 없습니다.</span
-                  ><button
-                    class="button button--secondary"
-                    type="button"
-                    disabled
-                  >
-                    시작 대기 중
-                  </button>
+                  <p class="notice notice--info" role="status">
+                    학생은 별도 동작 없이 기다립니다. 교수자가 class를 시작하면
+                    이 영역에 입장 링크가 나타납니다.
+                  </p>
                 </footer>
               </article>
               <article
@@ -241,7 +240,7 @@
                 </div>
                 <footer class="current-session__footer">
                   <span class="current-session__meta"
-                    >저장된 PDF·Transcript·Q&A는 준비되는 대로 먼저
+                    >저장된 PDF·Transcript·Q&amp;A는 준비되는 대로 먼저
                     확인합니다.</span
                   ><a
                     class="button button--secondary"
@@ -333,7 +332,10 @@
                   <h2 id="studentHistoryTitle">완료 class 기록</h2>
                   <span class="badge">8</span>
                 </div>
-                <p>날짜별 final Transcript, 요약과 질문·답변을 복습합니다.</p>
+                <p>
+                  실제 시작 시각 내림차순으로 표시하고, 시각이 같으면 Session ID
+                  내림차순으로 순서를 고정합니다.
+                </p>
               </div>
               <div
                 class="state-switcher"
@@ -357,50 +359,70 @@
               </div>
             </div>
             <div class="history-list" data-show-state="normal">
-              <article class="history-row">
+              <article
+                class="history-row"
+                data-session-row
+                data-started-at="2026-07-10T15:30:00+09:00"
+                data-session-id="f2000000-0000-4000-8000-000000000002"
+              >
                 <div>
-                  <time datetime="2026-07-10">7월 10일</time
-                  ><strong>합성곱 신경망</strong>
+                  <time datetime="2026-07-10T15:30:00+09:00"
+                    >7월 10일 · 15:30</time
+                  ><strong>합성곱 신경망 심화</strong
+                  ><small>동일 시각 tie-break · Session …F2</small>
                 </div>
                 <p class="history-row__summary">
                   PDF 2개 · final Transcript · 답변된 질문 7개
                 </p>
                 <a
                   class="icon-button"
-                  aria-label="합성곱 신경망 기록 열기"
-                  href="class-ended-student.html"
+                  aria-label="합성곱 신경망 심화 · 2026년 7월 10일 15시 30분 기록 열기"
+                  href="class-ended-student.html?session=f2"
                 >
                   ↗
                 </a>
               </article>
-              <article class="history-row">
+              <article
+                class="history-row"
+                data-session-row
+                data-started-at="2026-07-10T15:30:00+09:00"
+                data-session-id="a1000000-0000-4000-8000-000000000001"
+              >
                 <div>
-                  <time datetime="2026-07-08">7월 8일</time
-                  ><strong>신경망 기초</strong>
+                  <time datetime="2026-07-10T15:30:00+09:00"
+                    >7월 10일 · 15:30</time
+                  ><strong>합성곱 신경망 기초</strong
+                  ><small>동일 시각 tie-break · Session …A1</small>
                 </div>
                 <p class="history-row__summary">
                   PDF 1개 · final Transcript · 답변된 질문 11개
                 </p>
                 <a
                   class="icon-button"
-                  aria-label="신경망 기초 기록 열기"
-                  href="class-ended-student.html"
+                  aria-label="합성곱 신경망 기초 · 2026년 7월 10일 15시 30분 기록 열기"
+                  href="class-ended-student.html?session=a1"
                 >
                   ↗
                 </a>
               </article>
-              <article class="history-row">
+              <article
+                class="history-row"
+                data-session-row
+                data-started-at="2026-07-08T13:00:00+09:00"
+                data-session-id="81000000-0000-4000-8000-000000000008"
+              >
                 <div>
-                  <time datetime="2026-07-05">7월 5일</time
-                  ><strong>지도 학습</strong>
+                  <time datetime="2026-07-08T13:00:00+09:00"
+                    >7월 8일 · 13:00</time
+                  ><strong>신경망 기초</strong><small>Session ID …08</small>
                 </div>
                 <p class="history-row__summary">
                   PDF 2개 · final Transcript · 답변된 질문 5개
                 </p>
                 <a
                   class="icon-button"
-                  aria-label="지도 학습 기록 열기"
-                  href="class-ended-student.html"
+                  aria-label="신경망 기초 · 2026년 7월 8일 13시 기록 열기"
+                  href="class-ended-student.html?session=08"
                 >
                   ↗
                 </a>
