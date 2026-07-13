@@ -107,6 +107,7 @@ erDiagram
         bytea idempotency_key_hash
         bytea request_hash
         text state
+        timestamptz completed_at
         timestamptz expires_at
     }
 
@@ -122,7 +123,7 @@ erDiagram
     users ||--o{ idempotencyRecords : submits
 ```
 
-`oauth_transactions`는 callback 성공 전에는 User가 확정되지 않으므로 의도적으로 User FK를 갖지 않는다.
+`oauth_transactions`는 callback 성공 전에는 User가 확정되지 않으므로 의도적으로 User FK를 갖지 않는다. `course_members(course_id) WHERE role = 'PROFESSOR'` partial UNIQUE와 deferrable constraint trigger가 Course마다 owner와 일치하는 교수자 membership이 정확히 하나인지 transaction 종료 시 검증한다. `idempotency_records`의 terminal 행은 `expires_at = completed_at + interval '24 hours'`다.
 
 ## 3. class·자료·Transcript·이벤트
 
@@ -211,11 +212,11 @@ erDiagram
     lectureSessions o|--o{ outboxEvents : scopes
 ```
 
-`lecture_sessions(course_id) WHERE status = 'LIVE'`의 partial UNIQUE가 Course당 동시 LIVE class를 하나로 제한한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않는다. Transcript는 `(session_id, sequence)`와 `(session_id, utterance_id)`가 각각 UNIQUE다.
+`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않는다. Transcript는 `(session_id, sequence)`와 `(session_id, utterance_id)`가 각각 UNIQUE다.
 
 ## 4. 질문·클러스터·Answer
 
-Question은 현재 Cluster FK만 가진다. 일반 클러스터 membership 변경 이력 테이블은 없으며, 수업 종료 후 확정된 Cluster 행만 `is_final = true`로 보관한다. 교수자가 답변을 시작하면 당시 질문 membership을 `answer_questions`에 snapshot한다.
+Question은 현재 Cluster FK만 가진다. 일반 클러스터 membership 변경 이력 테이블은 없으며, 수업 종료 후 확정된 Cluster 행만 `is_final = true`로 보관한다. Cluster `title`은 AI 대표 질문의 정확한 text다. 교수자가 답변을 시작하면 당시 Cluster ID·title과 질문 membership을 snapshot한다.
 
 ```mermaid
 erDiagram
@@ -247,6 +248,7 @@ erDiagram
         uuid session_id FK
         uuid created_by_job_id FK
         integer created_by_job_attempt
+        bigint generation
         integer ordinal
         text title
         boolean is_final
@@ -306,7 +308,9 @@ erDiagram
     transcriptSegments o|--o{ answers : ends_at
 ```
 
-실제 질문–Answer lifetime 관계는 취소 snapshot 때문에 1:N일 수 있다. `CANCELLED` 시도는 Answer 개수에서 제외하며, `answer_questions(question_id) WHERE released_at IS NULL` partial UNIQUE가 취소되지 않은 활성·완료 Answer를 질문당 최대 하나로 제한한다. Answer의 두 Segment 경계와 AnswerQuestion 연결은 복합 FK·constraint trigger로 같은 Session인지 확인한다.
+같은 Job attempt의 Cluster는 하나의 `generation`을 공유하고 서로 다른 `ordinal`을 사용한다. generation은 Session 안에서 새 결과 세트마다 증가하고 재사용하지 않지만, 정확한 원자 할당과 최신 generation watermark·late-result fence는 후속 클러스터링 계약에서 확정한다. `generation`, `ordinal`, `is_final`, `finalized_at`, `created_by_job_id`, `created_by_job_attempt`는 Cluster 공개 lifecycle/provenance다.
+
+실제 질문–Answer lifetime 관계는 취소 snapshot 때문에 1:N일 수 있다. `CANCELLED` 시도는 Answer 개수에서 제외하며, `answer_questions(question_id) WHERE released_at IS NULL` partial UNIQUE가 취소되지 않은 활성·완료 Answer를 질문당 최대 하나로 제한한다. `source_cluster_title_snapshot`은 선택 당시 Cluster `title`, 즉 AI 대표 질문 exact text이며 현재 Cluster를 다시 join하지 않는다. Answer의 두 Segment 경계와 AnswerQuestion 연결은 복합 FK·constraint trigger로 같은 Session인지 확인한다.
 
 ## 5. AIJob·요약·Chat
 
@@ -349,10 +353,15 @@ erDiagram
         text visibility
         text status
         integer attempt
+        bigint version
         uuid run_token
         timestamptz lease_expires_at
         timestamptz available_at
+        text progress_stage
+        smallint progress_percent
+        boolean retryable
         boolean blocks_session_completion
+        timestamptz updated_at
     }
 
     lectureSummaries["lecture_summaries"] {
@@ -403,7 +412,7 @@ erDiagram
     aiJobs o|--o| chatMessages : creates_assistant
 ```
 
-`created_by_job_attempt`는 변경되는 Job 행에 FK로 걸지 않고 생성 당시 attempt snapshot으로 보관한다. 결과 삽입과 Job `SUCCEEDED` 전환은 같은 transaction이며, `(job_id, attempt, run_token)`이 현재 실행과 일치할 때만 commit한다.
+`created_by_job_attempt`는 변경되는 Job 행에 FK로 걸지 않고 생성 당시 attempt snapshot으로 보관한다. 재시도는 같은 Job 행을 `attempt + 1`, `version + 1`, `PENDING`으로 바꾸고 현재 progress·error·실행 시각·run token을 초기화한다. 결과 삽입과 Job `SUCCEEDED` 전환은 같은 transaction이며, `(job_id, attempt, run_token, RUNNING)`이 현재 실행과 일치할 때만 commit해 이전 attempt의 늦은 결과를 차단한다. API는 `visibility`, `attempt`, `version`, progress, `retryable`, `blocks_session_completion`, `updated_at`을 안전한 lifecycle로 공개한다.
 
 ## 6. 공통 KnowledgeChunk·Chat 근거
 

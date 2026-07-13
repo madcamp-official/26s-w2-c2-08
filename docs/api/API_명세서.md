@@ -138,8 +138,11 @@ POST /api/v1/auth/logout
 
 - `PUT` 반응 추가와 `DELETE` 반응 취소는 멱등적이다.
 - class 종료, AI 작업 생성과 중복 제출 위험이 있는 `POST`는 `Idempotency-Key` 헤더를 지원한다.
-- 같은 사용자·같은 경로·같은 키의 재요청은 같은 결과를 반환해야 한다.
-- 키 보관 기간과 충돌 판정 방식은 TBD이다.
+- 서버는 정규화한 HTTP method·path·body로 `request_hash`를 계산한다.
+- 같은 사용자·같은 경로·같은 키와 같은 `request_hash`의 재요청은 최초 응답의 HTTP status와 body를 그대로 반환한다.
+- 동일 요청이 처리 중이면 중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 저장된 응답을 재사용한다.
+- 같은 키로 다른 `request_hash`를 보내면 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
+- terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
 
 ### 2.7 요청 ID
 
@@ -160,19 +163,19 @@ POST /api/v1/auth/logout
 }
 ```
 
-|  HTTP | 의미                       | 주요 코드                                       |
-| ----: | -------------------------- | ----------------------------------------------- |
-| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`             |
-| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`    |
-| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`         |
-| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`                            |
-| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `MEMBERSHIP_CONFLICT` |
-| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                |
-| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                        |
-| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                              |
-| `429` | 요청 한도 초과             | `RATE_LIMITED`                                  |
-| `500` | 서버 오류                  | `INTERNAL_ERROR`                                |
-| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                        |
+|  HTTP | 의미                       | 주요 코드                                                                                                                                           |
+| ----: | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                 |
+| `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                        |
+| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                             |
+| `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`                                                                                                                                |
+| `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE` |
+| `413` | 파일 크기 초과             | `FILE_TOO_LARGE`                                                                                                                                    |
+| `415` | 파일 형식 오류             | `UNSUPPORTED_MEDIA_TYPE`                                                                                                                            |
+| `422` | 필드 검증 실패             | `VALIDATION_ERROR`                                                                                                                                  |
+| `429` | 요청 한도 초과             | `RATE_LIMITED`                                                                                                                                      |
+| `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                    |
+| `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                            |
 
 ### 3.2 AI 작업 수락 응답
 
@@ -180,15 +183,26 @@ POST /api/v1/auth/logout
 {
   "job": {
     "id": "job_01HXYZ",
+    "session_id": "session_01HXYZ",
     "job_type": "LIVE_SUMMARY",
+    "visibility": "REQUESTER_ONLY",
     "status": "PENDING",
+    "attempt": 1,
+    "version": 1,
+    "progress": null,
+    "retryable": false,
+    "blocks_session_completion": false,
+    "error": null,
     "target": {
       "resource_type": "SUMMARY",
       "resource_id": null,
       "resource_url": "/api/v1/sessions/session_01HXYZ/summaries"
     },
     "result": null,
-    "created_at": "2026-07-11T01:30:00Z"
+    "created_at": "2026-07-11T01:30:00Z",
+    "updated_at": "2026-07-11T01:30:00Z",
+    "started_at": null,
+    "finished_at": null
   }
 }
 ```
@@ -254,7 +268,12 @@ PENDING → RUNNING → SUCCEEDED
 ```
 
 - 실패한 작업만 재시도할 수 있다.
-- 재시도는 기존 작업을 갱신할지 새 작업을 만들지 TBD이다.
+- `visibility`는 `SHARED` 또는 `REQUESTER_ONLY`이며 `blocks_session_completion=true`인 Job은 반드시 `SHARED`이다.
+- `job_type`을 작업의 공개 purpose로 사용하고 `progress.stage`에는 `QUEUED`, `EXTRACTING`, `GENERATING`, `FINALIZING` 등 사용자에게 공개해도 안전한 phase만 반환한다.
+- provider 내부 단계, 프롬프트·응답 원문과 민감한 오류 정보는 공개하지 않는다.
+- 재시도는 같은 Job 행의 `attempt`를 1 증가시키고 `PENDING`으로 되돌린다. `version`도 1 증가한다.
+- 재시도 시 현재 실행 상태인 progress, error, `started_at`, `finished_at`을 `null`로 초기화하고 `retryable=false`로 되돌린다.
+- worker 결과는 현재 Job의 `id`, `attempt`, 실행 token과 `RUNNING` 상태가 모두 일치할 때만 반영한다. 이전 attempt의 늦은 결과는 폐기한다.
 
 ## 5. 사용자 API
 
@@ -525,6 +544,7 @@ GET /api/v1/sessions/{session_id}/questions?status=OPEN&sort=POPULAR&cursor=<cur
 - 권한: Course 멤버
 - `sort`: `POPULAR`, `RECENT`
 - 응답은 익명 질문, 반응 수, 답변 상태와 선택적 클러스터 요약을 포함한다.
+- 클러스터 요약은 같은 클러스터링 결과를 식별하는 `generation`, 그 결과 안의 안정적 순서인 `ordinal`, 최종본 여부 `is_final`, 최종 확정 시각 `finalized_at`과 생성 provenance인 `created_by_job_id`, `created_by_job_attempt`를 포함한다.
 - 현재 사용자의 반응 여부는 `reacted_by_me`로 표현한다.
 - 교수자와 다른 학생에게 `author_id`, 이름, 이메일을 절대 반환하지 않는다.
 
@@ -631,6 +651,7 @@ GET /api/v1/answers/{answer_id}
 
 - 권한: Course 멤버
 - 답변 상태, 대상 질문 snapshot과 Transcript 범위를 반환한다.
+- 클러스터에서 시작한 Answer는 `source_cluster_id`와 선택 당시 대표 질문 문장을 그대로 보존한 `source_cluster_title_snapshot`을 반환한다. 직접 질문을 선택한 Answer에서는 두 필드가 모두 `null`이다.
 
 ### 11.3 답변 캡처 시작
 
@@ -663,7 +684,7 @@ Idempotency-Key: <key>
 
 - 권한: Course `PROFESSOR`
 - Session이 `LIVE`일 때만 허용한다.
-- 클러스터를 선택하면 선택 시점의 미답변 원본 질문을 답변 대상으로 확정한다.
+- 클러스터를 선택하면 선택 시점의 미답변 원본 질문과 대표 질문 문장의 정확한 text를 답변 대상으로 확정한다.
 - 대상 질문을 `SELECTED`로 변경하고 선택 시점의 마지막 final sequence를 `capture_started_after_sequence`로 기록한다. 아직 final이 없으면 `0`이다.
 - 실제 `start_sequence`는 선택 이후 처음 포함되는 final 구간이며 생성 전에는 `null`일 수 있다.
 - 성공: `201 Created`, Answer 상태 `CAPTURING`
@@ -838,8 +859,10 @@ Idempotency-Key: <key>
 
 - 권한: 요청형 작업은 요청자, 공유 후처리 작업은 Course `PROFESSOR`를 초안으로 한다.
 - `FAILED`인 작업만 재시도한다.
-- 성공: `202 Accepted`
-- 재시도 시 새 Job 생성 여부는 TBD이다.
+- `retryable=false`인 작업은 `409 AI_JOB_NOT_RETRYABLE`, `FAILED`가 아닌 작업은 `409 AI_JOB_STATE_CONFLICT`를 반환한다.
+- 성공: `202 Accepted`, 같은 Job ID와 `attempt + 1`, `status=PENDING`인 Job을 반환한다.
+- 현재 시도의 progress, error, `started_at`, `finished_at`은 `null`, `retryable`은 `false`로 초기화된다.
+- 이전 attempt worker의 늦은 결과는 Job ID·attempt·실행 token·`RUNNING` 상태를 대조해 반영하지 않는다.
 
 ### 14.3 Session 공용 작업 목록
 

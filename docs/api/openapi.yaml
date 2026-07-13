@@ -589,7 +589,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          $ref: "#/components/responses/SessionCreateConflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
@@ -1658,7 +1658,10 @@ paths:
       summary: 실패한 AI 작업 재시도
       description: |
         FAILED 작업만 재시도할 수 있다. 개인 작업은 요청자, 공유 후처리 작업은 해당
-        Course의 PROFESSOR가 실행한다. 새 Job을 생성할지 기존 attempt를 올릴지는 미정이다.
+        Course의 PROFESSOR가 실행한다. 같은 Job ID의 attempt와 version을 1씩 올리고
+        status를 PENDING으로 되돌린다. progress, error, started_at, finished_at은 null,
+        retryable은 false로 초기화한다. 이전 attempt worker의 늦은 결과는 Job ID, attempt,
+        실행 token과 RUNNING 상태가 현재 실행과 모두 일치하지 않으면 반영하지 않는다.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -1678,7 +1681,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          $ref: "#/components/responses/AIJobRetryConflict"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -2139,7 +2142,7 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
           example:
             error:
-              code: PDF_REQUIRED
+              code: UNSUPPORTED_MEDIA_TYPE
               message: PDF 파일만 업로드할 수 있습니다.
               request_id: req_01HXYZ
               details: null
@@ -2276,6 +2279,11 @@ components:
       type: string
       enum: [PENDING, RUNNING, SUCCEEDED, FAILED]
 
+    AIJobVisibility:
+      type: string
+      enum: [SHARED, REQUESTER_ONLY]
+      description: SHARED는 Course 멤버 공개, REQUESTER_ONLY는 작업 요청자에게만 공개
+
     AIJobType:
       type: string
       enum:
@@ -2283,10 +2291,9 @@ components:
         - QUESTION_CLUSTERING
         - LIVE_SUMMARY
         - FINAL_SUMMARY
-        - QUESTION_DRAFT_HELP
         - CHAT_RESPONSE
         - SESSION_POSTPROCESSING
-      description: 작업 분해에 따라 구현 전 보완할 수 있는 초안
+      description: 사용자에게 공개하는 작업 purpose. provider 내부 작업명은 노출하지 않음
 
     SharedAIJobType:
       type: string
@@ -2530,6 +2537,7 @@ components:
         - version
         - started_at
         - ended_at
+        - completed_at
         - created_at
         - updated_at
       properties:
@@ -2554,6 +2562,10 @@ components:
         ended_at:
           type: [string, "null"]
           format: date-time
+        completed_at:
+          type: [string, "null"]
+          format: date-time
+          description: COMPLETED 전환 시각. 그 전에는 null
         created_at:
           type: string
           format: date-time
@@ -2694,14 +2706,45 @@ components:
     QuestionClusterSummary:
       type: object
       additionalProperties: false
-      required: [id, title]
+      required:
+        - id
+        - title
+        - summary
+        - generation
+        - ordinal
+        - is_final
+        - finalized_at
+        - created_by_job_id
+        - created_by_job_attempt
       properties:
         id:
           $ref: "#/components/schemas/ResourceId"
         title:
           type: string
+          description: 클러스터링 결과가 만든 대표 질문 문장
         summary:
           type: [string, "null"]
+        generation:
+          type: integer
+          minimum: 1
+          description: 같은 클러스터링 결과의 Cluster가 공유하는 Session 내 세대 번호
+        ordinal:
+          type: integer
+          minimum: 0
+          description: 같은 generation 안의 안정적인 표시 순서
+        is_final:
+          type: boolean
+          description: 수업 종료 후 확정된 최종 클러스터인지 여부
+        finalized_at:
+          type: [string, "null"]
+          format: date-time
+          description: is_final이면 확정 시각, 아니면 null
+        created_by_job_id:
+          $ref: "#/components/schemas/ResourceId"
+        created_by_job_attempt:
+          type: integer
+          minimum: 1
+          description: Cluster를 생성한 Job attempt snapshot
 
     Question:
       type: object
@@ -2882,6 +2925,7 @@ components:
         - version
         - question_ids
         - source_cluster_id
+        - source_cluster_title_snapshot
         - capture_started_after_sequence
         - start_sequence
         - end_sequence
@@ -2906,6 +2950,12 @@ components:
             $ref: "#/components/schemas/ResourceId"
         source_cluster_id:
           type: [string, "null"]
+          description: 클러스터 선택 당시 ID snapshot. 직접 질문 선택이면 null
+        source_cluster_title_snapshot:
+          type: [string, "null"]
+          description: |
+            클러스터 선택 당시 대표 질문 문장의 정확한 text snapshot. 직접 질문 선택이면
+            source_cluster_id와 함께 null이며 이후 Cluster 교체·삭제와 무관하게 유지된다.
         capture_started_after_sequence:
           type: integer
           minimum: 0
@@ -3179,9 +3229,10 @@ components:
       properties:
         code:
           type: string
-          description: AI_TIMEOUT, AI_SERVICE_UNAVAILABLE 등 안전한 오류 코드
+          description: AI_TIMEOUT, AI_SERVICE_UNAVAILABLE 등 provider 원문을 제거한 안전한 오류 코드
         message:
           type: string
+          description: 프롬프트·모델 응답·내부 stack을 포함하지 않는 안전한 사용자 메시지
         retryable:
           type: boolean
 
@@ -3192,7 +3243,9 @@ components:
       properties:
         stage:
           type: string
-          description: QUEUED, EXTRACTING, GENERATING, FINALIZING 등 작업별 단계 코드
+          description: |
+            QUEUED, EXTRACTING, GENERATING, FINALIZING 등 사용자에게 공개해도 안전한
+            작업별 phase. provider 내부 단계명과 민감한 입력·오류 정보는 노출하지 않는다.
         percent:
           type: [integer, "null"]
           minimum: 0
@@ -3206,15 +3259,18 @@ components:
         - id
         - session_id
         - job_type
+        - visibility
         - status
         - attempt
         - version
         - progress
         - retryable
+        - blocks_session_completion
         - error
         - target
         - result
         - created_at
+        - updated_at
         - started_at
         - finished_at
       properties:
@@ -3224,6 +3280,9 @@ components:
           $ref: "#/components/schemas/ResourceId"
         job_type:
           $ref: "#/components/schemas/AIJobType"
+          description: 사용자에게 공개하는 작업 purpose
+        visibility:
+          $ref: "#/components/schemas/AIJobVisibility"
         status:
           $ref: "#/components/schemas/AIJobStatus"
         attempt:
@@ -3238,6 +3297,12 @@ components:
             - type: "null"
         retryable:
           type: boolean
+          description: FAILED Job을 현재 권한 주체가 다시 실행할 수 있는지 여부
+        blocks_session_completion:
+          type: boolean
+          description: |
+            true이면 이 Job이 SUCCEEDED 또는 FAILED terminal 상태가 될 때까지 Session은
+            PROCESSING을 유지한다. true인 Job의 visibility는 반드시 SHARED이다.
         error:
           oneOf:
             - $ref: "#/components/schemas/AIJobError"
@@ -3251,6 +3316,9 @@ components:
             - type: "null"
           description: SUCCEEDED이면 결과 리소스 링크, 완료 전 또는 실패하면 null
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
         started_at:
