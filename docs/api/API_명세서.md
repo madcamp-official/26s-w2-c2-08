@@ -227,12 +227,15 @@ READY → LIVE → PROCESSING → COMPLETED
 | 후처리 완료 | `PROCESSING` | `COMPLETED`  |
 
 - 다른 상태에서의 전이는 `409 SESSION_STATE_CONFLICT`로 거부한다.
+- 한 Course에는 `READY`, `LIVE`, `PROCESSING` 중 하나인 active Session이 합계 최대 1개만 존재한다.
+- active Session이 이미 있을 때 class 생성은 `409 ACTIVE_SESSION_EXISTS`로 거부한다.
 - `PROCESSING`과 `COMPLETED`에서는 새 음성, 질문과 반응을 받지 않는다.
 - 종료 시 생성한 공용 Job 집합은 `SESSION_POSTPROCESSING`, `FINAL_SUMMARY`와 필요 시 마지막 `QUESTION_CLUSTERING`이다.
 - 이 공용 Job이 모두 terminal 상태인 `SUCCEEDED` 또는 `FAILED`에 도달하면 Session을 `COMPLETED`로 전환한다. 모든 Job의 성공을 요구하지 않는다.
 - `SESSION_POSTPROCESSING`의 성공은 drain과 child Job 상태 수집이 끝났다는 뜻이며 `FINAL_SUMMARY`·`QUESTION_CLUSTERING`의 성공까지 의미하지 않는다.
 - `FAILED` Job은 기록 화면에 오류와 재시도 상태를 표시하고, 재시도 중에도 Session은 `COMPLETED`를 유지한다.
 - worker 장애로 `RUNNING`에 남은 Job은 watchdog이 timeout 후 `FAILED`로 바꿔 Session이 `PROCESSING`에 영구 정체되지 않게 한다.
+- Session이 `COMPLETED`로 전환된 시각을 `completed_at`으로 공개한다. 그 전에는 `null`이다.
 
 ### 4.3 Question
 
@@ -323,8 +326,35 @@ GET /api/v1/courses/{course_id}
 
 - 권한: Course 멤버
 - 응답: Course 정보, 현재 사용자 역할과 현재 class 요약
+- `current_session`은 `READY`, `LIVE`, `PROCESSING` 중 하나인 유일한 active Session이며 없으면 `null`이다.
 - 완료 class 목록은 `GET /courses/{course_id}/sessions?status=COMPLETED`로 조회한다.
 - `join_code`는 `PROFESSOR`에게만 반환한다.
+
+### 6.5 Course 참여 코드 회전
+
+```http
+POST /api/v1/courses/{course_id}/join-code/rotate
+Idempotency-Key: <key>
+```
+
+- 권한: 해당 Course를 처음 생성한 `PROFESSOR`만 가능하다.
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- 성공: `200 OK`, 새 `join_code`를 포함한 Course를 반환한다.
+- 새 코드는 영문 대문자 6자이며 이전 코드는 새 코드가 저장되는 즉시 무효가 된다.
+
+### 6.6 Course 삭제
+
+```http
+DELETE /api/v1/courses/{course_id}
+Idempotency-Key: <key>
+```
+
+- 권한: Course `PROFESSOR`
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- Course에는 종료 상태나 종료 API가 없으며 삭제만 제공한다.
+- active Session이 있는 Course의 삭제 허용 여부와 삭제·보관 방식은 미정이다. 이 정책을 확정하기 전에는 구현 계약을 추가로 정해야 한다.
+- 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 `204`를 반환한다.
+- 삭제가 허용되는 Course의 성공 응답은 `204 No Content`이다.
 
 ## 7. Lecture Session API
 
@@ -335,7 +365,8 @@ GET /api/v1/courses/{course_id}/sessions?status=<status>&cursor=<cursor>&limit=2
 ```
 
 - 권한: Course 멤버
-- 기본 정렬: `lecture_date DESC, id DESC`
+- 기본 정렬과 완료 목록 정렬은 `lecture_date DESC, started_at DESC NULLS FIRST, id DESC`이다. 같은 날짜의 완료 class는 실제 시작 시각으로 구분한다.
+- 페이지 커서는 이 정렬 tuple 전체를 보존한다.
 - `status`는 선택적이다.
 
 ### 7.2 class 생성
@@ -353,7 +384,10 @@ POST /api/v1/courses/{course_id}/sessions
 
 - 권한: Course `PROFESSOR`
 - 성공: `201 Created`, 상태 `READY`
-- 같은 날짜에 여러 class를 허용할지는 TBD이다.
+- `title`은 선택적이다. 생략하거나 앞뒤 공백을 제거한 값이 빈 문자열이면 서버가 Course 제목·class 날짜·시각을 포함한 자동 제목을 생성한다.
+- 자동 제목의 정확한 문자열 형식, `READY`에서 사용할 시각 원장과 timezone은 미정이다.
+- 같은 날짜에 여러 class를 허용한다.
+- 같은 Course에 `READY`, `LIVE`, `PROCESSING` Session이 이미 있으면 `409 ACTIVE_SESSION_EXISTS`를 반환한다.
 
 ### 7.3 class 상세
 
@@ -362,10 +396,41 @@ GET /api/v1/sessions/{session_id}
 ```
 
 - 권한: Course 멤버
-- 응답: 세션 상태, 날짜와 시작·종료 시각
+- 응답: 세션 상태, 날짜와 시작·종료·완료 시각
 - 자료, final Transcript, 질문·답변과 공용 AI 작업은 각 Session 하위 목록 API로 조회한다.
 
-### 7.4 class 시작
+### 7.4 class 제목 수정
+
+```http
+PATCH /api/v1/sessions/{session_id}
+```
+
+```json
+{
+  "title": "그래프 탐색"
+}
+```
+
+- 권한: Course `PROFESSOR`
+- 모든 Session 상태에서 제목만 수정할 수 있다. `lecture_date`와 시작·종료·완료 시각은 수정할 수 없다.
+- 앞뒤 공백을 제거한 제목이 빈 문자열이면 class 생성과 같은 자동 제목으로 되돌린다.
+- 성공: `200 OK`, `version`이 증가한 Session을 반환한다. 별도 `If-Match` 계약은 도입하지 않는다.
+
+### 7.5 class 삭제
+
+```http
+DELETE /api/v1/sessions/{session_id}
+Idempotency-Key: <key>
+```
+
+- 권한: Course `PROFESSOR`
+- `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
+- `READY`, `COMPLETED`에서만 삭제할 수 있다.
+- `LIVE`, `PROCESSING`에서는 `409 SESSION_STATE_CONFLICT`를 반환한다.
+- 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Session이 사라진 뒤의 재요청도 기존 `204`를 반환한다.
+- 성공: `204 No Content`
+
+### 7.6 class 시작
 
 ```http
 POST /api/v1/sessions/{session_id}/start
@@ -375,9 +440,9 @@ POST /api/v1/sessions/{session_id}/start
 - 성공: `200 OK`, 상태 `LIVE`
 - `READY`에서만 시작한다.
 - 강의자료 없이 시작을 허용할지는 TBD이다.
-- 한 Course의 동시 `LIVE` class 개수 제한은 TBD이다.
+- Course의 유일한 active Session이 이 Session이므로 같은 Course의 다른 `READY`, `LIVE`, `PROCESSING` Session과 공존할 수 없다.
 
-### 7.5 class 종료
+### 7.7 class 종료
 
 ```http
 POST /api/v1/sessions/{session_id}/end
@@ -1149,20 +1214,19 @@ LIVE 요약과 Chat은 REST 요청을 `202 Accepted + AIJob`으로 수락하고,
 
 ## 19. 미정 사항
 
-| 항목             | 현재 상태                        | 결정 시 영향            |
-| ---------------- | -------------------------------- | ----------------------- |
-| ID 형식          | 불투명 string                    | OpenAPI `format`, DB PK |
-| Course 참여 코드 | 길이·표준화·회전·만료 TBD        | Course 요청·오류        |
-| PDF 카디널리티   | Session당 개수 TBD               | 업로드 충돌 응답        |
-| Session 동시성   | Course당 `LIVE` 개수 TBD         | 시작 API 제약           |
-| 답변 형식        | MVP 텍스트 답변 여부 TBD         | Answer 요청·응답        |
-| 답변 카디널리티  | 질문당 답변 수 TBD               | Answer 스키마           |
-| 개인 AI 데이터   | 교수자 LIVE 사용·보관·삭제 TBD   | Summary·Chat 권한·수명  |
-| AI 응답 전송     | 폴링·SSE·WebSocket TBD           | Chat·Summary 응답       |
-| 오디오 publisher | 단일 연결 lease·교대 정책 TBD    | 중복 탭·장치 충돌       |
-| 이벤트 재생      | event log 보존 여부 TBD          | 재연결 프로토콜         |
-| 개인 AI 스트림   | streaming HTTP·SSE·target WS TBD | delta·재연결 계약       |
-| 레이트 리미트    | 임계치 TBD                       | `429` 헤더·재시도       |
+| 항목               | 현재 상태                                         | 결정 시 영향                |
+| ------------------ | ------------------------------------------------- | --------------------------- |
+| ID 형식            | 불투명 string                                     | OpenAPI `format`, DB PK     |
+| class 자동 제목    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD | Session 생성·제목 수정 응답 |
+| active Course 삭제 | active Session 보유 시 삭제·보관 방식 TBD         | Course 삭제 응답·트랜잭션   |
+| PDF 카디널리티     | Session당 개수 TBD                                | 업로드 충돌 응답            |
+| 답변 형식          | MVP 텍스트 답변 여부 TBD                          | Answer 요청·응답            |
+| 개인 AI 데이터     | 교수자 LIVE 사용·보관·삭제 TBD                    | Summary·Chat 권한·수명      |
+| AI 응답 전송       | 폴링·SSE·WebSocket TBD                            | Chat·Summary 응답           |
+| 오디오 publisher   | 단일 연결 lease·교대 정책 TBD                     | 중복 탭·장치 충돌           |
+| 이벤트 재생        | event log 보존 여부 TBD                           | 재연결 프로토콜             |
+| 개인 AI 스트림     | streaming HTTP·SSE·target WS TBD                  | delta·재연결 계약           |
+| 레이트 리미트      | 임계치 TBD                                        | `429` 헤더·재시도           |
 
 ## 20. 검토 체크리스트
 

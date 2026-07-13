@@ -11,6 +11,8 @@ GOAL 서비스의 페이지, 화면 영역, 사용자 기능과 백그라운드 
 
 - **Course**: 한 학기 단위 수업방
 - **class**: Course 안의 날짜별 강의 세션
+- **active class**: `READY`, `LIVE`, `PROCESSING` 상태인 class. Course마다 최대 하나만 존재한다.
+- **current_session**: Course의 단일 active class 또는 active class가 없을 때 `null`
 - **실시간 class**: 현재 진행 중인 강의 세션
 - **끝난 class**: 강의 종료 후 기록 정리가 완료된 세션
 - `LIVE_CLASS_PAGE_*`: 학생·교수자 실시간 class 페이지에 공통으로 사용되는 영역
@@ -62,16 +64,19 @@ ROOT(0)
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| Course 페이지-교수자 | `COURSE_PAGE_PROF` | 3 | 페이지 | `MY_OWN_COURSE_LIST` | 교수자 | MVP 필수 | Course 정보·참여 코드, 현재 class 상태, class 생성·시작·입장과 완료 기록 진입 제공 | 관리 중인 Course 선택 또는 Course 생성 직후 |
-| Course 페이지-학생 | `COURSE_PAGE_STUD` | 3 | 페이지 | `MY_COURSE_LIST` | 학생 | MVP 필수 | Course 정보, 현재 class 상태·입장, 날짜별 완료 class 목록과 강의 기록 진입 제공 | 참여 중인 Course 선택 또는 Course 참여 직후 |
+| Course 페이지-교수자 | `COURSE_PAGE_PROF` | 3 | 페이지 | `MY_OWN_COURSE_LIST` | Course 교수자 | MVP 필수 | 유일한 owner에게 Course 정보·참여 코드 회전·Course 삭제, 단일 active class 관리와 `started_at` 기준 완료 기록 진입 제공 | 관리 중인 Course 선택 또는 Course 생성 직후 |
+| Course 페이지-학생 | `COURSE_PAGE_STUD` | 3 | 페이지 | `MY_COURSE_LIST` | Course 학생 | MVP 필수 | Course 정보, 단일 active class 상태·입장, 실제 시작 시각으로 구분되는 완료 class 목록과 기록 진입 제공 | 참여 중인 Course 선택 또는 Course 참여 직후 |
 | 내 정보 수정 버튼 | `MY_INFO_CHANGE_BUTTON` | 3 | 기능 | `MY_INFO_PAGE` | 공통 | MVP 선택 | 수정 가능한 계정 정보를 편집하는 흐름으로 이동 | 내 정보 페이지에서 수정 버튼 선택 |
 
 ### Level 4 · class 페이지
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| 오늘 class 생성 및 준비 페이지 | `CLASS_CREATE_PAGE` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | class 제목·날짜를 입력하고 강의자료 PDF를 업로드해 시작 준비 상태로 생성 | 교수자가 Course 페이지에서 오늘 class 생성 선택 |
-| Course 참여 코드 영역 | `COURSE_CODE_AREA` | 4 | 영역 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | 학생 참여용 고유 코드를 표시·복사하며 권한 없는 사용자에게는 숨김 | 교수자가 자신이 관리하는 Course 페이지에 진입 |
+| class 생성 및 준비 페이지 | `CLASS_CREATE_PAGE` | 4 | 페이지 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | active class가 없을 때 선택 제목·필수 날짜와 강의자료 PDF를 입력해 `READY` class를 생성; 빈 제목은 Course 제목·날짜·시각을 포함한 서버 자동 제목 사용 | owner가 Course 페이지에서 class 생성 선택 |
+| Course 참여 코드 영역 | `COURSE_CODE_AREA` | 4 | 영역 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | owner에게만 무기한 `[A-Z]{6}` 참여 코드의 표시·복사·회전을 제공하고 회전 즉시 이전 코드를 무효화하며 감사·이력은 남기지 않음 | owner가 자신이 관리하는 Course 페이지에 진입 |
+| Course 삭제 | `COURSE_DELETE` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | 종료·보관 상태나 owner 이전 없이 유일한 owner가 Course 삭제를 요청; active class가 있을 때의 삭제와 삭제 후 복구 정책은 미정 | owner가 Course 삭제를 선택하고 확인 |
+| class 제목 수정 | `CLASS_TITLE_EDIT` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`LIVE`·`PROCESSING`·`COMPLETED`에서 제목을 수정하며 빈 제목은 Course 제목·날짜·시각을 포함한 서버 자동 제목 사용; 날짜와 상태 시각은 수정 불가 | owner가 해당 class의 제목 수정 선택 |
+| class 삭제 | `CLASS_DELETE` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`COMPLETED`에서 삭제; `LIVE`는 종료 후 `PROCESSING` 완료를 기다리고 `PROCESSING`은 완료까지 삭제 불가 | owner가 삭제 가능한 상태의 class에서 삭제 선택 |
 | 끝난 class 메인 페이지-교수자 | `ENDED_CLASS_PAGE_PROF` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | 강의자료, final Transcript, AI 요약, 질문·답변 정리와 실패한 후처리 작업 재시도 제공 | 완료 class 목록에서 특정 class 선택 |
 | 끝난 class 메인 페이지-학생 | `ENDED_CLASS_PAGE_STUD` | 4 | 페이지 | `COURSE_PAGE_STUD` | 학생 | MVP 필수 | 강의자료, final Transcript, AI 요약, 질문·교수자 답변과 복습 AI 제공 | 완료 class 목록에서 특정 class 선택 |
 | 실시간 class 메인 페이지-교수자 | `LIVE_CLASS_PAGE_PROF` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | STT 상태, 실시간 Transcript, 질문 클러스터·반응 순위, 답변과 class 종료 기능 제공 | class 시작 또는 진행 중인 class에 재입장 |
@@ -93,7 +98,7 @@ ROOT(0)
 | 실시간 class AI 대화 영역 | `LIVE_AI_CHAT_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | PDF와 현재 Transcript 기반 요약·설명·질의응답 및 처리·실패·재시도 상태 제공 | 학생 실시간 class 페이지에 표시하거나 접고 펼침 |
 | 실시간 class 음성 스트리밍(STT) | `LIVE_AUDIO_STREAM` | 5 | 백그라운드 작업 | `LIVE_CLASS_PAGE_PROF` | 교수자 | MVP 필수 | 마이크 음성을 조각 단위로 전송해 partial/final STT 생성; 음성 원본 저장은 후순위 | 교수자가 class를 시작하고 마이크 권한 허용 |
 | 실시간 class 끝내기 | `LIVE_CLASS_QUIT` | 5 | 기능 | `LIVE_CLASS_PAGE_PROF` | 교수자 | MVP 필수 | 새 실시간 입력을 마감하고 class를 정리 중 상태로 전환해 후처리 시작 | 교수자가 종료 버튼을 선택하고 확인 |
-| 실시간 class 시작하기 | `LIVE_CLASS_START` | 5 | 기능 | `CLASS_CREATE_PAGE` | 교수자 | MVP 필수 | class 상태를 진행 중으로 바꾸고 음성 스트리밍, Transcript, 질문과 AI 기능 활성화 | class 정보와 강의자료 준비 완료 후 시작 선택 |
+| 실시간 class 시작하기 | `LIVE_CLASS_START` | 5 | 기능 | `CLASS_CREATE_PAGE` | 교수자 | MVP 필수 | 단일 active class인 `READY` class를 진행 중으로 바꾸고 음성 스트리밍, Transcript, 질문과 AI 기능 활성화 | class 정보와 강의자료 준비 완료 후 시작 선택 |
 | 실시간 class 질문 목록 영역 | `LIVE_QUESTION_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | 익명 질문, 반응 수, 답변 상태와 유사 질문 클러스터 표시; 교수자는 정렬·답변 대상 선택 | 실시간 class 페이지에 항상 표시 |
 | 실시간 class Transcript 영역 | `LIVE_TRANSCRIPT_AREA` | 5 | 영역 | `LIVE_CLASS_PAGE_*` | 공통 | MVP 필수 | partial STT를 즉시 갱신하고 final Transcript를 누적 표시하며 연결·재연결 상태 구분 | 실시간 class 페이지에 항상 표시 |
 
@@ -120,14 +125,17 @@ ROOT(0)
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| class 기록 정리 중 상태 | `CLASS_PROCESSING_STATE` | 7 | 영역 | `LIVE_CLASS_QUIT_PROCESS` | 공통 | MVP 필수 | Transcript 확정·요약·질문 답변 정리의 진행·부분 성공·실패를 표시하고 완료 후 기록 페이지로 전환 | class 종료 후 백그라운드 정리 작업 진행 중 |
+| class 기록 정리 중 상태 | `CLASS_PROCESSING_STATE` | 7 | 영역 | `LIVE_CLASS_QUIT_PROCESS` | 공통 | MVP 필수 | Transcript 확정·요약·질문 답변 정리의 진행·부분 성공·실패를 표시하고 완료 후 기록 페이지로 전환; owner는 제목만 수정하고 완료 전 삭제 불가 | class 종료 후 백그라운드 정리 작업 진행 중 |
 
 ## 3. MVP 범위 요약
 
 ### 필수
 
-- Course 생성·참여 및 참여 코드 관리
-- 날짜별 class 생성과 강의자료 PDF 업로드
+- 인증 사용자의 Course 생성·참여, Course별 유일한 교수자 owner와 학생 역할
+- 무기한 `[A-Z]{6}` 참여 코드의 owner 전용 회전과 이전 코드 즉시 무효화
+- Course별 단일 active class 생성과 강의자료 PDF 업로드
+- 같은 날짜 class의 실제 시작 시각 구분과 `started_at` 기준 완료 목록
+- 모든 상태의 class 제목 수정, 상태별 class 삭제와 owner의 Course 삭제
 - 실시간 음성 스트리밍과 partial/final STT
 - 익명 질문, ‘나도 궁금해요’, 유사 질문 클러스터링과 교수자 답변 연결
 - 수업 중 Transcript 요약과 강의자료 기반 AI 질의응답

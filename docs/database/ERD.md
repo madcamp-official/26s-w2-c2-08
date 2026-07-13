@@ -498,25 +498,33 @@ erDiagram
 
 Mermaid cardinality만으로 표현할 수 없는 규칙은 다음과 같다.
 
-| 규칙                                  | DB 보장 방식                                               |
-| ------------------------------------- | ---------------------------------------------------------- |
-| Course당 동시에 LIVE인 class 최대 1개 | `UNIQUE (course_id) WHERE status = 'LIVE'`                 |
-| class당 PDF 여러 개                   | `lecture_materials.session_id`에 UNIQUE 없음               |
-| 질문당 취소되지 않은 Answer 최대 1개  | `UNIQUE (question_id) WHERE released_at IS NULL`           |
-| Session당 캡처 중 Answer 최대 1개     | `UNIQUE (session_id) WHERE status = 'CAPTURING'`           |
-| 클러스터 변경 이력 미보관             | 현재 `questions.cluster_id`를 교체하고 대체된 Cluster 삭제 |
-| 종료 후 최종 클러스터 보관            | `question_clusters.is_final`, `finalized_at`               |
-| AIJob 같은 행 재시도                  | `attempt + 1`, 새 `run_token`, lease 검증                  |
-| AI 결과 provenance                    | 결과의 `created_by_job_id`, `created_by_job_attempt`       |
-| Knowledge source 정확히 한 종류       | typed nullable FK 조합 `CHECK`                             |
-| Chat 근거 source 통합                 | `chat_message_evidence.knowledge_chunk_id` FK              |
-| 서로 다른 Session의 행 연결 금지      | `(resource_id, session_id)` 복합 FK                        |
+| 규칙                                 | DB 보장 방식                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| Course의 교수자 owner 정확히 1명     | 교수자 partial UNIQUE + owner 일치 deferrable constraint trigger                |
+| Course당 active class 합계 최대 1개  | `UNIQUE (course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`            |
+| 같은 날짜 class 순차 생성·조회       | 날짜 UNIQUE 없음 + `(lecture_date DESC, started_at DESC, id DESC)` index        |
+| 제목 수정·날짜와 lifecycle 시각 불변 | 빈 제목은 Course 제목·날짜·시각 포함, 상태 전이 trigger와 제한된 update command |
+| class당 PDF 여러 개                  | `lecture_materials.session_id`에 UNIQUE 없음                                    |
+| 질문당 취소되지 않은 Answer 최대 1개 | `UNIQUE (question_id) WHERE released_at IS NULL`                                |
+| Session당 캡처 중 Answer 최대 1개    | `UNIQUE (session_id) WHERE status = 'CAPTURING'`                                |
+| 클러스터 generation·순서·provenance  | `(session_id, generation, ordinal)` UNIQUE + Job attempt constraint trigger     |
+| 클러스터 변경 이력 미보관            | 현재 `questions.cluster_id`를 교체하고 대체된 Cluster 삭제                      |
+| 종료 후 최종 클러스터 보관           | `question_clusters.is_final`, `finalized_at`                                    |
+| Answer 대표 질문 snapshot            | 선택 당시 Cluster `title` exact text를 `source_cluster_title_snapshot` 저장     |
+| AIJob 같은 행 재시도                 | `attempt + 1`, 새 `run_token`, lease·현재 attempt 검증                          |
+| AI 결과 provenance                   | 결과의 `created_by_job_id`, `created_by_job_attempt`                            |
+| 멱등 응답 정확히 24시간              | `expires_at = completed_at + interval '24 hours'` CHECK                         |
+| Knowledge source 정확히 한 종류      | typed nullable FK 조합 `CHECK`                                                  |
+| Chat 근거 source 통합                | `chat_message_evidence.knowledge_chunk_id` FK                                   |
+| 서로 다른 Session의 행 연결 금지     | `(resource_id, session_id)` 복합 FK                                             |
 
 ## 8. 삭제 관계 요약
 
-- Course 삭제는 CourseMember와 LectureSession aggregate를 삭제한다.
-- LectureSession 삭제는 Material, Transcript, Gap, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제한다.
+- Course 삭제는 불변 owner만 요청할 수 있고 CourseMember와 LectureSession aggregate를 삭제한다. active class가 있을 때의 허용 여부와 삭제 후 복구 유예는 아직 미정이다.
+- LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Transcript, Gap, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
 - User 탈퇴는 공유 학습 기록을 지우지 않고 User 행을 익명화한다. 인증 정보와 개인 Chat·LIVE Summary는 제거한다.
-- Cluster 삭제 시 Question의 현재 Cluster FK만 `NULL` 처리한다. Answer의 선택 Cluster ID·제목과 AnswerQuestion membership snapshot은 FK 없이 유지한다.
+- Cluster 삭제 시 Question의 현재 Cluster FK만 `NULL` 처리한다. Answer의 선택 Cluster ID·AI 대표 질문 exact text와 AnswerQuestion membership snapshot은 FK 없이 유지한다.
 - 결과→AIJob과 Evidence→KnowledgeChunk는 deferred `NO ACTION`으로 독립 삭제를 막되 aggregate 전체 삭제는 허용한다.
-- PDF object 삭제는 DB FK가 아니라 transactional outbox의 멱등 스토리지 정리 task로 처리한다.
+- 삭제는 `Course → Session → AIJob` 잠금 순서를 사용하고, Session 단독 삭제는 `Session → AIJob` 순서를 사용한다. 삭제된 Job의 늦은 결과는 attempt·run token·상태 fence에서 폐기한다.
+- PDF object 삭제는 DB 행 삭제 전에 key를 수집하고 transactional outbox의 멱등 스토리지 정리 task로 처리한다.
+- Course owner 탈퇴 시 aggregate와 owner membership을 어떻게 처리할지는 미정이며, 현재는 공유 참조를 보존하는 User tombstone 원칙만 있다.

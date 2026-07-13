@@ -249,34 +249,34 @@ ticket 소비는 `UPDATE ... SET used_at = now() WHERE ticket_hash = :hash AND u
 
 ### 6.1 `courses`
 
-한 학기 단위 수업방과 교수자에게 다시 표시할 참여 코드를 저장한다.
+한 학기 단위 수업방, 불변 owner와 교수자에게 다시 표시할 현재 참여 코드를 저장한다. Course 종료·보관 상태는 두지 않는다.
 
 | 컬럼                           | 타입          | NULL | 기본값              | 키·제약         | 설명                          |
 | ------------------------------ | ------------- | ---: | ------------------- | --------------- | ----------------------------- |
 | `id`                           | `uuid`        |    N | `gen_random_uuid()` | PK              | Course ID                     |
 | `title`                        | `text`        |    N | -                   | CHECK           | 과목명                        |
 | `semester`                     | `text`        |    N | -                   | CHECK           | 표시용 학기                   |
-| `created_by_user_id`           | `uuid`        |    N | -                   | FK → `users.id` | 생성 사용자                   |
+| `created_by_user_id`           | `uuid`        |    N | -                   | FK → `users.id` | 불변 교수자 owner             |
 | `join_code_lookup_hash`        | `bytea`       |    N | -                   | UNIQUE          | 정규화 코드의 HMAC-SHA-256    |
 | `join_code_lookup_key_version` | `smallint`    |    N | -                   | CHECK `> 0`     | HMAC key 버전                 |
 | `join_code_ciphertext`         | `bytea`       |    N | -                   | -               | AES-256-GCM 암호문과 auth tag |
 | `join_code_nonce`              | `bytea`       |    N | -                   | -               | 암호화 nonce                  |
 | `join_code_key_version`        | `smallint`    |    N | -                   | CHECK `> 0`     | 암호화 키 버전                |
-| `join_code_expires_at`         | `timestamptz` |    Y | `NULL`              | -               | `NULL`이면 회전 전까지 유효   |
 | `version`                      | `bigint`      |    N | `1`                 | CHECK `> 0`     | 리소스 버전                   |
 | `created_at`                   | `timestamptz` |    N | `now()`             | -               | 생성 시각                     |
 | `updated_at`                   | `timestamptz` |    N | `now()`             | -               | 갱신 시각                     |
 
 암호화·조회 규칙:
 
-1. 입력 코드는 trim 후 대문자로 정규화한다.
+1. 입력 코드는 trim 후 대문자로 정규화하고 `[A-Z]{6}`인지 검사한다. 구분자와 소문자는 정규화 결과 밖에 남기지 않는다.
 2. 정규화 값을 현재 단일 lookup HMAC key로 HMAC-SHA-256 계산해 `join_code_lookup_hash`로 조회한다.
 3. 교수자 표시가 필요할 때만 ciphertext를 복호화한다.
 4. AES-GCM associated data에는 `course_id`를 넣어 다른 Course 행으로 암호문을 옮겨도 복호화되지 않게 한다.
 5. 암호화 키와 HMAC key는 서로 분리하고 DB 밖에서 관리한다.
 6. lookup HMAC key 회전은 참여 코드 발급을 잠시 중단하고 전역 advisory lock을 잡은 뒤, 모든 Course의 lookup hash와 key version을 한 transaction에서 새 key로 재계산한 후에만 발급을 재개한다. 서로 다른 lookup key version을 장기간 섞어 두지 않는다.
 7. 암호화 key는 lookup key와 독립적으로 행 단위 점진 회전할 수 있다.
-8. MVP는 자동 만료를 사용하지 않고 Course 삭제 또는 교수자의 회전 전까지 유효하게 둔다.
+8. 참여 코드는 자동 만료하지 않는다. owner의 제품 기능상 코드 회전은 Course row를 잠근 뒤 새 hash·ciphertext·nonce로 현재 값을 원자 교체하고 `version`을 증가시킨다.
+9. 코드 회전이 commit되면 이전 코드는 즉시 무효이며 이전 hash·ciphertext와 회전 이력은 보관하지 않는다. 제품 코드 회전과 6·7항의 비밀키 회전은 서로 다른 작업이다.
 
 제약·인덱스:
 
@@ -334,8 +334,8 @@ Course 안의 날짜별 class와 상태 전이를 저장한다.
 제약·인덱스:
 
 - `UNIQUE (id, course_id)`; KnowledgeChunk의 범위 검증에 사용한다.
-- `UNIQUE INDEX lecture_sessions_one_live_per_course_uq (course_id) WHERE status = 'LIVE'`
-- `INDEX lecture_sessions_course_date_idx (course_id, lecture_date DESC, id DESC)`
+- `UNIQUE INDEX lecture_sessions_one_active_per_course_uq (course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`
+- `INDEX lecture_sessions_course_history_idx (course_id, lecture_date DESC, started_at DESC, id DESC)`
 - `INDEX lecture_sessions_course_status_idx (course_id, status, updated_at DESC)`
 - `CHECK (length(btrim(title)) > 0)`
 - `CHECK ((status = 'READY' AND started_at IS NULL AND ended_at IS NULL AND completed_at IS NULL) OR (status = 'LIVE' AND started_at IS NOT NULL AND ended_at IS NULL AND completed_at IS NULL) OR (status = 'PROCESSING' AND started_at IS NOT NULL AND ended_at IS NOT NULL AND completed_at IS NULL) OR (status = 'COMPLETED' AND started_at IS NOT NULL AND ended_at IS NOT NULL AND completed_at IS NOT NULL))`
@@ -344,7 +344,7 @@ Course 안의 날짜별 class와 상태 전이를 저장한다.
 - `course_id ON DELETE CASCADE`
 - `created_by_user_id ON DELETE RESTRICT`; 탈퇴 시 User 행 자체를 익명화한다.
 
-같은 날짜의 class는 제목이 다를 수 있으므로 여러 개를 허용한다. 동시 시작 요청은 partial UNIQUE 인덱스로 최종 차단하고, 서비스는 `409 SESSION_STATE_CONFLICT`로 변환한다.
+같은 날짜의 class는 순차적으로 여러 개 허용한다. 완료 기록은 `lecture_date DESC, started_at DESC, id DESC`로 정렬하고 실제 `started_at`을 표시해 구분한다. `READY`, `LIVE`, `PROCESSING` 합계는 partial UNIQUE 인덱스가 Course당 최대 한 행으로 제한한다. class 생성 경쟁에서 난 충돌은 `409 ACTIVE_SESSION_EXISTS`, 허용되지 않은 상태 전이는 `409 SESSION_STATE_CONFLICT`로 변환한다. 제목은 모든 상태에서 바꿀 수 있고 빈 입력은 Course 제목·class 날짜·시각을 포함한 자동 제목으로 치환한 뒤 저장한다. 정확한 문자열 형식, `READY`에서 사용할 시각 원장과 timezone은 미정이다. `lecture_date`는 생성 후 변경하지 않으며, `started_at`, `ended_at`, `completed_at`은 각 상태 전이에서 최초 설정된 뒤 바꾸지 않는다. 이 불변성은 상태 전이용 DB trigger가 기존 non-NULL 시각의 덮어쓰기를 거부해 이중 보장한다.
 
 ## 7. 자료·Transcript
 
@@ -957,16 +957,22 @@ Course 생성은 다음 항목을 한 트랜잭션으로 처리한다.
 2. 서버가 참여 코드를 생성하고 정규화한다.
 3. HMAC lookup hash와 AES-256-GCM 암호문을 만든다.
 4. `courses`와 생성자의 `course_members(PROFESSOR)`를 함께 삽입한다.
-5. 암호화한 응답과 멱등성 완료 상태를 기록한다.
+5. 암호화한 응답과 멱등성 terminal 상태·`completed_at`·`expires_at`을 기록한다.
 
-참여 시 HMAC으로 Course를 찾고 `join_code_expires_at`을 확인한 뒤 Course 또는 멤버 행을 잠근다. `(course_id, user_id)`를 멱등 upsert하되 기존 `PROFESSOR` 역할을 `STUDENT`로 변경하지 않는다. HMAC UNIQUE 충돌이 난 코드 생성은 새 코드를 만들어 제한 횟수만큼 재시도한다.
+참여 시 정규화한 `[A-Z]{6}` 코드의 HMAC으로 Course를 찾은 뒤 Course 또는 멤버 행을 잠근다. 코드는 자동 만료하지 않으므로 만료 시각을 검사하지 않는다. `(course_id, user_id)`를 멱등 upsert하되 기존 `PROFESSOR` 역할을 `STUDENT`로 변경하지 않는다. HMAC UNIQUE 충돌이 난 코드 생성은 새 코드를 만들어 제한 횟수만큼 재시도한다.
 
-### 14.2 class 생성·시작
+제품 참여 코드 회전은 owner 권한과 멱등성 record를 확인하고 Course 행을 잠근 뒤 새 코드의 hash·ciphertext·nonce·key version, Course `version`, 멱등성 terminal 응답을 한 transaction에서 교체한다. commit 전에는 기존 코드가 유효하고 commit 뒤에는 새 코드만 유효하다. 이전 코드나 회전 이력 행은 만들지 않는다.
 
-- class 생성은 동일 날짜에도 여러 행을 허용한다.
+Course 삭제 권한은 불변 owner에게만 있다. Course에는 별도 종료 상태를 만들지 않는다. active class가 있을 때 삭제를 허용할지와 삭제 후 복구 유예 정책은 미정이므로 구현에서 임의로 hard delete·soft delete 중 하나를 확정하지 않는다. 삭제가 허용되는 조건이 충족된 뒤에는 `Course → Session → AIJob` 순서로 잠그고 PDF object key를 수집해 storage cleanup outbox와 멱등성 `204` terminal 응답을 남긴 다음 Course aggregate를 한 transaction에서 cascade 삭제한다. outbox의 `session_id`는 부모 삭제 시 `NULL`이 되어도 내부 cleanup payload와 event ID로 처리할 수 있어야 한다.
+
+### 14.2 class 생성·제목 수정·시작·삭제
+
+- class 생성은 Course 행을 잠근 뒤 active class가 없는지 확인한다. 동일 날짜의 완료 이력과는 충돌하지 않으므로 순차적으로 여러 행을 허용한다. partial UNIQUE가 동시 생성 경쟁의 최종 방어선이며 충돌은 `409 ACTIVE_SESSION_EXISTS`로 변환한다.
+- 제목 수정은 Session 행을 잠그고 모든 상태에서 허용한다. trim 후 빈 값이면 Course 제목·class 날짜·시각을 포함한 자동 제목으로 치환하고 `version`, `updated_at`, 공유 outbox event를 함께 갱신한다. 정확한 문자열 형식, `READY`에서 사용할 시각 원장과 timezone은 미정이며 `lecture_date`와 이미 기록된 lifecycle 시각은 수정하지 않는다.
 - 시작은 `status = 'READY'` 조건으로 갱신하고 `started_at`, `version`을 함께 변경한다.
-- 동시 시작 경쟁의 최종 방어선은 `lecture_sessions_one_live_per_course_uq`다. 충돌은 `409 SESSION_STATE_CONFLICT`로 변환한다.
+- 시작을 포함한 active 상태 경쟁의 최종 방어선은 `lecture_sessions_one_active_per_course_uq`다. 충돌은 `409 SESSION_STATE_CONFLICT`로 변환한다.
 - 실시간 audio ticket은 시작 권한과 `LIVE` 상태를 확인한 뒤 별도 짧은 트랜잭션에서 발급한다.
+- class 삭제는 owner가 `READY`, `COMPLETED`에서만 실행하고 `LIVE`, `PROCESSING`에서는 `409 SESSION_STATE_CONFLICT`로 거부한다. 삭제 transaction은 멱등성 record를 선점한 뒤 `Session → AIJob` 순서로 대상 aggregate를 잠그고 PDF object key를 수집한다. storage cleanup outbox와 멱등성 `204` terminal 응답을 남긴 다음 Session aggregate를 cascade 삭제한다. 삭제된 Job의 이전 attempt worker는 Job ID·attempt·run token·`RUNNING` 조건을 만족하지 못해 늦은 결과를 commit할 수 없다.
 
 ### 14.3 PDF 업로드와 전처리
 
@@ -1051,32 +1057,33 @@ Answer 시작은 다음 순서로 처리한다.
 | `oauth_transactions`                     | 생성 후 10분                              | 사용 완료·만료 후 정기 삭제        |
 | `realtime_tickets`                       | 생성 후 60초                              | 사용 완료·만료 후 정기 삭제        |
 | `auth_sessions`                          | 발급 후 7일                               | 만료·폐기 후 정기 삭제             |
-| `idempotency_records`                    | 완료 후 24시간                            | 암호문 포함 정기 삭제              |
+| `idempotency_records`                    | terminal `completed_at`부터 정확히 24시간 | 암호문 포함 만료 직후 정기 삭제    |
 | 발행 완료 `outbox_events`                | 24시간                                    | replay window 후 정기 삭제         |
 | PDF·Transcript·질문·Answer·FINAL Summary | Course 수명                               | Course 관리 삭제·정책 만료 시 삭제 |
 | 개인 LIVE Summary·Chat                   | 계정 또는 Course 수명 중 먼저 도달한 시점 | 사용자 탈퇴·Course 삭제 시 삭제    |
 | 실패 `ai_jobs`                           | Course 수명                               | 진단 가능한 안전한 metadata만 보관 |
 
-보관 기간은 제품의 개인정보 정책 확정 전 운영 기본값이며, 외부 공개 전 법무·운영 검토로 확정한다.
+멱등성 record의 24시간은 외부 요청 계약으로 확정된 값이다. 나머지 보관 기간은 제품의 개인정보 정책 확정 전 운영 기본값이며, 외부 공개 전 법무·운영 검토로 확정한다.
 
 ### 15.3 삭제 순서와 `ON DELETE`
 
-- Course 관리 삭제는 `course_members`, `lecture_sessions`와 Session 하위 데이터를 cascade한다.
-- Session 삭제는 Material, Transcript, Gap, Cluster, Question, Answer, Summary, Chat, KnowledgeChunk와 Job을 함께 정리한다.
+- owner의 Course 삭제는 허용 조건이 확정된 뒤 `course_members`, `lecture_sessions`와 Session 하위 데이터를 aggregate 단위로 cascade한다. active class가 있을 때의 삭제와 복구 유예 정책은 아직 미정이다.
+- owner의 class 삭제는 `READY`, `COMPLETED`에서만 허용한다. Session 삭제는 Material, Transcript, Gap, Cluster, Question, Answer, Summary, Chat, KnowledgeChunk와 Job을 함께 정리하며 `LIVE`, `PROCESSING`에서는 거부한다.
 - Question 삭제는 Reaction을 cascade한다. 공유 질문 보존을 위해 User 탈퇴가 Question 삭제로 이어지지는 않는다.
 - Chat 삭제는 Message와 Evidence를 cascade한다.
 - 독립적인 `ai_jobs` 삭제는 결과 행의 deferred `NO ACTION` FK 때문에 commit되지 않는다. Session 전체 삭제에서는 Job과 결과가 같은 transaction에서 함께 제거된다.
 - KnowledgeChunk 단독 삭제는 Evidence가 참조하면 deferred `NO ACTION` FK가 막는다. 재색인 시 기존 Chunk를 즉시 삭제하지 말고 새 Chunk·Evidence 처리 정책을 먼저 적용한다.
-- PDF object는 DB cascade로 삭제되지 않는다. 삭제 transaction의 storage cleanup outbox를 통해 멱등 삭제한다.
+- 삭제 transaction은 `Course → Session → AIJob` 순서로 잠근다. Session 단독 삭제는 `Session → AIJob` 순서를 사용한다. 삭제된 Job의 늦은 결과는 attempt·run token·상태 fencing에서 폐기한다.
+- PDF object는 DB cascade로 삭제되지 않는다. DB 행을 지우기 전에 object key를 수집하고 같은 transaction의 storage cleanup outbox를 통해 멱등 삭제한다.
 - User 탈퇴는 우선 `users.deleted_at`을 기록하고 이름·이메일·avatar를 익명값으로 교체한다. 인증 identity/session과 개인 Chat·LIVE Summary·REQUESTER_ONLY Job은 같은 deferred transaction에서 제거하고, 공유 질문·Answer 작성자 FK는 익명화된 동일 User 행을 가리키게 유지한다.
-- `courses.created_by_user_id`, `course_members.user_id`, `lecture_sessions.created_by_user_id`, `questions.author_user_id` 등 공유 `RESTRICT` 참조가 하나라도 있으면 User 행은 영구 tombstone으로 유지하고 hard delete하지 않는다. hard delete는 모든 공유·Reaction·개인 참조가 전혀 없는 계정만 허용한다.
+- `courses.created_by_user_id`, `course_members.user_id`, `lecture_sessions.created_by_user_id`, `questions.author_user_id` 등 공유 `RESTRICT` 참조가 하나라도 있으면 User 행은 영구 tombstone으로 유지하고 hard delete하지 않는다. hard delete는 모든 공유·Reaction·개인 참조가 전혀 없는 계정만 허용한다. Course owner 탈퇴 시 Course와 멤버십을 어떻게 처리할지는 별도 미정 사항이다.
 
-MVP에는 Course·class·질문의 일반 사용자 hard delete API를 추가하지 않는다. 운영 삭제 기능을 만들 때는 위 cascade와 object storage 보상 작업을 하나의 관리 workflow로 구현한다.
+MVP의 질문 일반 hard delete API는 제공하지 않는다. Course·class 삭제는 위 owner 권한, 상태, cascade와 object storage 보상 규칙을 따르는 하나의 관리 workflow로 구현한다.
 
 ## 16. 인덱스 운영 원칙
 
 - B-tree 복합 인덱스의 선두 컬럼은 권한·범위 조건인 `course_id`, `session_id`, `owner_user_id`를 우선한다.
-- partial UNIQUE는 애플리케이션 선조회로 대체하지 않는다. Course당 `LIVE` 하나, Session당 `CAPTURING` Answer 하나, 질문당 미해제 Answer 하나는 DB가 최종 보장한다.
+- partial UNIQUE는 애플리케이션 선조회로 대체하지 않는다. Course당 `READY`·`LIVE`·`PROCESSING` 합계 하나, Session당 `CAPTURING` Answer 하나, 질문당 미해제 Answer 하나는 DB가 최종 보장한다.
 - `questions.reaction_count`와 최신 cursor는 실시간 hot path를 위해 저장하되 원장과 reconciliation한다.
 - HNSW는 embedding model과 차원이 확정된 뒤 생성한다. Session 범위 B-tree를 함께 두고 실제 데이터 분포로 `ef_search`, `m`, `ef_construction`을 조정한다.
 - production index 추가·교체는 가능한 경우 `CREATE INDEX CONCURRENTLY`를 사용하고 migration transaction 제약을 별도로 처리한다.
@@ -1103,25 +1110,36 @@ MVP에는 Course·class·질문의 일반 사용자 hard delete API를 추가하
 
 문서와 사용자 결정만으로 확정할 수 없는 항목은 다음과 같다.
 
-| 항목                                    | 현재 문서 표현                               | 확정 시점                           |
-| --------------------------------------- | -------------------------------------------- | ----------------------------------- |
-| 참여 코드 alphabet·길이                 | trim·uppercase·HMAC lookup까지만 확정        | 참여 코드 생성기 구현 전            |
-| 참여 코드 회전·만료 UI                  | `join_code_expires_at` nullable, 기본 무기한 | Course 관리 기능 확장 전            |
-| embedding model·차원                    | `vector(EMBEDDING_DIM)` placeholder          | 모델 선택 후 첫 vector migration 전 |
-| vector index parameter                  | HNSW 사용 방향만 확정                        | staging 데이터 부하 시험 후         |
-| 개인 LIVE Summary·Chat 정확한 보관 기간 | 계정/Course 수명 이내 권장                   | 개인정보 정책 확정 전               |
-| idempotency·outbox replay 보관 기간     | 각각 24시간 권장                             | 운영 SLO 확정 전                    |
+| 항목                                    | 현재 문서 표현                                   | 확정 시점                           |
+| --------------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| class 자동 제목 형식·시각 원장·timezone | Course 제목·날짜·시각 포함은 확정, 나머지는 미정 | class 생성·수정 구현 전             |
+| active class가 있는 Course 삭제         | owner 권한만 확정, 허용 여부·응답 미정           | Course 삭제 구현 전                 |
+| Course 삭제 후 복구 유예                | hard delete·soft delete·유예 기간 미정           | Course 삭제 구현 전                 |
+| Course owner 탈퇴 처리                  | owner 이전은 없고 User tombstone 원칙만 확정     | 탈퇴 workflow 구현 전               |
+| Cluster generation 할당·최신 결과 fence | Session별 증가·미재사용과 공개 필드만 확정       | 전체 재클러스터링 계약 변경 시      |
+| embedding model·차원                    | `vector(EMBEDDING_DIM)` placeholder              | 모델 선택 후 첫 vector migration 전 |
+| vector index parameter                  | HNSW 사용 방향만 확정                            | staging 데이터 부하 시험 후         |
+| 개인 LIVE Summary·Chat 정확한 보관 기간 | 계정/Course 수명 이내 권장                       | 개인정보 정책 확정 전               |
+| outbox replay 보관 기간                 | 발행 완료 후 24시간 권장                         | 운영 SLO 확정 전                    |
 
 위 항목을 확정하기 전에는 placeholder를 실제 SQLAlchemy 타입이나 irreversible migration으로 굳히지 않는다.
 
-### 18.1 API 문서 후속 동기화
+### 18.1 외부 계약 동기화 확인
 
-이번 사용자 결정으로 기존 API 문서의 다음 TBD는 해소됐다. 이 작업에서는 DB 문서만 작성하므로 OpenAPI는 변경하지 않았으며, 다음 API 명세 변경 때 동기화한다.
+API 명세와 OpenAPI는 다음 DB 규칙을 같은 변경 묶음에서 반영해야 한다.
 
-- Course당 동시 `LIVE` class는 1개다.
+- Course 생성자는 유일한 교수자 owner이며 owner 이전은 없다.
+- 참여 코드는 `[A-Z]{6}`, 무기한이고 owner 회전 시 이전 코드가 즉시 무효다.
+- Course당 `READY`, `LIVE`, `PROCESSING` 합계는 최대 1개이며 `current_session`으로 노출한다.
+- 같은 날짜 class는 허용하고 완료 목록은 실제 `started_at`으로 구분한다.
+- 제목은 모든 상태에서 수정하고 날짜·lifecycle 시각은 수정하지 않는다.
+- `READY`, `COMPLETED` class 삭제만 허용하며 Course 삭제의 active·복구 정책은 미정으로 유지한다.
+- 멱등성 terminal 응답은 `completed_at`부터 정확히 24시간 재사용한다.
 - class당 PDF는 여러 개다.
 - 질문당 취소되지 않은 활성·완료 Answer는 최대 1개다.
 - AIJob retry는 같은 Job ID에서 `attempt`를 증가시킨다.
+- Cluster 공개 필드는 `generation`, `ordinal`, `is_final`, `finalized_at`, `created_by_job_id`, `created_by_job_attempt`다.
+- `source_cluster_title_snapshot`은 선택 당시 `question_clusters.title`, 즉 AI 대표 질문의 정확한 text다.
 - Chat Evidence의 저장 식별자는 `knowledge_chunk_id`다. API에 source 표시가 필요하면 KnowledgeChunk의 typed FK에서 `source_kind`, label, 안전한 link를 파생한다.
 - AIJob `result` link는 결과 테이블의 `created_by_job_id` 역조회로 조립한다.
 
@@ -1129,14 +1147,20 @@ MVP에는 Course·class·질문의 일반 사용자 hard delete API를 추가하
 
 - [ ] API 상태값과 DB `CHECK` 값이 일치하는가?
 - [ ] 참여 코드 암호화 키와 lookup HMAC key가 분리되어 있는가?
-- [ ] Course당 `LIVE` 하나를 partial UNIQUE로 검증하는가?
+- [ ] Course 생성자와 정확히 한 명인 `PROFESSOR` membership을 deferred invariant로 검증하는가?
+- [ ] Course당 `READY`·`LIVE`·`PROCESSING` 합계 하나를 partial UNIQUE로 검증하는가?
+- [ ] 같은 날짜 완료 class 목록이 `started_at`과 `id`를 tie-breaker로 사용하는가?
+- [ ] 참여 코드가 `[A-Z]{6}`로 정규화되고 회전 뒤 이전 코드·이력이 남지 않는가?
 - [ ] Session당 PDF 개수에 불필요한 UNIQUE가 없는가?
-- [ ] 클러스터 이력 테이블 없이 Answer 시작 snapshot만 보관하는가?
+- [ ] 클러스터 generation·ordinal·final 상태와 Job attempt provenance를 검증하는가?
+- [ ] 클러스터 이력 테이블 없이 Answer 시작 시 AI 대표 질문 exact text snapshot만 보관하는가?
 - [ ] 취소되지 않은 질문–Answer 연결이 질문당 하나인가?
 - [ ] 모든 AI 생성 root 결과 행에 `created_by_job_id`, `created_by_job_attempt`가 있는가? (입력 Material 상태는 `processed_by_*`, Evidence는 상위 Assistant Message를 통해 귀속)
 - [ ] Job 재시도가 같은 행의 `attempt` 증가와 run token 검증을 사용하는가?
+- [ ] 멱등성 terminal 응답 만료가 `completed_at + 24 hours`인가?
 - [ ] Chat Evidence가 공통 KnowledgeChunk만 참조하는가?
 - [ ] DB에 generic `source_type + source_id` FK가 없는가?
 - [ ] vector 검색이 SQL 단계에서 Course·Session 범위를 제한하는가?
 - [ ] partial Transcript와 음성 원본을 영구 저장하지 않는가?
 - [ ] 삭제 transaction이 object storage 정리 outbox를 남기는가?
+- [ ] class 삭제가 `READY`, `COMPLETED`에서만 가능하고 늦은 worker 결과를 fence하는가?
