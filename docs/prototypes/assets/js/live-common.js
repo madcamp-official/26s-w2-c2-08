@@ -82,6 +82,22 @@ function setChatLocked(form, locked) {
   });
 }
 
+function hasLiveSummarySource() {
+  const transcript = document.querySelector('[data-query-state="transcript"]');
+  return transcript?.dataset.demoState !== "empty";
+}
+
+function clearPrivateResultCache(section) {
+  section.querySelectorAll("[data-live-chat-snapshot]").forEach((item) => {
+    item.textContent = "";
+  });
+  section
+    .querySelectorAll(
+      '[data-live-summary-state] [data-show-state="complete"], [data-live-chat-state] [data-show-state="evidence"], [data-live-chat-state] [data-show-state="no-evidence"]',
+    )
+    .forEach((item) => item.replaceChildren());
+}
+
 function initLiveAi(root, announce) {
   const summary = root.querySelector("[data-live-summary-state]");
   const chat = root.querySelector("[data-live-chat-state]");
@@ -93,13 +109,34 @@ function initLiveAi(root, announce) {
     chat.setAttribute("aria-label", "개인 AI 대화와 처리 상태");
   }
   if (chat?.dataset.demoState === "pending") setChatLocked(chatForm, true);
+  if (summary && !hasLiveSummarySource()) {
+    setDemoState(summary, "not-ready");
+  }
 
   root.addEventListener("click", (event) => {
+    const evidenceLink = event.target.closest("a.live-evidence-link");
     const summaryAction = event.target.closest("[data-live-summary-action]");
     const chatAction = event.target.closest("[data-live-chat-action]");
 
+    if (evidenceLink) {
+      event.preventDefault();
+      announce(
+        "정적 Prototype에서는 Evidence 권한을 재검사한 뒤 안정적인 공개 link로 이동하는 동작만 모의합니다.",
+      );
+      showToast("Evidence 공개 link 이동을 모의했습니다.", "info");
+      return;
+    }
+
     if (summaryAction) {
       const action = summaryAction.dataset.liveSummaryAction;
+      if (action !== "not-ready" && !hasLiveSummarySource()) {
+        setDemoState(summary, "not-ready");
+        moveFocusToState(summary);
+        announce(
+          "확정된 live Transcript가 0건이라 Summary Job 없이 409 SUMMARY_TRANSCRIPT_NOT_READY로 거부했습니다.",
+        );
+        return;
+      }
       if (action === "retry") {
         setAttempt(summary, "[data-live-summary-attempt]");
         setDemoState(summary, "pending");
@@ -170,6 +207,7 @@ export function purgeLivePrivateAi(root = document) {
     section.dataset.livePurged = "true";
     delete section.dataset.activeChatMessage;
     delete section.dataset.activeChatJob;
+    clearPrivateResultCache(section);
     section.querySelectorAll("[data-live-summary-state]").forEach((state) => {
       state.dataset.demoState = "purged";
       delete state.dataset.selectedJobId;
@@ -205,8 +243,10 @@ export function initLiveCommon({
     .forEach((section) => initLiveAi(section, announce));
 
   root.addEventListener("click", (event) => {
-    const processing = event.target.closest("[data-live-processing]");
-    if (!processing) return;
+    const terminal = event.target.closest(
+      "[data-live-processing], [data-live-terminal]",
+    );
+    if (!terminal) return;
     purgeLivePrivateAi(root);
     announce(
       "Session이 PROCESSING으로 전환되어 개인 LIVE Summary·Chat과 선택 Job 정보를 삭제했습니다.",
@@ -215,7 +255,9 @@ export function initLiveCommon({
   });
 
   if (
-    new URLSearchParams(window.location.search).get("view") === "processing"
+    ["processing", "completed"].includes(
+      new URLSearchParams(window.location.search).get("view"),
+    )
   ) {
     purgeLivePrivateAi(root);
   }

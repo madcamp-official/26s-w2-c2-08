@@ -24,6 +24,7 @@ const materialError = document.querySelector("[data-material-error]");
 const materialCount = document.querySelector("[data-material-count]");
 const announcement = document.querySelector("#liveAnnouncement");
 const transcriptStream = document.querySelector("#transcriptStream");
+const liveView = document.querySelector("#liveView");
 
 const { announce } = initLiveCommon({ announcer: announcement });
 
@@ -31,6 +32,7 @@ let activeAnswer = null;
 let partialRevision = 2;
 let pendingMaterialRow = null;
 let endingSession = false;
+let materialSequence = 0;
 
 function getActivePartial() {
   return document.querySelector('[data-transcript-kind="partial"]');
@@ -151,6 +153,15 @@ function shouldWarnBeforeLeave() {
   return !endingSession && publisherState?.dataset.demoState === "active";
 }
 
+function lockLiveControls() {
+  endingSession = true;
+  liveView
+    ?.querySelectorAll(
+      "[data-show-state='normal'] input, [data-show-state='normal'] textarea, [data-show-state='normal'] button",
+    )
+    .forEach((control) => (control.disabled = true));
+}
+
 function handleBeforeUnload(event) {
   if (!shouldWarnBeforeLeave()) return;
   event.preventDefault();
@@ -192,10 +203,18 @@ function ensureMaterialOpenAction(row) {
     row.append(actions);
   }
   if (!actions.querySelector("a")) {
+    if (!row.dataset.materialId) {
+      materialSequence += 1;
+      row.dataset.materialId = `material-live-${String(materialSequence).padStart(3, "0")}`;
+    }
     const link = document.createElement("a");
     link.className = "button button--ghost";
-    link.href = "/api/v1/materials/material-uploaded/content";
+    link.href = `/api/v1/materials/${row.dataset.materialId}/content`;
     link.textContent = "원본 열기";
+    link.setAttribute(
+      "aria-label",
+      `${row.dataset.materialName || "PDF 자료"} 원본 열기`,
+    );
     actions.prepend(link);
   }
 }
@@ -309,9 +328,25 @@ function initializeAnswerFixture() {
   });
   updateTargetStatus(target, "selected");
   if (state === "candidate") {
-    const finals = document.querySelectorAll('[data-transcript-kind="final"]');
-    const lastFinal = finals[finals.length - 1];
-    if (lastFinal) lastFinal.dataset.transcriptKind = "candidate";
+    const partial = getActivePartial();
+    if (partial) {
+      const candidate = partial.cloneNode(true);
+      candidate.removeAttribute("id");
+      candidate.dataset.transcriptKind = "candidate";
+      candidate.dataset.sequence = String(sequence + 1);
+      const time = candidate.querySelector("[data-transcript-time]");
+      const text = candidate.querySelector("[data-partial-text]");
+      const meta = candidate.querySelector("[data-partial-meta]");
+      if (time) time.textContent = "10:34";
+      if (text) {
+        text.textContent =
+          "다익스트라는 음수 가중치가 없을 때 최단 경로를 구합니다.";
+      }
+      if (meta) {
+        meta.textContent = `final · DB commit · sequence ${sequence + 1}`;
+      }
+      partial.before(candidate);
+    }
   }
   setAnswerControlsDisabled(true);
 }
@@ -335,11 +370,21 @@ document.addEventListener("click", (event) => {
   const leavePreview = event.target.closest("[data-leave-preview]");
   const endOpen = event.target.closest("[data-end-open]");
   const endConfirm = event.target.closest("[data-end-confirm]");
+  const viewProcessing = event.target
+    .closest('[data-state="processing"]')
+    ?.closest('[data-state-switcher][data-state-target="#liveView"]');
+
+  if (viewProcessing) {
+    lockLiveControls();
+    removePartial("PROCESSING 상태에서는 저장되지 않은 partial을 숨깁니다.");
+  }
 
   if (publisherStart) {
-    setDemoState(publisherState, "active");
+    setDemoState(publisherState, "starting");
     setDemoState(audioState, "permission");
-    announce("첫 audio.start가 성공해 이 탭이 active publisher가 됐습니다.");
+    announce(
+      "마이크 권한을 확인합니다. 아직 audio.start가 성공하지 않아 publisher를 선점하지 않았습니다.",
+    );
   }
   if (micRequest) {
     if (publisherState.dataset.demoState === "conflict") {
@@ -348,9 +393,11 @@ document.addEventListener("click", (event) => {
         "error",
       );
     } else {
-      setDemoState(publisherState, "active");
+      setDemoState(publisherState, "starting");
       setDemoState(audioState, "connecting");
-      announce("마이크 권한 목 응답을 기다립니다.");
+      announce(
+        "마이크 권한 목 응답을 기다립니다. publisher는 audio.start 성공 전까지 선점하지 않습니다.",
+      );
     }
   }
   if (micAllow) {
@@ -369,6 +416,9 @@ document.addEventListener("click", (event) => {
     }
   }
   if (micDeny) {
+    if (publisherState.dataset.demoState !== "conflict") {
+      setDemoState(publisherState, "checking");
+    }
     setDemoState(audioState, "denied");
     setDemoState(recordingState, "idle");
     announce("마이크 권한은 거부됐지만 조회 기능은 계속 사용할 수 있습니다.");
@@ -463,17 +513,12 @@ document.addEventListener("click", (event) => {
     }
   }
   if (endConfirm) {
-    endingSession = true;
+    lockLiveControls();
     setDemoState(endFlow, "processing");
     setDemoState(eventState, "stopped");
     setDemoState(recordingState, "finalizing");
     questionsPanel.dataset.clusteringFenced = "true";
-    document
-      .querySelectorAll(
-        "#liveView [data-show-state='normal'] input, #liveView [data-show-state='normal'] textarea, #liveView [data-show-state='normal'] button",
-      )
-      .forEach((control) => (control.disabled = true));
-    setDemoState(document.querySelector("#liveView"), "processing");
+    setDemoState(liveView, "processing");
     window.setTimeout(() => {
       setDemoState(recordingState, "ready-upload");
     }, 300);
@@ -569,6 +614,11 @@ if (["reconnecting", "resync"].includes(eventState?.dataset.demoState)) {
 
 applyMaterialFixture();
 initializeAnswerFixture();
+
+if (liveView?.dataset.demoState === "processing") {
+  lockLiveControls();
+  removePartial("PROCESSING 상태에서는 저장되지 않은 partial을 숨깁니다.");
+}
 
 if (new URLSearchParams(window.location.search).get("leave") === "warning") {
   openDialog(leaveDialog, document.querySelector("[data-leave-preview]"));

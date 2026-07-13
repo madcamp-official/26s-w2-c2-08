@@ -36,6 +36,7 @@
             class="profile-button"
             type="button"
             data-profile-trigger
+            aria-label="김도현 계정 메뉴"
             aria-expanded="false"
             aria-controls="profilePopover"
           >
@@ -65,38 +66,6 @@
     </header>
 
     <main class="container page-main live-shell" id="mainContent">
-      <nav class="breadcrumb" aria-label="현재 위치">
-        <a href="course-professor.html">알고리즘</a
-        ><span aria-hidden="true">/</span
-        ><span aria-current="page">그래프 탐색과 최단 경로 · LIVE</span>
-      </nav>
-
-      <header class="live-header">
-        <div>
-          <p class="eyebrow">LIVE_CLASS_PAGE_PROF · LIVE</p>
-          <div class="cluster">
-            <h1 id="classTitle">그래프 탐색과 최단 경로</h1>
-            <button
-              class="button button--ghost"
-              type="button"
-              data-dialog-open="titleDialog"
-            >
-              제목 수정
-            </button>
-          </div>
-          <p>
-            2026년 7월 12일 14:00 시작 · 날짜와 시작 시각은 수정할 수 없습니다.
-            참여자 수는 현재 API 계약에 없어 표시하지 않습니다.
-          </p>
-        </div>
-        <div class="live-header__actions">
-          <span class="status-chip status-chip--live">LIVE</span
-          ><button class="button button--danger" type="button" data-end-open>
-            class 종료
-          </button>
-        </div>
-      </header>
-
       <div
         id="liveAnnouncement"
         class="sr-only"
@@ -144,6 +113,7 @@
               <button
                 type="button"
                 data-state="processing"
+                data-live-processing
                 aria-pressed="false"
               >
                 PROCESSING
@@ -328,9 +298,44 @@
         data-demo-state="normal"
         data-query-state="view"
         data-query-default="normal"
-        aria-live="polite"
       >
         <div data-show-state="normal">
+          <nav class="breadcrumb" aria-label="현재 위치">
+            <a href="course-professor.html">알고리즘</a
+            ><span aria-hidden="true">/</span
+            ><span aria-current="page">그래프 탐색과 최단 경로 · LIVE</span>
+          </nav>
+
+          <header class="live-header">
+            <div>
+              <p class="eyebrow">LIVE_CLASS_PAGE_PROF · LIVE</p>
+              <div class="cluster">
+                <h1 id="classTitle">그래프 탐색과 최단 경로</h1>
+                <button
+                  class="button button--ghost"
+                  type="button"
+                  data-dialog-open="titleDialog"
+                >
+                  제목 수정
+                </button>
+              </div>
+              <p>
+                2026년 7월 12일 14:00 시작 · 날짜와 시작 시각은 수정할 수
+                없습니다. 참여자 수는 현재 API 계약에 없어 표시하지 않습니다.
+              </p>
+            </div>
+            <div class="live-header__actions">
+              <span class="status-chip status-chip--live">LIVE</span
+              ><button
+                class="button button--danger"
+                type="button"
+                data-end-open
+              >
+                class 종료
+              </button>
+            </div>
+          </header>
+
           <section class="live-axis-grid" aria-label="실시간 독립 상태">
             <article
               class="live-contract-axis"
@@ -380,6 +385,10 @@
                 >
                   이 탭에서 마이크 시작
                 </button>
+              </div>
+              <div data-show-state="starting" hidden>
+                <strong>마이크 권한 확인 중 · publisher 미선점</strong>
+                <p>서버가 첫 audio.start를 수락한 뒤에만 ACTIVE가 됩니다.</p>
               </div>
               <div data-show-state="active" hidden>
                 <strong>ACTIVE · 이 탭만 음성 전송</strong>
@@ -692,7 +701,13 @@
                       <h3 data-show-state="cluster-failed" hidden>
                         클러스터링 실패 · 원본 질문 유지
                       </h3>
-                      <p>
+                      <p data-show-state="normal">
+                        requested sequence 46 · applied sequence 46 · pending 0
+                      </p>
+                      <p
+                        data-show-state="unclustered clustering-pending clustering-running clustering-retry-reserved cluster-failed"
+                        hidden
+                      >
                         requested sequence 48 · applied sequence 46 · pending 2
                       </p>
                     </div>
@@ -755,7 +770,11 @@
                   </p>
                 </div>
 
-                <div class="live-mindmap" aria-label="질문 Cluster 마인드맵">
+                <div
+                  class="live-mindmap"
+                  role="group"
+                  aria-labelledby="questionsTitle"
+                >
                   <article
                     class="live-mindmap__center"
                     data-answer-target
@@ -1087,6 +1106,7 @@
                   <a
                     class="button button--ghost"
                     href="/api/v1/materials/material-graph/content"
+                    aria-label="그래프 탐색 자료.pdf 원본 열기"
                     >원본 열기</a
                   ><button
                     class="button button--danger"
@@ -1113,6 +1133,7 @@
                   <a
                     class="button button--ghost"
                     href="/api/v1/materials/material-processing/content"
+                    aria-label="그래프 탐색 자료 (1).pdf 원본 열기"
                     >원본 열기</a
                   ><button
                     class="button button--danger"
@@ -1332,6 +1353,13 @@
                     <p>“<span data-live-chat-snapshot>저장된 입력</span>”</p>
                   </div>
                   <div data-show-state="evidence" hidden>
+                    <div class="live-chat-turn live-chat-turn--user">
+                      <small>USER</small>
+                      <p data-live-chat-snapshot>
+                        다익스트라와 벨만-포드의 차이는 무엇인가요?
+                      </p>
+                    </div>
+                    <small>ASSISTANT</small>
                     <div class="live-ai-result__body">
                       벨만-포드는 간선 완화를 반복해 음수 간선을 처리합니다.
                     </div>
@@ -1372,6 +1400,13 @@
                     </ul>
                   </div>
                   <div data-show-state="no-evidence" hidden>
+                    <div class="live-chat-turn live-chat-turn--user">
+                      <small>USER</small>
+                      <p data-live-chat-snapshot>
+                        현재 근거만으로 비교할 수 있나요?
+                      </p>
+                    </div>
+                    <small>ASSISTANT</small>
                     <div class="live-ai-result__body">
                       현재 저장된 근거에서 직접 확인하기 어려운 질문입니다.
                     </div>
