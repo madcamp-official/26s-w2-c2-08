@@ -351,7 +351,8 @@ paths:
       description: |
         정상 HTTP 인증으로 Session scope의 60초 만료·1회용 티켓을 발급한다.
         `SESSION_EVENTS_READ`는 Course 멤버, `SESSION_AUDIO_WRITE`는 해당 Course의
-        PROFESSOR이면서 LIVE Session일 때만 발급한다. 응답과 티켓을 로그에 남기지 않는다.
+        PROFESSOR이면서 LIVE Session일 때만 발급한다. 상태 변경 요청이므로 exact Origin
+        allowlist를 검사하며, 응답과 티켓을 로그에 남기지 않는다.
       requestBody:
         required: true
         content:
@@ -393,6 +394,8 @@ paths:
           $ref: "#/components/responses/Conflict"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/courses:
     parameters:
@@ -7789,6 +7792,10 @@ x-websocket-channels:
   channels:
     /api/v1/ws/sessions/{session_id}:
       summary: Course 멤버용 Session 변경 알림
+      implementation: |
+        현재 `connection.ready`, `resync.required`, `session.updated`, SHARED `job.updated`만
+        전달한다. commit된 PostgreSQL Outbox를 FastAPI process-local publisher가 fan-out하며,
+        cursor replay는 최대 500건이다. 다른 event와 multi-process transport는 후속 범위다.
       authorization: Course membership required
       authentication: POST /api/v1/realtime-tickets의 60초 만료·1회용 SESSION_EVENTS_READ ticket
       handshakeQuery: ticket

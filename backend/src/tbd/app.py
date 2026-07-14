@@ -11,6 +11,8 @@ from tbd.core.errors import install_exception_handlers
 from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
 from tbd.providers.google_oidc import GoogleOIDCClient, GoogleOIDCProvider
+from tbd.realtime.hub import RealtimeHub
+from tbd.realtime.publisher import RealtimeOutboxPublisher
 from tbd.repositories.idempotency import IdempotencyRepository
 
 
@@ -18,7 +20,14 @@ from tbd.repositories.idempotency import IdempotencyRepository
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Release pooled database connections during application shutdown."""
 
-    yield
+    publisher = app.state.realtime_publisher
+    if publisher is not None:
+        await publisher.start()
+    try:
+        yield
+    finally:
+        if publisher is not None:
+            await publisher.stop()
     await app.state.database.dispose()
 
 
@@ -43,6 +52,16 @@ def create_app(
     cipher = runtime_settings.idempotency_response_cipher
     app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None
     app.state.course_join_code_codec = runtime_settings.course_join_code_codec
+    app.state.realtime_hub = RealtimeHub()
+    app.state.realtime_publisher = (
+        RealtimeOutboxPublisher(
+            database=runtime_database,
+            hub=app.state.realtime_hub,
+            settings=runtime_settings,
+        )
+        if hasattr(runtime_database, "session_factory")
+        else None
+    )
     app.add_middleware(RequestIdMiddleware)
     install_exception_handlers(app)
     app.include_router(api_router)

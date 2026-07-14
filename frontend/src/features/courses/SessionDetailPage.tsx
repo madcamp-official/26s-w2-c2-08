@@ -18,6 +18,7 @@ import {
   courseKeys,
   sessionQueryOptions,
 } from './queries'
+import { useSessionRealtime } from '../realtime/useSessionRealtime'
 
 function statusCopy(status: string) {
   switch (status) {
@@ -55,6 +56,12 @@ export function SessionDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const endKey = useRef<string | null>(null)
   const deleteKey = useRef<string | null>(null)
+
+  useSessionRealtime({
+    sessionId,
+    courseId: session.data?.course_id,
+    enabled: session.isSuccess,
+  })
 
   function refreshCourse() {
     if (session.data) {
