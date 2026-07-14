@@ -77,6 +77,33 @@ def test_production_accepts_explicit_non_default_database_url() -> None:
         _env_file=None,
         app_env=AppEnvironment.PRODUCTION,
         database_url="postgresql+psycopg://goal:strong-password@database:5432/goal",
+        frontend_origin="https://goal.example",
+        auth_allowed_origins="https://goal.example",
+        auth_secret_key="a-production-auth-secret-with-at-least-32-bytes",
+        google_oidc_client_id="client-id.apps.googleusercontent.com",
+        google_oidc_client_secret="client-secret",
+        google_oidc_redirect_uri="https://api.goal.example/api/v1/auth/google/callback",
     )
 
     assert settings.effective_database_url.endswith("@database:5432/goal")
+
+
+def test_production_rejects_http_auth_origin() -> None:
+    """Production browser origins must use HTTPS."""
+
+    with pytest.raises(ValidationError, match="FRONTEND_ORIGIN must use HTTPS"):
+        Settings(
+            _env_file=None,
+            app_env=AppEnvironment.PRODUCTION,
+            database_url="postgresql+psycopg://goal:strong-password@database:5432/goal",
+            auth_secret_key="a-production-auth-secret-with-at-least-32-bytes",
+            google_oidc_client_id="client-id.apps.googleusercontent.com",
+            google_oidc_client_secret="client-secret",
+        )
+
+
+def test_auth_origin_rejects_paths() -> None:
+    """Origin allowlists are exact origins rather than arbitrary URL prefixes."""
+
+    with pytest.raises(ValidationError, match="exact scheme"):
+        Settings(_env_file=None, auth_allowed_origins="http://localhost:5173/path")
