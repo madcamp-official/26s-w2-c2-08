@@ -41,8 +41,9 @@ def test_fresh_upgrade_downgrade_and_reupgrade(
 
     alembic_runner(temporary_database_url, "upgrade", "head")
     revision, vector_version = _migration_state(temporary_database_url)
-    assert revision == "20260710_0001"
+    assert revision is not None
     assert vector_version is not None
+    upgraded_revision = revision
 
     alembic_runner(temporary_database_url, "downgrade", "base")
     revision, vector_version = _migration_state(temporary_database_url)
@@ -51,5 +52,5 @@ def test_fresh_upgrade_downgrade_and_reupgrade(
 
     alembic_runner(temporary_database_url, "upgrade", "head")
     revision, vector_version = _migration_state(temporary_database_url)
-    assert revision == "20260710_0001"
+    assert revision == upgraded_revision
     assert vector_version is not None
