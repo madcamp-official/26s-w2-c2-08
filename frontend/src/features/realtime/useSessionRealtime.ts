@@ -6,18 +6,28 @@ import { questionKeys } from '../questions/queries'
 import { answerKeys } from '../answers/queries'
 
 import { createRealtimeTicket } from './api'
-import { RealtimeSessionClient } from './client'
+import {
+  RealtimeSessionClient,
+  type RealtimeConnectionState,
+  type RealtimeEvent,
+} from './client'
 
 interface UseSessionRealtimeOptions {
   sessionId: string
   courseId: string | undefined
   enabled: boolean
+  onEvent?: (event: RealtimeEvent) => void
+  onResyncRequired?: () => void
+  onConnectionState?: (state: RealtimeConnectionState) => void
 }
 
 export function useSessionRealtime({
   sessionId,
   courseId,
   enabled,
+  onEvent,
+  onResyncRequired,
+  onConnectionState,
 }: UseSessionRealtimeOptions) {
   const queryClient = useQueryClient()
 
@@ -50,10 +60,33 @@ export function useSessionRealtime({
           scope: 'SESSION_EVENTS_READ',
           resume_cursor: resumeCursor,
         }),
-      onEvent: invalidateCanonicalState,
-      onResyncRequired: invalidateCanonicalState,
+      onEvent: (event) => {
+        onEvent?.(event)
+        // partial STT is intentionally transient and has no REST representation.
+        // Refetching on it would erase a newer in-memory revision before its final arrives.
+        if (
+          event.type !== 'transcript.partial' &&
+          event.type !== 'transcript.final' &&
+          event.type !== 'transcript.status'
+        ) {
+          invalidateCanonicalState()
+        }
+      },
+      onResyncRequired: () => {
+        onResyncRequired?.()
+        invalidateCanonicalState()
+      },
+      onConnectionState,
     })
     client.start()
     return () => client.stop()
-  }, [courseId, enabled, queryClient, sessionId])
+  }, [
+    courseId,
+    enabled,
+    onConnectionState,
+    onEvent,
+    onResyncRequired,
+    queryClient,
+    sessionId,
+  ])
 }

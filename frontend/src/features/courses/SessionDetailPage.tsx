@@ -12,8 +12,6 @@ import { answerKeys } from '../answers/queries'
 import { AnswerPanel } from '../answers/AnswerPanel'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { sessionMaterialsQueryOptions } from '../materials/queries'
-import { QuestionPanel } from '../questions/QuestionPanel'
-import { QuestionMindmap } from '../questions/QuestionMindmap'
 import { questionKeys } from '../questions/queries'
 import {
   deleteSession,
@@ -27,6 +25,7 @@ import {
   sessionQueryOptions,
 } from './queries'
 import { useSessionRealtime } from '../realtime/useSessionRealtime'
+import { LiveClassRoom } from '../live/LiveClassRoom'
 
 function statusCopy(status: string) {
   switch (status) {
@@ -69,7 +68,7 @@ export function SessionDetailPage() {
   useSessionRealtime({
     sessionId,
     courseId: session.data?.course_id,
-    enabled: session.isSuccess,
+    enabled: session.isSuccess && session.data.status !== 'LIVE',
   })
 
   function refreshCourse() {
@@ -235,15 +234,6 @@ export function SessionDetailPage() {
                   )}
                 </>
               )}
-              {data.status === 'LIVE' && (
-                <Button
-                  variant="danger"
-                  disabled={end.isPending}
-                  onClick={() => end.mutate()}
-                >
-                  {end.isPending ? '종료 중…' : '수업 종료'}
-                </Button>
-              )}
               {canDelete && (
                 <Button variant="ghost" onClick={() => setDeleteOpen(true)}>
                   class 삭제
@@ -287,28 +277,14 @@ export function SessionDetailPage() {
         sessionStatus={data.status}
       />
       {data.status === 'LIVE' && (
-        <>
-          <QuestionPanel
-            sessionId={data.id}
-            student={!professor}
-            onStartVoiceAnswer={
-              professor ? (target) => startAnswer.mutate(target) : undefined
-            }
-            answerCapturePending={startAnswer.isPending}
-          />
-          <QuestionMindmap
-            sessionId={data.id}
-            onStartVoiceAnswer={
-              professor ? (target) => startAnswer.mutate(target) : undefined
-            }
-            answerCapturePending={startAnswer.isPending}
-          />
-          <AnswerPanel
-            sessionId={data.id}
-            professor={professor}
-            sessionStatus={data.status}
-          />
-        </>
+        <LiveClassRoom
+          session={data}
+          professor={professor}
+          onStartVoiceAnswer={(target) => startAnswer.mutate(target)}
+          answerCapturePending={startAnswer.isPending}
+          onEnd={() => end.mutate()}
+          endPending={end.isPending}
+        />
       )}
       {data.status === 'COMPLETED' && (
         <AnswerPanel
