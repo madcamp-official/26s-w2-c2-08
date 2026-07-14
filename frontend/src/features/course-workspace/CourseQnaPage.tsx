@@ -11,8 +11,8 @@ function answerCopy(item: CourseQnaArchiveItem) {
   const answer = item.answer
   if (!answer) return null
   if (answer.text_content) return answer.text_content
-  if (answer.organization_state.organization) {
-    return answer.organization_state.organization.content
+  if (answer.organization) {
+    return answer.organization.content
   }
   return answer.answer_type === 'VOICE'
     ? '완료된 음성 Answer는 class 기록에서 Transcript 범위와 함께 확인할 수 있습니다.'

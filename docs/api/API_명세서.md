@@ -561,9 +561,9 @@ GET /api/v1/courses/{course_id}/qna?cursor=<cursor>&limit=20
 
 - 권한과 cursor 오류는 6.7절과 같다.
 - 현재 active Session이 있으면 먼저 두고 완료 class는 `started_at DESC, id DESC`로 정렬한다. 같은 class 안에서는 `occurred_at DESC`, 동일 시각이면 target ID 내림차순으로 정렬한다.
-- 항목은 `target_type` discriminator로 `STUDENT_QUESTION`과 `AI_REPRESENTATIVE_QUESTION`을 구분한다. 두 유형 모두 class 요약, immutable `target_text_snapshot`, nullable 또는 완료된 공개 Answer, class 기록으로 이동하는 `record_url`을 포함한다.
+- 항목은 `target_type` discriminator로 `STUDENT_QUESTION`과 `AI_REPRESENTATIVE_QUESTION`을 구분한다. 두 유형 모두 class 요약, immutable `target_text_snapshot`, nullable 또는 완료된 공개 Answer, class 기록으로 이동하는 `record_url`을 포함한다. 공개 Answer는 표시용 `id`, `answer_type`, `status=COMPLETED`, 교수자 `text_content`, content-only `organization`, `completed_at`만 반환한다.
 - 학생 질문은 작성자 식별정보 없이 모두 포함한다. 미답변 질문은 `answer=null`, 답변된 질문은 `status=COMPLETED`인 Answer만 포함한다. 학생 Question 공개 표현에도 계정 ID·이름·이메일을 추가하지 않는다.
-- AI 대표질문은 `status=COMPLETED` Answer가 있는 target만 포함하고 Answer의 immutable snapshot을 질문 문구로 사용한다. `CAPTURING`·취소 Answer와 폐기된 미답변 대표질문은 제외하며, 내부 clustering·provider Job ID를 공개하지 않는다.
+- AI 대표질문은 `status=COMPLETED` Answer가 있는 `ACTIVE`·`PRESERVED` target만 포함하고 Answer의 immutable snapshot을 질문 문구로 사용한다. `CAPTURING`·취소 Answer와 `DISCARDED` 대표질문은 완료 Answer 원장이 남아 있어도 제외한다. Answer·clustering·provider Job ID, attempt·retry 상태, Transcript version·segment ID, 모델·prompt provenance는 공개하지 않는다.
 - archive는 읽기 전용이다. Answer 작성·수정·철회와 실패 Job 재시도는 기존 class 기록 API와 화면에서 수행한다.
 
 ## 7. Lecture Session API

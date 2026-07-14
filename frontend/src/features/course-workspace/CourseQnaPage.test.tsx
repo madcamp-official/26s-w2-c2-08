@@ -20,36 +20,13 @@ const session = {
 function completedAnswer(id: string, textContent: string | null) {
   return {
     id,
-    session_id: sessionId,
     answer_type: textContent ? ('TEXT' as const) : ('VOICE' as const),
     status: 'COMPLETED' as const,
-    version: 1,
-    target: textContent
-      ? {
-          type: 'STUDENT_QUESTION' as const,
-          question_id: '30000000-0000-0000-0000-000000000001',
-        }
-      : {
-          type: 'AI_REPRESENTATIVE_QUESTION' as const,
-          representative_question_id: '40000000-0000-0000-0000-000000000001',
-        },
-    target_text_snapshot: '왜 이 방식이 필요한가요?',
     text_content: textContent,
-    source_transcript_version_id: textContent ? null : 'version-live',
-    canonical_transcript_mapping: null,
-    organization_state: {
-      status: 'NOT_APPLICABLE' as const,
-      job_id: null,
-      attempt: null,
-      retryable: false,
-      organization: null,
-    },
-    capture_started_after_sequence: textContent ? null : 0,
-    start_sequence: textContent ? null : 1,
-    end_sequence: textContent ? null : 2,
-    started_at: '2026-07-13T06:20:00Z',
+    organization: textContent
+      ? null
+      : { content: '음성 Answer의 공개 AI 정리문' },
     completed_at: '2026-07-13T06:25:00Z',
-    updated_at: '2026-07-13T06:25:00Z',
   }
 }
 
@@ -154,7 +131,7 @@ describe('Course Q&A archive', () => {
     ).toBeInTheDocument()
     expect(within(unanswered!).getByText(/작성자 비공개/)).toBeInTheDocument()
     expect(screen.getByText('AI 대표질문')).toBeInTheDocument()
-    expect(screen.getByText(/완료된 음성 Answer/)).toBeInTheDocument()
+    expect(screen.getByText('음성 Answer의 공개 AI 정리문')).toBeInTheDocument()
     expect(
       screen.getAllByRole('link', { name: 'class 기록 보기' })[0],
     ).toHaveAttribute('href', `/sessions/${sessionId}`)
