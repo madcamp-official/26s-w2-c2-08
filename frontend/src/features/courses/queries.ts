@@ -6,6 +6,8 @@ import { getCourse, getSession, listCourseSessions, listCourses } from './api'
 export const courseKeys = {
   all: ['courses'] as const,
   list: (role: CourseRoleFilter) => ['courses', 'list', role] as const,
+  infiniteList: (role: CourseRoleFilter) =>
+    ['courses', 'infinite-list', role] as const,
   detail: (courseId: string) => ['courses', 'detail', courseId] as const,
   sessions: (courseId: string) => ['courses', courseId, 'sessions'] as const,
   completedSessions: (courseId: string) =>
@@ -44,7 +46,17 @@ export function sessionQueryOptions(sessionId: string) {
 export function courseListQueryOptions(role: CourseRoleFilter) {
   return queryOptions({
     queryKey: courseKeys.list(role),
-    queryFn: ({ signal }) => listCourses(role, signal),
+    queryFn: ({ signal }) => listCourses(role, {}, signal),
+  })
+}
+
+export function courseInfiniteListQueryOptions(role: CourseRoleFilter) {
+  return infiniteQueryOptions({
+    queryKey: courseKeys.infiniteList(role),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) =>
+      listCourses(role, { cursor: pageParam }, signal),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
   })
 }
 

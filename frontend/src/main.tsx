@@ -7,6 +7,7 @@ import './styles/tokens.css'
 import './styles/globals.css'
 import './styles/components.css'
 import './styles/public-auth.css'
+import './styles/home-account.css'
 
 const rootElement = document.getElementById('root')
 

@@ -20,11 +20,18 @@ function idempotencyHeaders(key?: string) {
 
 export async function listCourses(
   role: CourseRoleFilter,
+  {
+    cursor,
+    limit = 100,
+  }: {
+    cursor?: string
+    limit?: number
+  } = {},
   signal?: AbortSignal,
 ) {
   try {
     const { data, error, response } = await apiClient.GET('/api/v1/courses', {
-      params: { query: { role, limit: 100 } },
+      params: { query: { role, cursor, limit } },
       signal,
     })
     if (error) throw apiErrorFromResponse(response, error)

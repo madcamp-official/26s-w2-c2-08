@@ -49,6 +49,7 @@ const scenarios: FoundationScenario[] = [
     path: '/',
     auth: 'signed-in',
     heading: '김도현님, 오늘의 강의를 이어가세요.',
+    checkpoint: { level: 2, name: '그래프 탐색과 최단 경로' },
     requiredRequests: [
       'GET /api/v1/me',
       'GET /api/v1/courses?role=PROFESSOR&limit=100',
