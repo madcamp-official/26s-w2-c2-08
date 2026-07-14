@@ -152,9 +152,18 @@ make dev-web
 
 접속 주소:
 
-- Frontend: <http://127.0.0.1:5173>
-- FastAPI: <http://127.0.0.1:8000>
-- API 문서: <http://127.0.0.1:8000/docs>
+- Frontend: <http://localhost:5173>
+- FastAPI: <http://localhost:8000>
+- API 문서: <http://localhost:8000/docs>
+
+Vite 개발 서버는 `/api` 요청을 FastAPI로 proxy한다. 따라서 기본 로컬 환경에서는
+`VITE_API_BASE_URL`을 설정하지 않는다. 별도 API 서버를 사용할 때만 API origin을
+설정하며, API 계약의 `/api` 경로를 중복하지 않도록 `/api`를 붙이지 않는다.
+
+```bash
+# 예: 별도 API origin
+VITE_API_BASE_URL=https://api.example.com
+```
 
 ### 검사 명령
 
