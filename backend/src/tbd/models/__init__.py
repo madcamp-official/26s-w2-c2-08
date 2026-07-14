@@ -12,6 +12,13 @@ from tbd.models.clustering import (
 )
 from tbd.models.common import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 from tbd.models.courses import Course, CourseMember
+from tbd.models.knowledge import (
+    ChatMessage,
+    ChatMessageEvidence,
+    ChatSession,
+    KnowledgeChunk,
+    LectureSummary,
+)
 from tbd.models.materials import (
     LectureMaterial,
     RecordingUpload,
@@ -32,10 +39,15 @@ __all__ = [
     "Answer",
     "AnswerOrganization",
     "AnswerTranscriptMapping",
+    "ChatMessage",
+    "ChatMessageEvidence",
+    "ChatSession",
     "Course",
     "CourseMember",
     "LectureMaterial",
     "LectureSession",
+    "LectureSummary",
+    "KnowledgeChunk",
     "OAuthTransaction",
     "Question",
     "QuestionCluster",
