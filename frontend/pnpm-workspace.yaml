@@ -1,0 +1,3 @@
+allowBuilds:
+  # Node 기반 API mocking만 사용하므로 MSW의 선택적 설치 스크립트는 실행하지 않는다.
+  msw: false
