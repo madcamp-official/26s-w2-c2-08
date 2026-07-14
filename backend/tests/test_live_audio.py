@@ -190,6 +190,17 @@ def test_audio_socket_claims_one_publisher_and_persists_only_final_results(
                     other_socket.receive_json()
             assert conflict.value.code == 4409
 
+        timeline = client.get(f"/api/v1/sessions/{session_id}/transcript")
+        assert timeline.status_code == 200
+        assert timeline.json()["selected_version"]["source"] == "LIVE"
+        assert [item["text"] for item in timeline.json()["segments"]] == ["저장되는 최종 문장"]
+        assert timeline.json()["gaps"] == []
+        segment_id = timeline.json()["segments"][0]["id"]
+        assert client.get(f"/api/v1/transcript-segments/{segment_id}").status_code == 200
+        versions = client.get(f"/api/v1/sessions/{session_id}/transcript/versions")
+        assert versions.status_code == 200
+        assert versions.json()["items"][0]["is_canonical"] is True
+
     recording, segments, gaps = asyncio.run(_audio_rows(migrated_database_url, session_id))
     assert recording.last_received_sequence == 0
     assert recording.last_processed_sequence == 0
