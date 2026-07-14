@@ -7,10 +7,14 @@ import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
+import { createVoiceAnswer, type AnswerTarget } from '../answers/api'
+import { answerKeys } from '../answers/queries'
+import { AnswerPanel } from '../answers/AnswerPanel'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { sessionMaterialsQueryOptions } from '../materials/queries'
 import { QuestionPanel } from '../questions/QuestionPanel'
 import { QuestionMindmap } from '../questions/QuestionMindmap'
+import { questionKeys } from '../questions/queries'
 import {
   deleteSession,
   endSession,
@@ -119,6 +123,22 @@ export function SessionDetailPage() {
         })
       }
       navigate(`/courses/${session.data?.course_id ?? ''}`, { replace: true })
+    },
+  })
+  const startAnswer = useMutation({
+    mutationFn: (target: AnswerTarget) =>
+      createVoiceAnswer(sessionId, target, crypto.randomUUID()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: answerKeys.session(sessionId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: questionKeys.session(sessionId),
+      })
+      showToast({
+        tone: 'success',
+        message: '음성 Answer 캡처를 시작했습니다.',
+      })
     },
   })
 
@@ -268,9 +288,41 @@ export function SessionDetailPage() {
       />
       {data.status === 'LIVE' && (
         <>
-          <QuestionPanel sessionId={data.id} student={!professor} />
-          <QuestionMindmap sessionId={data.id} />
+          <QuestionPanel
+            sessionId={data.id}
+            student={!professor}
+            onStartVoiceAnswer={
+              professor ? (target) => startAnswer.mutate(target) : undefined
+            }
+            answerCapturePending={startAnswer.isPending}
+          />
+          <QuestionMindmap
+            sessionId={data.id}
+            onStartVoiceAnswer={
+              professor ? (target) => startAnswer.mutate(target) : undefined
+            }
+            answerCapturePending={startAnswer.isPending}
+          />
+          <AnswerPanel
+            sessionId={data.id}
+            professor={professor}
+            sessionStatus={data.status}
+          />
         </>
+      )}
+      {data.status === 'COMPLETED' && (
+        <AnswerPanel
+          sessionId={data.id}
+          professor={professor}
+          sessionStatus={data.status}
+        />
+      )}
+      {startAnswer.isError && (
+        <p className="form-error" role="alert">
+          {startAnswer.error instanceof ApiError
+            ? startAnswer.error.message
+            : '음성 Answer 캡처를 시작하지 못했습니다.'}
+        </p>
       )}
       {professor && (
         <Dialog

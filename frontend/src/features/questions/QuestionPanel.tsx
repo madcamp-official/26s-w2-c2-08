@@ -18,6 +18,7 @@ import {
   type Question,
 } from './api'
 import { questionKeys } from './queries'
+import type { AnswerTarget } from '../answers/api'
 
 const MAX_QUESTION_LENGTH = 300
 const MAX_QUESTION_DRAFT_LENGTH = 500
@@ -25,6 +26,8 @@ const MAX_QUESTION_DRAFT_LENGTH = 500
 interface QuestionPanelProps {
   sessionId: string
   student: boolean
+  onStartVoiceAnswer?: (target: AnswerTarget) => void
+  answerCapturePending?: boolean
 }
 
 function normalizedLength(value: string) {
@@ -47,7 +50,12 @@ function questionErrorMessage(error: unknown) {
   return '요청을 처리하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.'
 }
 
-export function QuestionPanel({ sessionId, student }: QuestionPanelProps) {
+export function QuestionPanel({
+  sessionId,
+  student,
+  onStartVoiceAnswer,
+  answerCapturePending = false,
+}: QuestionPanelProps) {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const [content, setContent] = useState('')
@@ -287,6 +295,20 @@ export function QuestionPanel({ sessionId, student }: QuestionPanelProps) {
                       }
                     >
                       {question.reacted_by_me ? '공감 취소' : '나도 궁금해요'}
+                    </Button>
+                  )}
+                  {!student && onStartVoiceAnswer && (
+                    <Button
+                      variant="secondary"
+                      disabled={answerCapturePending}
+                      onClick={() =>
+                        onStartVoiceAnswer({
+                          type: 'STUDENT_QUESTION',
+                          question_id: question.id,
+                        })
+                      }
+                    >
+                      음성 답변 시작
                     </Button>
                   )}
                 </div>

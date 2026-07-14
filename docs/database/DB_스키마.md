@@ -985,7 +985,7 @@ API child `ordinal`은 DB `position`을 그대로 projection한다.
 - `(end_segment_id, source_transcript_version_id, session_id) FK → transcript_segments(id, transcript_version_id, session_id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED`
 - `CHECK (status IN ('CAPTURING', 'COMPLETED'))`
 - `CHECK (char_length(btrim(target_text_snapshot)) BETWEEN 1 AND 300)`
-- `CHECK (text_content IS NULL OR char_length(btrim(text_content)) > 0)`; 정확한 최대 길이는 미정이다.
+- `CHECK (text_content IS NULL OR (text_content = btrim(text_content) AND text_content IS NFC NORMALIZED AND char_length(text_content) BETWEEN 1 AND 2000))`
 - `CHECK ((start_segment_id IS NULL) = (end_segment_id IS NULL))`
 - `CHECK ((source_transcript_version_id IS NULL) = (capture_started_after_sequence IS NULL))`
 - `CHECK ((status = 'CAPTURING' AND source_transcript_version_id IS NOT NULL AND capture_started_after_sequence IS NOT NULL AND start_segment_id IS NULL AND text_content IS NULL AND completed_at IS NULL) OR (status = 'COMPLETED' AND completed_at IS NOT NULL AND ((source_transcript_version_id IS NOT NULL AND capture_started_after_sequence IS NOT NULL AND start_segment_id IS NOT NULL) OR (source_transcript_version_id IS NULL AND capture_started_after_sequence IS NULL AND start_segment_id IS NULL AND text_content IS NOT NULL))))`
@@ -1000,7 +1000,7 @@ LIVE 음성 Answer의 `source_transcript_version_id`, `capture_started_after_seq
 
 별도 `answer_type` 컬럼은 두지 않는다. CHECK가 `source_transcript_version_id IS NOT NULL`인 Answer를 voice-backed로, source가 `NULL`이고 `text_content`가 필수인 완료 Answer를 text-only로 상호 배타적으로 만들므로 API는 각각 `VOICE`, `TEXT`로 안전하게 계산한다.
 
-`CAPTURING` 취소는 Answer 행을 hard delete하고 target `status`를 `OPEN`으로 되돌린다. target 대표 질문의 `lifecycle_status`가 이미 `PRESERVED`라면 membership을 제거한 뒤 관련 Evidence가 없을 때만 대표 질문을 hard delete하고, Evidence가 있으면 `DISCARDED` tombstone으로 전이한다. 아직 중앙 `lifecycle_status=ACTIVE` 대표 질문이면 유지하되 다음 교체 때 같은 Evidence-aware 폐기 분기를 적용한다. `CANCELLED`, `cancelled_at`, `released_at`과 별도 취소 감사 행은 만들지 않는다. `COMPLETED` Answer의 삭제·text 최대 길이·검색 Chunk 재생성 세부 정책은 미정이다.
+`CAPTURING` 취소는 Answer 행을 hard delete하고 target `status`를 `OPEN`으로 되돌린다. target 대표 질문의 `lifecycle_status`가 이미 `PRESERVED`라면 membership을 제거한 뒤 관련 Evidence가 없을 때만 대표 질문을 hard delete하고, Evidence가 있으면 `DISCARDED` tombstone으로 전이한다. 아직 중앙 `lifecycle_status=ACTIVE` 대표 질문이면 유지하되 다음 교체 때 같은 Evidence-aware 폐기 분기를 적용한다. `CANCELLED`, `cancelled_at`, `released_at`과 별도 취소 감사 행은 만들지 않는다. `COMPLETED` text-only Answer 철회는 Answer 행을 hard delete하고 학생 질문 target을 `OPEN`으로 되돌린다. voice-backed Answer의 text 철회는 행·target·음성 범위는 유지하고 `text_content`만 `NULL`로 만든다. Answer 수동 text의 KnowledgeChunk 재생성은 아직 미구현이다.
 
 ### 8.8 `answer_transcript_mappings`
 

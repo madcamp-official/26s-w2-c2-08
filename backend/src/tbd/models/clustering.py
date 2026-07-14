@@ -168,7 +168,9 @@ class Answer(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             name="answers_target_snapshot_ck",
         ),
         CheckConstraint(
-            "text_content IS NULL OR char_length(btrim(text_content)) > 0",
+            "text_content IS NULL OR (text_content = btrim(text_content) "
+            "AND text_content IS NFC NORMALIZED "
+            "AND char_length(text_content) BETWEEN 1 AND 2000)",
             name="answers_text_content_ck",
         ),
         CheckConstraint("version > 0", name="answers_version_ck"),
