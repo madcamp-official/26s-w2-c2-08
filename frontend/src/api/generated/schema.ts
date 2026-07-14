@@ -350,6 +350,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/courses/{course_id}/materials": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Course 전체 강의자료 archive 조회
+         * @description Course 멤버만 조회할 수 있다. 현재 active Session을 먼저 두고 완료 class는
+         *     started_at DESC, id DESC, 같은 Session의 현재 연결된 Material은 created_at ASC,
+         *     id ASC로 정렬한다. detached Material, 내부 storage key·path와 물리 object URL은
+         *     반환하지 않는다. UPLOADED·PROCESSING·READY 자료는 inline·attachment URL을 제공하고
+         *     FAILED 자료는 상태만 제공한다. cursor는 Course와 material archive 정렬에 묶인다.
+         */
+        get: operations["listCourseMaterialArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/transcripts": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Course 전체 Transcript archive 조회
+         * @description Course 멤버만 조회할 수 있다. LIVE·PROCESSING·COMPLETED class의 공개 Transcript
+         *     index만 반환하고 Segment·Gap 본문은 embed하지 않는다. active Session을 먼저 두고
+         *     완료 class는 started_at DESC, id DESC로 정렬한다. 사용자가 class를 펼칠 때
+         *     transcript.timeline_url로 기존 timeline cursor API를 지연 조회한다. HQ 실패 뒤
+         *     보존된 LIVE canonical을 HQ 성공으로 표시하지 않으며 파일 다운로드 URL은 제공하지 않는다.
+         *     cursor는 Course와 transcript archive 정렬에 묶인다.
+         */
+        get: operations["listCourseTranscriptArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/summaries": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Course 전체 공용 FINAL Summary archive 조회
+         * @description Course 멤버만 조회할 수 있다. PROCESSING·COMPLETED class의 FINAL,
+         *     COURSE_MEMBERS, requester_user_id=null인 공용 Summary 상태와 성공한 최종 결과만
+         *     반환한다. REQUESTER_ONLY LIVE Summary·Chat·Message·Evidence·개인 AIJob은 SQL 조회와
+         *     public schema 모두에서 제외한다. active PROCESSING Session을 먼저 두고 완료 class는
+         *     started_at DESC, id DESC로 정렬한다. cursor는 Course와 summary archive 정렬에 묶인다.
+         */
+        get: operations["listCourseSummaryArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courses/{course_id}/qna": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Course 전체 읽기 전용 Q&A archive 조회
+         * @description Course 멤버만 조회할 수 있다. 작성자 식별정보 없이 미답변·답변된 학생 질문과
+         *     완료 Answer가 있는 AI 대표질문의 immutable target snapshot을 반환한다.
+         *     CAPTURING·취소 Answer, 폐기된 미답변 대표질문과 내부 clustering·provider Job ID는
+         *     제외한다. active Session을 먼저 두고 완료 class는 started_at DESC, id DESC,
+         *     같은 class의 target은 occurred_at DESC, target ID DESC로 정렬한다. cursor는
+         *     Course와 Q&A archive 정렬에 묶이며 Answer 관리·retry mutation은 제공하지 않는다.
+         */
+        get: operations["listCourseQnaArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/courses/{course_id}/sessions": {
         parameters: {
             query?: never;
@@ -365,9 +487,9 @@ export interface paths {
         };
         /**
          * Course의 class 목록 조회
-         * @description Course 멤버만 조회할 수 있다. 기본 및 완료 목록 정렬은
-         *     `lecture_date DESC, started_at DESC NULLS FIRST, id DESC`이다. 같은 날짜의 완료
-         *     class는 실제 시작 시각으로 구분하며 페이지 cursor는 이 정렬 tuple 전체를 보존한다.
+         * @description Course 멤버만 조회할 수 있다. 목록은 `started_at DESC NULLS LAST, id DESC`로
+         *     정렬하고 status=COMPLETED 목록의 active Session은 Course current_session으로 별도
+         *     조회한다. 페이지 cursor는 Course·status와 마지막 started_at·Session ID에 묶인다.
          */
         get: operations["listCourseSessions"];
         put?: never;
@@ -617,7 +739,8 @@ export interface paths {
          *     UPLOADED, PROCESSING, READY인 자료의 PDF 본문을 반환한다. FAILED는 사용할 수
          *     없는 자료이므로 원본을 반환하지 않는다. 인증 없음은 401이다. 비멤버·권한 밖
          *     요청, FAILED, 분리되거나 존재하지 않는 자료는 모두 404 MATERIAL_NOT_FOUND로
-         *     응답해 존재를 공개하지 않는다.
+         *     응답해 존재를 공개하지 않는다. disposition 기본값은 inline이며 attachment를
+         *     지정하면 저장된 display_name을 안전하게 인코딩한 개별 다운로드 응답을 반환한다.
          */
         get: operations["downloadMaterialContent"];
         put?: never;
@@ -2072,6 +2195,147 @@ export interface components {
         };
         LectureSessionListResponse: {
             items: components["schemas"]["LectureSession"][];
+            next_cursor: string | null;
+        };
+        /**
+         * @description Course class와 현재 연결된 Material의 공개 projection. FAILED는 원본 동작을
+         *     제공하지 않고 나머지 공개 처리 상태는 권한을 다시 검사하는 API URL만 제공한다.
+         */
+        CourseMaterialArchiveItem: {
+            session: components["schemas"]["LectureSessionSummary"];
+            material: components["schemas"]["LectureMaterial"];
+            /** @description 기본 disposition=inline인 권한 재검사 PDF 본문 경로. FAILED는 null */
+            content_url: string | null;
+            /** @description disposition=attachment인 개별 다운로드 경로. FAILED는 null */
+            download_url: string | null;
+        } & ({
+            material?: components["schemas"]["LectureMaterial"] & {
+                /** @enum {unknown} */
+                processing_status?: "UPLOADED" | "PROCESSING" | "READY";
+            };
+            /** Format: uri-reference */
+            content_url?: string;
+            /** Format: uri-reference */
+            download_url?: string;
+        } | {
+            material?: components["schemas"]["LectureMaterial"] & {
+                /** @constant */
+                processing_status?: "FAILED";
+            };
+            content_url?: null;
+            download_url?: null;
+        });
+        CourseMaterialArchiveResponse: {
+            items: components["schemas"]["CourseMaterialArchiveItem"][];
+            /** @description Course ID, material archive와 마지막 Session·Material 정렬 위치에 묶인 cursor */
+            next_cursor: string | null;
+        };
+        CourseTranscriptArchiveItem: {
+            session: components["schemas"]["LectureSessionSummary"] & {
+                /** @enum {unknown} */
+                status?: "LIVE" | "PROCESSING" | "COMPLETED";
+            };
+            /**
+             * @description Segment·Gap을 embed하지 않는 공개 index. timeline_url은 사용자가 class를
+             *     선택하거나 펼칠 때 기존 Session timeline cursor API로 지연 조회한다.
+             */
+            transcript: components["schemas"]["RecordTranscriptIndex"];
+        };
+        CourseTranscriptArchiveResponse: {
+            items: components["schemas"]["CourseTranscriptArchiveItem"][];
+            /** @description Course ID, transcript archive와 마지막 Session 정렬 위치에 묶인 cursor */
+            next_cursor: string | null;
+        };
+        /** @description 요청자 정보가 없는 Course 구성원 공용 FINAL Summary */
+        CourseFinalSummary: components["schemas"]["LectureSummary"] & {
+            /** @constant */
+            summary_type?: "FINAL";
+            /** @constant */
+            visibility?: "COURSE_MEMBERS";
+        };
+        CourseSummaryArchiveItem: {
+            session: components["schemas"]["LectureSessionSummary"] & {
+                /** @enum {unknown} */
+                status?: "PROCESSING" | "COMPLETED";
+            };
+            state: components["schemas"]["FinalSummaryState"];
+            /** @description state.status=AVAILABLE일 때만 성공한 공용 FINAL Summary */
+            summary: components["schemas"]["CourseFinalSummary"] | null;
+            /** @description state.status=AVAILABLE일 때만 Summary 단건 경로 */
+            summary_url: string | null;
+        } & ({
+            state?: components["schemas"]["FinalSummaryAvailableState"];
+            summary?: components["schemas"]["CourseFinalSummary"];
+            /** Format: uri-reference */
+            summary_url?: string;
+        } | {
+            state?: components["schemas"]["FinalSummaryPendingState"] | components["schemas"]["FinalSummaryNotApplicableState"] | components["schemas"]["FinalSummaryFailedState"] | components["schemas"]["FinalSummaryDataIntegrityErrorState"];
+            summary?: null;
+            summary_url?: null;
+        });
+        CourseSummaryArchiveResponse: {
+            items: components["schemas"]["CourseSummaryArchiveItem"][];
+            /** @description Course ID, summary archive와 마지막 Session 정렬 위치에 묶인 cursor */
+            next_cursor: string | null;
+        };
+        /** @description Q&A archive에 공개하는 terminal Answer. 취소는 hard delete되며 CAPTURING은 제외 */
+        CourseArchiveCompletedAnswer: components["schemas"]["Answer"] & {
+            /** @constant */
+            status?: "COMPLETED";
+            /** Format: date-time */
+            completed_at?: string;
+        };
+        CourseStudentQuestionArchiveItem: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            target_type: "STUDENT_QUESTION";
+            session: components["schemas"]["LectureSessionSummary"];
+            /** @description 작성자 계정 ID·이름·이메일이 없는 공개 익명 질문 */
+            question: components["schemas"]["Question"];
+            /** @description 질문 문구. Answer가 있으면 Answer 생성 시점 immutable snapshot과 같다 */
+            target_text_snapshot: string;
+            /** @description 미답변 질문은 null */
+            answer: components["schemas"]["CourseArchiveCompletedAnswer"] | null;
+            /**
+             * Format: uri-reference
+             * @description 관리 mutation이 아니라 해당 class 기록으로 이동하는 Frontend 상대 경로
+             */
+            record_url: string;
+            /**
+             * Format: date-time
+             * @description 안정적인 archive 정렬에 사용하는 Question created_at
+             */
+            occurred_at: string;
+        };
+        CourseRepresentativeQuestionArchiveItem: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            target_type: "AI_REPRESENTATIVE_QUESTION";
+            session: components["schemas"]["LectureSessionSummary"];
+            /** @description 공개 대표질문 ID. clustering·provider Job ID는 반환하지 않는다 */
+            representative_question_id: components["schemas"]["ResourceId"];
+            /** @description 완료 Answer가 선택될 때 고정한 immutable 대표질문 문구 */
+            target_text_snapshot: string;
+            answer: components["schemas"]["CourseArchiveCompletedAnswer"];
+            /**
+             * Format: uri-reference
+             * @description 관리 mutation이 아니라 해당 class 기록으로 이동하는 Frontend 상대 경로
+             */
+            record_url: string;
+            /**
+             * Format: date-time
+             * @description 안정적인 archive 정렬에 사용하는 Answer completed_at
+             */
+            occurred_at: string;
+        };
+        CourseQnaArchiveItem: components["schemas"]["CourseStudentQuestionArchiveItem"] | components["schemas"]["CourseRepresentativeQuestionArchiveItem"];
+        CourseQnaArchiveResponse: {
+            items: components["schemas"]["CourseQnaArchiveItem"][];
+            /** @description Course ID, Q&A archive와 마지막 Session·target 정렬 위치에 묶인 cursor */
             next_cursor: string | null;
         };
         SessionEndAcceptedResponse: {
@@ -4264,9 +4528,9 @@ export interface components {
         /** @description 불투명 AIJob ID */
         JobId: components["schemas"]["ResourceId"];
         /**
-         * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-         *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-         *     400 INVALID_CURSOR를 반환한다.
+         * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+         *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+         *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
          */
         Cursor: string;
         /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -4637,9 +4901,9 @@ export interface operations {
                 /** @description 현재 사용자의 Course별 역할 필터 */
                 role?: components["schemas"]["CourseRoleFilter"];
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -4924,15 +5188,179 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listCourseMaterialArchive: {
+        parameters: {
+            query?: {
+                /**
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Course 전체에 현재 연결된 강의자료 페이지 */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseMaterialArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listCourseTranscriptArchive: {
+        parameters: {
+            query?: {
+                /**
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Course class별 Transcript index 페이지 */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseTranscriptArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listCourseSummaryArchive: {
+        parameters: {
+            query?: {
+                /**
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Course class별 공용 FINAL Summary 페이지 */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseSummaryArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listCourseQnaArchive: {
+        parameters: {
+            query?: {
+                /**
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Course ID */
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Course class별 Q&A target 페이지 */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseQnaArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
     listCourseSessions: {
         parameters: {
             query?: {
                 /** @description Session 상태 필터 */
                 status?: components["schemas"]["LectureSessionStatus"];
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -5229,9 +5657,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -5409,7 +5837,10 @@ export interface operations {
     };
     downloadMaterialContent: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description PDF Content-Disposition 방식. 기본 inline은 열람, attachment는 개별 다운로드 */
+                disposition?: "inline" | "attachment";
+            };
             header?: {
                 /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
                 "X-Request-ID"?: components["parameters"]["RequestId"];
@@ -5527,9 +5958,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -5572,9 +6003,9 @@ export interface operations {
                 /** @description 현재 특정 Cluster의 학생 질문만 조회 */
                 cluster_id?: components["schemas"]["ResourceId"];
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -5840,9 +6271,9 @@ export interface operations {
             query?: {
                 scope?: components["schemas"]["QuestionClusterScope"];
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -5881,9 +6312,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -5924,9 +6355,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -6243,9 +6674,9 @@ export interface operations {
                 /** @description 상태를 모호하지 않게 하는 필수 Summary 유형 필터 */
                 summary_type: components["schemas"]["SummaryType"];
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -6377,9 +6808,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
@@ -6507,9 +6938,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: number;
@@ -6718,9 +7149,9 @@ export interface operations {
                 job_type?: components["schemas"]["SharedAIJobType"];
                 status?: components["schemas"]["AIJobStatus"];
                 /**
-                 * @description 직전 응답에서 받은 불투명 keyset cursor. Session·필터·정렬과
-                 *     마지막 항목의 정렬 키·id를 고정하며 다른 조건에 재사용하면
-                 *     400 INVALID_CURSOR를 반환한다.
+                 * @description 직전 응답에서 받은 불투명 keyset cursor. resource 종류, Course 또는 Session,
+                 *     필터·정렬과 마지막 항목의 정렬 키·id를 고정한다. 다른 Course·resource·필터에
+                 *     재사용하거나 변조하면 400 INVALID_CURSOR를 반환한다.
                  */
                 cursor?: components["parameters"]["Cursor"];
                 /** @description 반환할 최대 항목 수. 공통 기본 20, 최대 100 */
