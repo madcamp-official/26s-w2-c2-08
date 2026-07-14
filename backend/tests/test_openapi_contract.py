@@ -189,6 +189,54 @@ def test_course_material_archive_and_download_disposition_match_contract(
         assert "Content-Disposition" in success["headers"]
 
 
+def test_course_transcript_archive_matches_compact_index_contract(
+    app: FastAPI,
+    canonical_openapi: dict[str, Any],
+) -> None:
+    """Runtime exposes the bounded archive without embedding timeline arrays."""
+
+    path = "/api/v1/courses/{course_id}/transcripts"
+    canonical_operation = canonical_openapi["paths"][path]["get"]
+    runtime_document = app.openapi()
+    runtime_operation = runtime_document["paths"][path]["get"]
+    for operation in (canonical_operation, runtime_operation):
+        assert operation["operationId"] == "listCourseTranscriptArchive"
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in _resolve_local_refs(operation["parameters"], canonical_openapi)
+        }
+        assert {"cursor", "limit"} <= parameters.keys()
+        assert parameters["limit"]["schema"]["minimum"] == 1
+        assert parameters["limit"]["schema"]["maximum"] == 100
+        assert parameters["limit"]["schema"]["default"] == 20
+        assert {"400", "401", "403", "404", "422"} <= operation["responses"].keys()
+
+    archive_schema = _resolve_local_refs(
+        canonical_operation["responses"]["200"], canonical_openapi
+    )["content"]["application/json"]["schema"]
+    item_schema = archive_schema["properties"]["items"]["items"]
+    assert set(item_schema["required"]) == {"session", "transcript"}
+    transcript_schema = item_schema["properties"]["transcript"]
+    assert {"state", "selected_version_id", "segment_count", "gap_count"} <= set(
+        transcript_schema["required"]
+    )
+    assert "segments" not in transcript_schema["properties"]
+    assert "gaps" not in transcript_schema["properties"]
+
+    runtime_archive_schema = _resolve_local_refs(
+        runtime_operation["responses"]["200"], runtime_document
+    )["content"]["application/json"]["schema"]
+    runtime_item_schema = runtime_archive_schema["properties"]["items"]["items"]
+    runtime_session_schema = _resolve_local_refs(
+        runtime_item_schema["properties"]["session"], runtime_document
+    )
+    assert set(runtime_session_schema["properties"]["status"]["enum"]) == {
+        "LIVE",
+        "PROCESSING",
+        "COMPLETED",
+    }
+
+
 @pytest.mark.parametrize("path", ["/api/health", "/api/health/db"])
 def test_health_success_payloads_match_canonical_openapi(
     app: FastAPI,
