@@ -6,6 +6,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,6 +43,7 @@ class Settings(BaseSettings):
     app_env: AppEnvironment = AppEnvironment.DEVELOPMENT
     app_host: str = "127.0.0.1"
     app_port: int = 8000
+    app_timezone: str = "Asia/Seoul"
     postgres_host: str = DEFAULT_POSTGRES_HOST
     postgres_host_port: int = 5432
     postgres_db: str = DEFAULT_POSTGRES_DB
@@ -203,6 +205,11 @@ class Settings(BaseSettings):
         ):
             if getattr(self, field_name) <= 0:
                 raise ValueError(f"{field_name.upper()} must be positive")
+
+        try:
+            ZoneInfo(self.app_timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("APP_TIMEZONE must be a valid IANA timezone") from exc
 
     @field_validator("idempotency_response_encryption_key")
     @classmethod
