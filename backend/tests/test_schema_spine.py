@@ -39,6 +39,7 @@ EXPECTED_TABLES = {
     "realtime_tickets",
     "recording_uploads",
     "session_recordings",
+    "storage_deletion_ledgers",
     "transcript_gaps",
     "transcript_segments",
     "transcript_versions",

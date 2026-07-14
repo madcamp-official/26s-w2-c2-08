@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -157,6 +158,14 @@ class SessionRecording(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             name="session_recordings_uploaded_time_ck",
         ),
         CheckConstraint("version > 0", name="session_recordings_version_ck"),
+        Index(
+            "session_recordings_retention_due_idx",
+            "retention_expires_at",
+            "id",
+            postgresql_where=sql_text(
+                "deleted_at IS NULL AND retention_expires_at IS NOT NULL AND storage_key IS NOT NULL"
+            ),
+        ),
     )
 
     session_id: Mapped[UUID] = mapped_column(
@@ -191,6 +200,8 @@ class SessionRecording(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     capture_ended_at: Mapped[datetime | None] = mapped_column(nullable=True)
     uploaded_at: Mapped[datetime | None] = mapped_column(nullable=True)
     failed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    retention_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 class RecordingUpload(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
