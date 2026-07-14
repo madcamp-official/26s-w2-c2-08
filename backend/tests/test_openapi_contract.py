@@ -209,9 +209,7 @@ def test_course_summary_archive_matches_public_final_contract(
         assert parameters["limit"]["schema"]["default"] == 20
         assert parameters["limit"]["schema"]["minimum"] == 1
         assert parameters["limit"]["schema"]["maximum"] == 100
-        assert {"400", "401", "403", "404", "422"} <= operation[
-            "responses"
-        ].keys()
+        assert {"400", "401", "403", "404", "422"} <= operation["responses"].keys()
 
     archive_schema = _resolve_local_refs(
         canonical_operation["responses"]["200"], canonical_openapi
