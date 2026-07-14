@@ -441,7 +441,11 @@ async def end_session(
             result = SessionEndAcceptedResponse(
                 session=_project(ended.lecture_session),
                 recording=None,
-                jobs=[project_ai_job(ended.coordinator)],
+                jobs=[
+                    project_ai_job(job)
+                    for job in (ended.coordinator, ended.final_clustering)
+                    if job is not None
+                ],
             )
             assert isinstance(acquired, AcquiredIdempotencyRecord)
             await idempotency.complete(

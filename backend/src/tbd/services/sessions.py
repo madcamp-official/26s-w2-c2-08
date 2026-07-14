@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.jobs.kernel import JobKernel
+from tbd.models.clustering import Answer
 from tbd.models.enums import (
     AIJobStatus,
     AIJobType,
@@ -17,7 +18,7 @@ from tbd.models.enums import (
     TranscriptStatus,
 )
 from tbd.models.materials import SessionRecording, TranscriptVersion
-from tbd.models.questions import AIJob, QuestionClusteringState
+from tbd.models.questions import AIJob, Question, QuestionClusteringState
 from tbd.models.sessions import LectureSession
 from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.repositories.outbox import OutboxRepository
@@ -29,6 +30,7 @@ from tbd.services.courses import (
     CourseRoleRequiredError,
 )
 from tbd.services.personal_ai import PersonalAIService
+from tbd.services.questions import QuestionService
 
 
 class ActiveSessionExistsError(Exception):
@@ -53,6 +55,7 @@ class SessionEndResult:
 
     lecture_session: LectureSession
     coordinator: AIJob
+    final_clustering: AIJob | None = None
 
 
 class SessionService:
@@ -259,9 +262,108 @@ class SessionService:
             blocks_session_completion=True,
             retryable=True,
         )
-        await JobKernel(outbox=self.outbox).enqueue(session, coordinator)
+        kernel = JobKernel(outbox=self.outbox)
+        await kernel.enqueue(session, coordinator)
+        final_clustering = await self._schedule_final_clustering(
+            session,
+            lecture_session=lecture_session,
+            ended_at=timestamp,
+            kernel=kernel,
+        )
         await self._emit_session_updated(session, lecture_session)
-        return SessionEndResult(lecture_session=lecture_session, coordinator=coordinator)
+        return SessionEndResult(
+            lecture_session=lecture_session,
+            coordinator=coordinator,
+            final_clustering=final_clustering,
+        )
+
+    async def _schedule_final_clustering(
+        self,
+        session: AsyncSession,
+        *,
+        lecture_session: LectureSession,
+        ended_at: datetime,
+        kernel: JobKernel,
+    ) -> AIJob | None:
+        """Freeze eligible Question inputs as a blocking FINAL clustering Job.
+
+        A final run is deliberately created while ending the class, rather than
+        by the later coordinator.  It therefore cannot accidentally absorb
+        Question or Answer writes that race the ``LIVE → PROCESSING`` fence.
+        """
+
+        state = await session.scalar(
+            select(QuestionClusteringState)
+            .where(QuestionClusteringState.session_id == lecture_session.id)
+            .with_for_update()
+        )
+        if state is None:
+            return None
+
+        live_jobs = list(
+            await session.scalars(
+                select(AIJob)
+                .where(
+                    AIJob.session_id == lecture_session.id,
+                    AIJob.job_type == AIJobType.QUESTION_CLUSTERING,
+                    AIJob.clustering_mode == "LIVE_INCREMENTAL",
+                    AIJob.status.in_((AIJobStatus.PENDING, AIJobStatus.RUNNING)),
+                )
+                .with_for_update()
+            )
+        )
+        for job in live_jobs:
+            await kernel.supersede(session, job.id, now=ended_at)
+        if state.retry_job_id is not None:
+            await kernel.supersede(session, state.retry_job_id, now=ended_at)
+            state.retry_job_id = None
+
+        question_count = await session.scalar(
+            select(func.count(Question.id)).where(
+                Question.session_id == lecture_session.id,
+                Question.clustering_sequence <= state.requested_sequence,
+            )
+        )
+        representative_answer_count = await session.scalar(
+            select(func.count(Answer.id)).where(
+                Answer.session_id == lecture_session.id,
+                Answer.status == "COMPLETED",
+                Answer.target_representative_question_id.is_not(None),
+                Answer.completed_at <= ended_at,
+            )
+        )
+        if int(question_count or 0) + int(representative_answer_count or 0) == 0:
+            return None
+
+        final_job = AIJob(
+            session_id=lecture_session.id,
+            job_type=AIJobType.QUESTION_CLUSTERING,
+            visibility=AIJobVisibility.SHARED,
+            status=AIJobStatus.PENDING,
+            attempt=1,
+            version=1,
+            clustering_mode="FINAL",
+            input_through_sequence=state.requested_sequence,
+            base_revision=state.current_revision,
+            final_answered_through_at=ended_at,
+            blocks_session_completion=True,
+            retryable=True,
+        )
+        await kernel.enqueue(session, final_job)
+        state.last_job_id = final_job.id
+        state.last_job_attempt = final_job.attempt
+        state.last_job_status = str(AIJobStatus.PENDING)
+        await self.outbox.enqueue(
+            session,
+            session_id=lecture_session.id,
+            partition_key=f"session:{lecture_session.id}",
+            event_type="clustering.updated",
+            resource_version=max(1, state.requested_sequence),
+            payload=QuestionService.project_clustering_state(state, active=final_job).model_dump(
+                mode="json"
+            ),
+        )
+        return final_job
 
     async def mark_completed(
         self,
