@@ -219,3 +219,82 @@ def test_start_rejects_open_redirect(migrated_database_url: str) -> None:
         assert response.status_code == 400
         assert response.json()["error"]["code"] == "INVALID_RETURN_TO"
         assert provider.authorization_requests == []
+
+
+def test_me_restores_current_user_and_distinguishes_missing_session(
+    migrated_database_url: str,
+) -> None:
+    """The shared dependency returns a profile and stable missing-auth error."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        missing = client.get("/api/v1/me")
+        state = _start(client, provider)
+        assert _complete(client, state).status_code == 302
+        authenticated = client.get("/api/v1/me")
+
+        assert missing.status_code == 401
+        assert missing.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+        assert authenticated.status_code == 200
+        assert authenticated.json() == {
+            "id": authenticated.json()["id"],
+            "display_name": "테스트 사용자",
+            "email": "student@example.test",
+            "avatar_url": "https://example.test/avatar.png",
+        }
+
+
+def test_rotated_session_cannot_authenticate(migrated_database_url: str) -> None:
+    """The previous browser token becomes invalid immediately after callback rotation."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        first_state = _start(client, provider)
+        assert _complete(client, first_state).status_code == 302
+        old_token = client.cookies.get("goal_session")
+        second_state = _start(client, provider)
+        assert _complete(client, second_state).status_code == 302
+
+        assert old_token is not None
+        client.cookies.set("goal_session", old_token, domain="testserver.local", path="/")
+        response = client.get("/api/v1/me")
+
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "INVALID_SESSION"
+
+
+def test_me_updates_last_seen_without_extending_expiry(migrated_database_url: str) -> None:
+    """Activity tracking is throttled and cannot create a sliding session lifetime."""
+
+    client, provider, settings = _client(migrated_database_url)
+    crypto = AuthCrypto(settings.auth_secret_key.get_secret_value())
+    with client:
+        state = _start(client, provider)
+        assert _complete(client, state).status_code == 302
+        token = client.cookies.get("goal_session")
+        assert token is not None
+        token_hash = crypto.hash_token("session", token)
+
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            before = connection.execute(
+                "SELECT expires_at, last_seen_at FROM auth_sessions WHERE token_hash = %s",
+                (token_hash,),
+            ).fetchone()
+            connection.execute(
+                "UPDATE auth_sessions SET last_seen_at = now() - interval '10 minutes' "
+                "WHERE token_hash = %s",
+                (token_hash,),
+            )
+            connection.commit()
+
+        assert client.get("/api/v1/me").status_code == 200
+
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            after = connection.execute(
+                "SELECT expires_at, last_seen_at FROM auth_sessions WHERE token_hash = %s",
+                (token_hash,),
+            ).fetchone()
+
+        assert before is not None and after is not None
+        assert after[0] == before[0]
+        assert after[1] > before[1]

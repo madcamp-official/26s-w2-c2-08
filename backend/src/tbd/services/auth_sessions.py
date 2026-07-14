@@ -21,6 +21,10 @@ class EstablishedSession:
     user: User
 
 
+class InvalidSessionError(Exception):
+    """Raised when an opaque token does not resolve to an active user session."""
+
+
 class AuthSessionService:
     """Issue, rotate, and revoke hashed server-side sessions."""
 
@@ -106,3 +110,29 @@ class AuthSessionService:
                 )
                 .values(revoked_at=datetime.now(UTC))
             )
+
+    async def authenticate(self, session: AsyncSession, token: str) -> User:
+        """Resolve an active session and throttle last-seen writes without extending expiry."""
+
+        now = datetime.now(UTC)
+        async with session.begin():
+            auth_session = await session.scalar(
+                select(AuthSession).where(
+                    AuthSession.token_hash == self._crypto.hash_token("session", token),
+                    AuthSession.revoked_at.is_(None),
+                    AuthSession.expires_at > now,
+                )
+            )
+            if auth_session is None:
+                raise InvalidSessionError
+            user = await session.get(User, auth_session.user_id)
+            if user is None or user.deleted_at is not None:
+                raise InvalidSessionError
+
+            last_seen_before = now - timedelta(
+                seconds=self._settings.auth_last_seen_interval_seconds
+            )
+            if auth_session.last_seen_at is None or auth_session.last_seen_at <= last_seen_before:
+                auth_session.last_seen_at = now
+
+        return user

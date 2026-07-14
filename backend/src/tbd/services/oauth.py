@@ -100,6 +100,7 @@ class OAuthFlowService:
                     encryption_key_version=1,
                     return_to=safe_return_to,
                     expires_at=now + timedelta(seconds=self._settings.auth_oauth_ttl_seconds),
+                    created_at=now,
                 )
             )
 

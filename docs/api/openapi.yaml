@@ -254,6 +254,8 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/realtime-tickets:
     parameters:
