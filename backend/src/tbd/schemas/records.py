@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from tbd.schemas.clustering import QuestionClusteringStateResponse
+from tbd.schemas.courses import LectureSessionSummary
 from tbd.schemas.recordings import SessionRecordingResponse
 from tbd.schemas.sessions import LectureSessionResponse
 from tbd.schemas.transcripts import TranscriptAggregateResponse
@@ -31,6 +32,30 @@ class RecordTranscriptIndex(BaseModel):
     gap_count: int = Field(ge=0)
     timeline_url: str
     versions_url: str
+
+
+class CourseTranscriptSession(LectureSessionSummary):
+    """A class whose durable Transcript can appear in the archive."""
+
+    status: Literal["LIVE", "PROCESSING", "COMPLETED"]
+
+
+class CourseTranscriptArchiveItem(BaseModel):
+    """One class and its compact, canonical-safe Transcript index."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session: CourseTranscriptSession
+    transcript: RecordTranscriptIndex
+
+
+class CourseTranscriptArchiveResponse(BaseModel):
+    """A stable active-first page of Course Transcript indices."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CourseTranscriptArchiveItem]
+    next_cursor: str | None
 
 
 class FinalSummaryReason(BaseModel):

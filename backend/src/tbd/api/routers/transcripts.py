@@ -10,11 +10,17 @@ from tbd.api.dependencies import get_current_user_id, get_db_session, get_settin
 from tbd.core.config import Settings
 from tbd.core.errors import ApiError
 from tbd.schemas.errors import ErrorResponse
+from tbd.schemas.records import CourseTranscriptArchiveResponse
 from tbd.schemas.transcripts import (
     TranscriptSegmentResponse,
     TranscriptTimelinePageResponse,
     TranscriptVersionListResponse,
 )
+from tbd.services.course_transcripts import (
+    CourseTranscriptArchiveService,
+    InvalidCourseTranscriptArchiveCursorError,
+)
+from tbd.services.courses import CourseAccessDeniedError, CourseNotFoundError
 from tbd.services.transcripts import (
     InvalidTranscriptAnchorError,
     InvalidTranscriptCursorError,
@@ -48,6 +54,51 @@ def _raise_timeline_error(error: Exception) -> NoReturn:
     if isinstance(error, (InvalidTranscriptCursorError, InvalidTranscriptAnchorError)):
         raise ApiError(400, "INVALID_CURSOR", "Transcript 조회 기준을 확인해 주세요.") from error
     raise error
+
+
+@router.get(
+    "/courses/{course_id}/transcripts",
+    operation_id="listCourseTranscriptArchive",
+    response_model=CourseTranscriptArchiveResponse,
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+)
+async def list_course_transcript_archive(
+    course_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=2048)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> CourseTranscriptArchiveResponse:
+    """Return compact Transcript indices for visible classes in one Course."""
+
+    try:
+        result = await CourseTranscriptArchiveService(
+            auth_secret=settings.auth_secret_key.get_secret_value()
+        ).list_for_member(
+            session,
+            course_id=course_id,
+            user_id=user_id,
+            cursor=cursor,
+            limit=limit,
+        )
+    except CourseNotFoundError as exc:
+        raise ApiError(404, "RESOURCE_NOT_FOUND", "요청한 Course를 찾을 수 없습니다.") from exc
+    except CourseAccessDeniedError as exc:
+        raise ApiError(
+            403,
+            "COURSE_ACCESS_DENIED",
+            "이 Course에 접근할 권한이 없습니다.",
+        ) from exc
+    except InvalidCourseTranscriptArchiveCursorError as exc:
+        raise ApiError(400, "INVALID_CURSOR", "Transcript archive cursor를 확인해 주세요.") from exc
+    return CourseTranscriptArchiveResponse(items=result.items, next_cursor=result.next_cursor)
 
 
 @router.get(
