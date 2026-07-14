@@ -25,16 +25,15 @@ jobs:
         run: make skills-check
 
       - name: Validate Docker Compose
-        run: docker compose config --quiet
+        run: make compose-check
+
+      - name: Validate documentation links and structure
+        run: make docs-check
 
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: frontend
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -52,22 +51,26 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
+        working-directory: frontend
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: pnpm run lint
+        run: make frontend-lint
 
       - name: Check formatting
-        run: pnpm run format:check
+        run: make frontend-format
 
       - name: Type-check
-        run: pnpm run typecheck
+        run: make frontend-typecheck
+
+      - name: Check generated OpenAPI client types
+        run: make frontend-contract-check
 
       - name: Test
-        run: pnpm run test
+        run: make frontend-test
 
       - name: Build
-        run: pnpm run build
+        run: make frontend-build
 
   backend:
     name: Backend
@@ -79,7 +82,6 @@ jobs:
       POSTGRES_DB: tbd
       POSTGRES_USER: tbd
       POSTGRES_PASSWORD: tbd_dev
-      RUN_DATABASE_TESTS: "1"
     services:
       db:
         image: pgvector/pgvector:0.8.2-pg17-bookworm
@@ -94,10 +96,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    defaults:
-      run:
-        working-directory: backend
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -115,16 +113,23 @@ jobs:
           cache-dependency-glob: backend/uv.lock
 
       - name: Install dependencies
+        working-directory: backend
         run: uv sync --frozen --dev
 
       - name: Lint
-        run: uv run ruff check .
+        run: make backend-lint
 
       - name: Check formatting
-        run: uv run ruff format --check .
+        run: make backend-format
 
-      - name: Apply database migrations
-        run: uv run alembic upgrade head
+      - name: Unit tests
+        run: make backend-unit
 
-      - name: Test
-        run: uv run pytest
+      - name: OpenAPI contract tests
+        run: make backend-contract
+
+      - name: PostgreSQL integration tests
+        run: make backend-integration
+
+      - name: Alembic fresh upgrade and downgrade
+        run: make migration-check

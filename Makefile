@@ -1,6 +1,10 @@
 SHELL := /bin/bash
 
-.PHONY: setup compose-check db-up db-down db-logs migrate dev-api dev-web skills-sync skills-check lint test build check
+.PHONY: setup compose-check db-up db-down db-logs migrate dev-api dev-web \
+	skills-sync skills-check docs-check backend-lint backend-format frontend-lint \
+	frontend-format lint frontend-typecheck typecheck backend-unit backend-contract \
+	backend-integration migration-check frontend-test test frontend-contract-check \
+	frontend-build build check
 
 setup:
 	cd backend && uv sync --dev
@@ -33,17 +37,53 @@ skills-sync:
 skills-check:
 	python3 scripts/sync_skills.py check
 
-lint:
+docs-check:
+	python3 scripts/check_docs.py
+
+backend-lint:
 	cd backend && uv run ruff check .
+	cd backend && uv run ruff check ../scripts/check_docs.py
+
+backend-format:
 	cd backend && uv run ruff format --check .
+	cd backend && uv run ruff format --check ../scripts/check_docs.py
+
+frontend-lint:
 	cd frontend && pnpm lint
+
+frontend-format:
 	cd frontend && pnpm format:check
 
-test:
-	cd backend && uv run pytest
+lint: backend-lint backend-format frontend-lint frontend-format
+
+frontend-typecheck:
+	cd frontend && pnpm typecheck
+
+typecheck: frontend-typecheck
+
+backend-unit:
+	cd backend && uv run pytest -m "unit and not contract"
+
+backend-contract:
+	cd backend && uv run pytest -m contract
+
+backend-integration:
+	cd backend && uv run pytest -m "integration and not migration"
+
+migration-check:
+	cd backend && uv run pytest -m migration
+
+frontend-test:
 	cd frontend && pnpm test
 
-build:
+test: backend-unit backend-contract backend-integration migration-check frontend-test
+
+frontend-contract-check:
+	cd frontend && pnpm api:check
+
+frontend-build:
 	cd frontend && pnpm build
 
-check: skills-check compose-check lint test build
+build: frontend-build
+
+check: skills-check compose-check docs-check lint typecheck frontend-contract-check test build

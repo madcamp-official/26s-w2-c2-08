@@ -1,24 +1,26 @@
-"""Opt-in integration checks for PostgreSQL and pgvector."""
+"""Integration checks for PostgreSQL and pgvector."""
 
 import asyncio
-import os
 
 import pytest
 from sqlalchemy import text
 
-from tbd.core.config import get_settings
+from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_DATABASE_TESTS") != "1",
-    reason="set RUN_DATABASE_TESTS=1 with PostgreSQL running",
-)
+pytestmark = pytest.mark.integration
 
 
-async def read_vector_version() -> str | None:
+async def read_vector_version(database_url: str) -> str | None:
     """Return the installed pgvector extension version."""
 
-    database = create_database(get_settings())
+    database = create_database(
+        Settings(
+            _env_file=None,
+            app_env=AppEnvironment.TEST,
+            database_url=database_url,
+        )
+    )
     try:
         async with database.engine.connect() as connection:
             return await connection.scalar(
@@ -28,9 +30,9 @@ async def read_vector_version() -> str | None:
         await database.dispose()
 
 
-def test_pgvector_migration_is_applied() -> None:
+def test_pgvector_migration_is_applied(migrated_database_url: str) -> None:
     """The migrated database must expose the vector extension."""
 
-    version = asyncio.run(read_vector_version())
+    version = asyncio.run(read_vector_version(migrated_database_url))
 
     assert version is not None

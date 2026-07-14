@@ -17,7 +17,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx2>=2.5,<3.0",
+    "jsonschema>=4.24,<5.0",
+    "openapi-spec-validator>=0.7,<1.0",
     "pytest>=8.3,<9.0",
+    "pyyaml>=6.0,<7.0",
     "ruff>=0.9,<1.0",
 ]
 
@@ -32,7 +35,13 @@ packages = ["src/tbd"]
 package = true
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q --strict-markers"
+markers = [
+    "unit: 외부 PostgreSQL 없이 실행하는 빠른 단위·계약 테스트",
+    "integration: 격리된 임시 PostgreSQL이 필요한 통합 테스트",
+    "contract: canonical OpenAPI와 현재 구현 endpoint의 부분 계약 테스트",
+    "migration: 빈 PostgreSQL에서 Alembic upgrade·downgrade를 검증하는 테스트",
+]
 pythonpath = ["src"]
 testpaths = ["tests"]
 
