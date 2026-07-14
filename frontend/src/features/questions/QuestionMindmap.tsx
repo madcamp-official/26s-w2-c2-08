@@ -9,6 +9,7 @@ import type { AnswerTarget } from '../answers/api'
 
 interface QuestionMindmapProps {
   sessionId: string
+  scope?: 'CURRENT' | 'FINAL'
   onStartVoiceAnswer?: (target: AnswerTarget) => void
   answerCapturePending?: boolean
 }
@@ -26,6 +27,7 @@ function clusteringStatus(
 
 export function QuestionMindmap({
   sessionId,
+  scope = 'CURRENT',
   onStartVoiceAnswer,
   answerCapturePending = false,
 }: QuestionMindmapProps) {
@@ -33,8 +35,8 @@ export function QuestionMindmap({
     null,
   )
   const clusters = useQuery({
-    queryKey: questionKeys.clusters(sessionId),
-    queryFn: ({ signal }) => listQuestionClusters(sessionId, signal),
+    queryKey: questionKeys.clusters(sessionId, scope),
+    queryFn: ({ signal }) => listQuestionClusters(sessionId, scope, signal),
   })
 
   const activeClusterId =
@@ -61,8 +63,12 @@ export function QuestionMindmap({
     <section className="panel question-mindmap" aria-labelledby="mindmap-title">
       <header className="question-panel__heading">
         <div>
-          <p className="eyebrow">Question map</p>
-          <h2 id="mindmap-title">질문 마인드맵</h2>
+          <p className="eyebrow">
+            {scope === 'FINAL' ? 'Final question map' : 'Question map'}
+          </p>
+          <h2 id="mindmap-title">
+            {scope === 'FINAL' ? '최종 질문 마인드맵' : '질문 마인드맵'}
+          </h2>
           <p>
             AI 대표질문을 중심으로 익명 질문을 묶어 보여줍니다. 질문 원문은 별도
             목록에서도 그대로 확인할 수 있습니다.

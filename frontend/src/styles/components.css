@@ -1448,6 +1448,204 @@
   line-height: 1.6;
 }
 
+.record-page,
+.record-page__content,
+.record-summary,
+.record-transcript {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.record-page {
+  margin-top: var(--space-8);
+}
+
+.record-page__header {
+  display: flex;
+  gap: var(--space-5);
+  align-items: start;
+  justify-content: space-between;
+  padding: clamp(24px, 4vw, 44px);
+  border-radius: var(--radius-lg);
+  color: #fff;
+  background: var(--color-ink);
+}
+
+.record-page__header .eyebrow {
+  color: var(--color-accent);
+}
+
+.record-page__header h1,
+.record-page__header p {
+  margin: 0;
+}
+
+.record-page__header h1 {
+  margin-top: var(--space-2);
+  font-size: clamp(32px, 5vw, 52px);
+  letter-spacing: -0.05em;
+}
+
+.record-page__header p:last-child {
+  max-width: 620px;
+  margin-top: var(--space-3);
+  color: rgb(255 255 255 / 72%);
+  line-height: 1.65;
+}
+
+.record-processing {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(420px, 1fr);
+  gap: var(--space-6);
+  align-items: center;
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-soft);
+}
+
+.record-processing h2,
+.record-processing p {
+  margin: 0;
+}
+
+.record-processing h2 {
+  margin-top: var(--space-2);
+  font-size: 24px;
+}
+
+.record-processing p:last-child {
+  margin-top: var(--space-2);
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.record-processing__steps,
+.record-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-line);
+}
+
+.record-processing__steps div,
+.record-overview li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--color-surface);
+}
+
+.record-processing__steps dt,
+.record-overview span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.record-processing__steps dd,
+.record-overview strong {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.record-overview {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 0;
+  list-style: none;
+}
+
+.record-overview strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-summary header,
+.record-transcript__heading {
+  display: flex;
+  gap: var(--space-4);
+  align-items: start;
+  justify-content: space-between;
+}
+
+.record-summary h2,
+.record-transcript h2 {
+  margin: var(--space-2) 0 0;
+  font-size: 25px;
+  letter-spacing: -0.04em;
+}
+
+.record-summary__content {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.75;
+}
+
+.record-transcript__timeline {
+  display: grid;
+  gap: 0;
+  max-height: 680px;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  border-top: 1px solid var(--color-line);
+  list-style: none;
+}
+
+.record-transcript__timeline li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: 13px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.record-transcript__timeline time {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-transcript__timeline p,
+.record-transcript__timeline button {
+  margin: 0;
+  color: var(--color-ink);
+  line-height: 1.65;
+  text-align: left;
+}
+
+.record-transcript__timeline button {
+  width: 100%;
+  min-height: 44px;
+  margin: -9px 0;
+  padding: 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.record-transcript__timeline button:hover,
+.record-transcript__timeline button:focus-visible {
+  background: var(--color-brand-soft);
+}
+
+.record-transcript__gap {
+  padding-inline: 10px !important;
+  color: #865d00;
+  background: #fffaf0;
+}
+
+.record-transcript__gap p {
+  color: inherit;
+}
+
 @media (max-width: 900px) {
   .foundation-grid,
   .auth-grid,
@@ -1459,6 +1657,10 @@
 
   .course-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .record-processing {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1533,5 +1735,21 @@
     align-items: stretch;
     flex-direction: column;
     grid-template-columns: 1fr;
+  }
+
+  .record-page__header,
+  .record-summary header,
+  .record-transcript__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .record-processing__steps,
+  .record-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .record-transcript__timeline li {
+    grid-template-columns: 44px minmax(0, 1fr);
   }
 }
