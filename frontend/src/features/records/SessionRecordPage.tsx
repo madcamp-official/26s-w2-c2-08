@@ -3,16 +3,20 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, type MutableRefObject } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react'
 
 import { apiUrl } from '../../api/client'
 import { ApiError } from '../../api/errors'
 import { StatePanel } from '../../components/feedback/StatePanel'
 import { Button } from '../../components/ui/Button'
-import { AnswerPanel } from '../answers/AnswerPanel'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
-import { QuestionMindmap } from '../questions/QuestionMindmap'
 import { courseKeys } from '../courses/queries'
 import type { SessionRecording } from '../recordings/api'
 import {
@@ -20,11 +24,20 @@ import {
   listFinalSummaries,
   type SessionRecord,
 } from './api'
+import { FinalQuestionMindmap } from './FinalQuestionMindmap'
+import { RecordAnswerPanel } from './RecordAnswerPanel'
+import { RecordJobsPanel } from './RecordJobsPanel'
+import { RecordQuestionPanel } from './RecordQuestionPanel'
 import { recordKeys, recordManifestQueryOptions } from './queries'
 
 interface SessionRecordPageProps {
   sessionId: string
   professor: boolean
+}
+
+interface TranscriptRange {
+  startSequence: number
+  endSequence: number
 }
 
 function formatTime(value: number) {
@@ -243,10 +256,13 @@ function FinalSummaryPanel({ record }: { record: SessionRecord }) {
 function RecordTranscriptPanel({
   record,
   onSeek,
+  highlightRange,
 }: {
   record: SessionRecord
   onSeek: (offset: number) => void
+  highlightRange: TranscriptRange | null
 }) {
+  const timelineRef = useRef<HTMLOListElement | null>(null)
   const versionId = recordTranscriptVersionId(record)
   const timeline = useInfiniteQuery({
     queryKey: recordKeys.timeline(record.session.id, versionId ?? 'none'),
@@ -277,6 +293,26 @@ function RecordTranscriptPanel({
       return left.value.id.localeCompare(right.value.id)
     })
   }, [timeline.data])
+
+  useEffect(() => {
+    if (!highlightRange || !timelineRef.current) return
+    const item = items.find(
+      (entry) =>
+        entry.kind === 'segment' &&
+        entry.value.sequence >= highlightRange.startSequence &&
+        entry.value.sequence <= highlightRange.endSequence,
+    )
+    if (!item || item.kind !== 'segment') return
+    const target = timelineRef.current.querySelector<HTMLElement>(
+      `[data-segment-id="${item.value.id}"]`,
+    )
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)')
+      .matches
+      ? 'auto'
+      : 'smooth'
+    target?.scrollIntoView({ block: 'center', behavior })
+    target?.focus({ preventScroll: true })
+  }, [highlightRange, items])
 
   const transcriptState = recordTranscriptState(record)
   if (!transcriptState)
@@ -340,13 +376,25 @@ function RecordTranscriptPanel({
       )}
       {items.length > 0 && (
         <ol
+          ref={timelineRef}
           className="record-transcript__timeline"
           aria-label="확정 Transcript 타임라인"
         >
           {items.map((item) => (
             <li
               key={item.value.id}
-              className={`record-transcript__${item.kind}`}
+              data-segment-id={
+                item.kind === 'segment' ? item.value.id : undefined
+              }
+              tabIndex={item.kind === 'segment' ? -1 : undefined}
+              className={`record-transcript__${item.kind}${
+                item.kind === 'segment' &&
+                highlightRange &&
+                item.value.sequence >= highlightRange.startSequence &&
+                item.value.sequence <= highlightRange.endSequence
+                  ? ' record-transcript__segment--highlighted'
+                  : ''
+              }`}
             >
               <time>{formatTime(item.value.start_ms)}</time>
               {item.kind === 'segment' ? (
@@ -400,6 +448,9 @@ export function SessionRecordPage({
 }: SessionRecordPageProps) {
   const queryClient = useQueryClient()
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [highlightRange, setHighlightRange] = useState<TranscriptRange | null>(
+    null,
+  )
   const record = useQuery({
     ...recordManifestQueryOptions(sessionId),
     refetchInterval: (query) =>
@@ -469,14 +520,25 @@ export function SessionRecordPage({
         />
         <RecordRecordingPanel recording={data.recording} audioRef={audioRef} />
         <FinalSummaryPanel record={data} />
-        <RecordTranscriptPanel record={data} onSeek={seek} />
+        <RecordTranscriptPanel
+          record={data}
+          onSeek={seek}
+          highlightRange={highlightRange}
+        />
         {data.session.status === 'COMPLETED' && (
           <>
-            <QuestionMindmap sessionId={data.session.id} scope="FINAL" />
-            <AnswerPanel
+            <RecordQuestionPanel sessionId={data.session.id} />
+            <FinalQuestionMindmap sessionId={data.session.id} />
+            <RecordAnswerPanel
               sessionId={data.session.id}
               professor={professor}
-              sessionStatus={data.session.status}
+              onFocusTranscriptRange={(startSequence, endSequence) =>
+                setHighlightRange({ startSequence, endSequence })
+              }
+            />
+            <RecordJobsPanel
+              sessionId={data.session.id}
+              professor={professor}
             />
             <PersonalAiPanel sessionId={data.session.id} mode="REVIEW" />
           </>
