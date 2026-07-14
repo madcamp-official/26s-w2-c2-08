@@ -2,7 +2,7 @@
 
 import pytest
 
-from tbd.config import REPOSITORY_ROOT, Settings
+from tbd.core.config import REPOSITORY_ROOT, Settings
 
 
 def test_database_url_environment_variable_takes_precedence(
@@ -15,7 +15,7 @@ def test_database_url_environment_variable_takes_precedence(
 
     settings = Settings(_env_file=None)
 
-    assert settings.database_url == expected
+    assert settings.effective_database_url == expected
 
 
 def test_relative_storage_root_is_resolved_from_repository(
@@ -44,6 +44,6 @@ def test_database_url_is_built_from_postgres_settings(
 
     settings = Settings(_env_file=None)
 
-    assert settings.database_url == (
+    assert settings.effective_database_url == (
         "postgresql+psycopg://app%20user:secret%2Fvalue@database.local:5544/lecture"
     )

@@ -2,7 +2,7 @@
 
 import uvicorn
 
-from tbd.config import get_settings
+from tbd.core.config import get_settings
 
 
 def main() -> None:

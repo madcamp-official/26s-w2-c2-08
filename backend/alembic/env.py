@@ -8,8 +8,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from tbd.config import get_settings
-from tbd.db import Base
+from tbd.core.config import get_settings
+from tbd.models import Base
 
 config = context.config
 
@@ -23,7 +23,7 @@ def run_migrations_offline() -> None:
     """Run migrations without creating a database connection."""
 
     context.configure(
-        url=get_settings().database_url,
+        url=get_settings().effective_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -51,7 +51,7 @@ async def run_async_migrations() -> None:
     """Create the async engine and execute migrations."""
 
     configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = get_settings().database_url
+    configuration["sqlalchemy.url"] = get_settings().effective_database_url
 
     connectable = async_engine_from_config(
         configuration,

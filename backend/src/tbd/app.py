@@ -6,26 +6,32 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from tbd.api.router import api_router
-from tbd.config import get_settings
-from tbd.db import engine
+from tbd.core.config import Settings, get_settings
+from tbd.db import Database, create_database
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Release pooled database connections during application shutdown."""
 
     yield
-    await engine.dispose()
+    await app.state.database.dispose()
 
 
-def create_app() -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    database: Database | None = None,
+) -> FastAPI:
     """Create the HTTP application and mount its public routers."""
 
-    settings = get_settings()
+    runtime_settings = settings or get_settings()
+    runtime_database = database or create_database(runtime_settings)
     app = FastAPI(
-        title=settings.app_name,
+        title=runtime_settings.app_name,
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.settings = runtime_settings
+    app.state.database = runtime_database
     app.include_router(api_router)
     return app

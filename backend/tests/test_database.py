@@ -6,7 +6,8 @@ import os
 import pytest
 from sqlalchemy import text
 
-from tbd.db import engine
+from tbd.core.config import get_settings
+from tbd.db import create_database
 
 pytestmark = pytest.mark.skipif(
     os.getenv("RUN_DATABASE_TESTS") != "1",
@@ -17,18 +18,19 @@ pytestmark = pytest.mark.skipif(
 async def read_vector_version() -> str | None:
     """Return the installed pgvector extension version."""
 
-    async with engine.connect() as connection:
-        return await connection.scalar(
-            text("SELECT extversion FROM pg_extension WHERE extname = 'vector'")
-        )
+    database = create_database(get_settings())
+    try:
+        async with database.engine.connect() as connection:
+            return await connection.scalar(
+                text("SELECT extversion FROM pg_extension WHERE extname = 'vector'")
+            )
+    finally:
+        await database.dispose()
 
 
 def test_pgvector_migration_is_applied() -> None:
     """The migrated database must expose the vector extension."""
 
-    try:
-        version = asyncio.run(read_vector_version())
-    finally:
-        asyncio.run(engine.dispose())
+    version = asyncio.run(read_vector_version())
 
     assert version is not None
