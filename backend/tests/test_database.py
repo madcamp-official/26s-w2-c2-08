@@ -1,24 +1,32 @@
-"""Opt-in integration checks for PostgreSQL schema prerequisites."""
+"""Integration checks for PostgreSQL schema prerequisites."""
 
 import asyncio
-import os
 
 import pytest
 from sqlalchemy import text
 
-from tbd.core.config import get_settings
+from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_DATABASE_TESTS") != "1",
-    reason="set RUN_DATABASE_TESTS=1 with PostgreSQL running",
-)
+pytestmark = pytest.mark.integration
 
 
-async def read_extension_version(name: str) -> str | None:
-    """Return the installed extension version by its stable public name."""
+def _create_test_database(database_url: str):
+    """Create a database resource bound to the isolated migrated database."""
 
-    database = create_database(get_settings())
+    return create_database(
+        Settings(
+            _env_file=None,
+            app_env=AppEnvironment.TEST,
+            database_url=database_url,
+        )
+    )
+
+
+async def read_extension_version(database_url: str, name: str) -> str | None:
+    """Return an installed extension version by its stable public name."""
+
+    database = _create_test_database(database_url)
     try:
         async with database.engine.connect() as connection:
             return await connection.scalar(
@@ -29,19 +37,21 @@ async def read_extension_version(name: str) -> str | None:
         await database.dispose()
 
 
-def test_pgvector_migration_is_applied() -> None:
+def test_pgvector_migration_is_applied(migrated_database_url: str) -> None:
     """The migrated database must expose the vector extension."""
 
-    version = asyncio.run(read_extension_version("vector"))
+    version = asyncio.run(read_extension_version(migrated_database_url, "vector"))
 
     assert version is not None
 
 
-def test_pgcrypto_and_updated_at_trigger_function_are_applied() -> None:
+def test_pgcrypto_and_updated_at_trigger_function_are_applied(
+    migrated_database_url: str,
+) -> None:
     """The schema spine needs UUID generation and its shared timestamp trigger."""
 
     async def read_common_schema() -> tuple[str | None, str | None]:
-        database = create_database(get_settings())
+        database = _create_test_database(migrated_database_url)
         try:
             async with database.engine.connect() as connection:
                 extension = await connection.scalar(

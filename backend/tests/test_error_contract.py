@@ -2,11 +2,14 @@
 
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
 from tbd.core.errors import ApiError
+
+pytestmark = pytest.mark.unit
 
 
 def test_valid_request_id_is_echoed(app: FastAPI) -> None:

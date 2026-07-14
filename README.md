@@ -165,12 +165,38 @@ make skills-sync
 # 파일을 수정하지 않고 공통 Skill 동기화 상태와 형식만 검사
 make skills-check
 
-# 공통 Skill, lint, formatting, test, frontend build 전체 실행
+# PostgreSQL을 포함한 로컬 검증 환경 준비
+make db-up
+
+# 공통 Skill, 문서·계약, lint, typecheck, test, migration, build 전체 실행
 make check
+
+# DB 없이 실행되는 Backend unit test
+make backend-unit
+
+# 현재 구현 endpoint와 canonical OpenAPI의 부분 계약 검사
+make backend-contract
+
+# 고유한 임시 DB를 생성·폐기하는 PostgreSQL integration test
+make backend-integration
+
+# 빈 임시 DB에서 Alembic upgrade → downgrade → upgrade 검사
+make migration-check
+
+# OpenAPI로 다시 생성한 Frontend 타입과 저장된 타입의 차이 검사
+make frontend-contract-check
+
+# Markdown UTF-8·code fence·상대 링크 대상 검사
+make docs-check
 
 # DB 종료
 make db-down
 ```
+
+`make check`는 사용자의 Docker 상태를 임의로 변경하지 않는다. 먼저 `make db-up`으로
+PostgreSQL을 준비해야 하며, DB가 없거나 테스트 DB 생성 권한이 없으면 integration과
+migration 검사가 skip되지 않고 명확하게 실패한다. CI도 위와 동일한 Make target을
+사용한다.
 
 ### 기술 구성
 

@@ -5,6 +5,8 @@ from pydantic import ValidationError
 
 from tbd.core.config import REPOSITORY_ROOT, AppEnvironment, Settings
 
+pytestmark = pytest.mark.unit
+
 
 def test_database_url_environment_variable_takes_precedence(
     monkeypatch: pytest.MonkeyPatch,

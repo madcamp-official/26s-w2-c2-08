@@ -1,20 +1,16 @@
 """PostgreSQL integration tests for the relational schema spine."""
 
 import asyncio
-import os
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from tbd.core.config import get_settings
+from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_DATABASE_TESTS") != "1",
-    reason="set RUN_DATABASE_TESTS=1 with PostgreSQL running",
-)
+pytestmark = pytest.mark.integration
 
 EXPECTED_TABLES = {
     "ai_jobs",
@@ -51,11 +47,23 @@ EXPECTED_TABLES = {
 }
 
 
-async def create_course_and_ready_session() -> tuple[str, str, str]:
+def _create_test_database(database_url: str):
+    """Create a database resource bound to the isolated migrated database."""
+
+    return create_database(
+        Settings(
+            _env_file=None,
+            app_env=AppEnvironment.TEST,
+            database_url=database_url,
+        )
+    )
+
+
+async def create_course_and_ready_session(database_url: str) -> tuple[str, str, str]:
     """Create the minimum valid Course aggregate in one deferred-constraint transaction."""
 
     suffix = uuid4().hex
-    database = create_database(get_settings())
+    database = _create_test_database(database_url)
     try:
         async with database.engine.begin() as connection:
             user_id = await connection.scalar(
@@ -100,11 +108,13 @@ async def create_course_and_ready_session() -> tuple[str, str, str]:
         await database.dispose()
 
 
-def test_schema_spine_creates_all_documented_tables_and_guards() -> None:
+def test_schema_spine_creates_all_documented_tables_and_guards(
+    migrated_database_url: str,
+) -> None:
     """All relational tables, indexes, and integrity functions must be installed."""
 
     async def read_schema() -> tuple[set[str], set[str], set[str]]:
-        database = create_database(get_settings())
+        database = _create_test_database(migrated_database_url)
         try:
             async with database.engine.connect() as connection:
                 tables = set(
@@ -157,12 +167,14 @@ def test_schema_spine_creates_all_documented_tables_and_guards() -> None:
     }
 
 
-def test_course_and_session_concurrency_constraints_are_enforced() -> None:
+def test_course_and_session_concurrency_constraints_are_enforced(
+    migrated_database_url: str,
+) -> None:
     """Course ownership and one nonterminal class are database-enforced invariants."""
 
     async def assert_constraints() -> None:
-        user_id, course_id, _ = await create_course_and_ready_session()
-        database = create_database(get_settings())
+        user_id, course_id, _ = await create_course_and_ready_session(migrated_database_url)
+        database = _create_test_database(migrated_database_url)
         try:
             async with database.engine.connect() as connection:
                 with pytest.raises(IntegrityError):
@@ -191,12 +203,14 @@ def test_course_and_session_concurrency_constraints_are_enforced() -> None:
     asyncio.run(assert_constraints())
 
 
-def test_material_limit_guard_rejects_the_eleventh_active_pdf() -> None:
+def test_material_limit_guard_rejects_the_eleventh_active_pdf(
+    migrated_database_url: str,
+) -> None:
     """The trigger serializes concurrent upload checks through the session row lock."""
 
     async def assert_limit() -> None:
-        _, _, session_id = await create_course_and_ready_session()
-        database = create_database(get_settings())
+        _, _, session_id = await create_course_and_ready_session(migrated_database_url)
+        database = _create_test_database(migrated_database_url)
         try:
             async with database.engine.connect() as connection:
                 async with connection.begin():

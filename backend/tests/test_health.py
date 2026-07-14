@@ -1,7 +1,10 @@
 """Tests for unauthenticated health endpoints."""
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.unit
 
 
 def test_health_returns_ok(app: FastAPI) -> None:
