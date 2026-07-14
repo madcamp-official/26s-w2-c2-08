@@ -4,6 +4,14 @@ from tbd.models.auth import AuthSession, OAuthTransaction, RealtimeTicket
 from tbd.models.base import Base
 from tbd.models.common import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 from tbd.models.courses import Course, CourseMember
+from tbd.models.materials import (
+    LectureMaterial,
+    RecordingUpload,
+    SessionRecording,
+    TranscriptGap,
+    TranscriptSegment,
+    TranscriptVersion,
+)
 from tbd.models.sessions import LectureSession
 from tbd.models.users import User, UserAuthIdentity
 
@@ -12,12 +20,18 @@ __all__ = [
     "AuthSession",
     "Course",
     "CourseMember",
+    "LectureMaterial",
     "LectureSession",
     "OAuthTransaction",
     "RealtimeTicket",
+    "RecordingUpload",
+    "SessionRecording",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",
     "User",
     "UserAuthIdentity",
     "VersionMixin",
+    "TranscriptGap",
+    "TranscriptSegment",
+    "TranscriptVersion",
 ]

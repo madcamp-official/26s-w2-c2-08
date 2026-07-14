@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     postgres_password: str = DEFAULT_POSTGRES_PASSWORD
     database_url: str | None = None
     storage_root: Path = REPOSITORY_ROOT / "data" / "uploads"
-    max_upload_bytes: int = 50 * 1024 * 1024
+    max_upload_bytes: int = 100_000_000
 
     @property
     def effective_database_url(self) -> str:
