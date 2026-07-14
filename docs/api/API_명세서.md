@@ -1342,12 +1342,13 @@ Range: bytes=<start>-<end>
 
 > WebSocket은 Session 공용 실시간 알림·음성 전송 수단이고, DB와 REST 조회 결과가 최종 진실이다. 개인 AI 결과는 REST polling으로만 확인한다.
 
-#### 현재 구현 범위 (PR-11)
+#### 현재 구현 범위 (PR-12)
 
 `POST /api/v1/realtime-tickets`와 `WS /api/v1/ws/sessions/{session_id}`의
 `SESSION_EVENTS_READ`만 구현됐다. FastAPI 프로세스의 publisher가 commit된
-`outbox_events`를 전달하며, 현재 실제 broadcast event는 `session.updated`와 공용
-`job.updated`, 연결 control인 `connection.ready`·`resync.required`다. 이외의 event와
+`outbox_events`를 전달한다. 현재 실제 broadcast event는 `session.updated`, 공용
+`job.updated`, 익명 `question.created`, `reaction.updated`, `clustering.updated`와 연결
+control인 `connection.ready`·`resync.required`다. `question.updated`와 이외의 event,
 audio WebSocket·STT는 후속 구현 범위다. publisher memory는 원장이 아니며, cursor
 replay가 500개를 넘거나 cursor를 찾을 수 없으면 `resync.required`로 REST 복구를 요구한다.
 

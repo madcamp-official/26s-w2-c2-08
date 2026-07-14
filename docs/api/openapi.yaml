@@ -1313,6 +1313,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     post:
       tags: [Questions]
       operationId: createAnonymousQuestion
@@ -1440,6 +1442,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/questions/{question_id}/reaction:
     parameters:
@@ -1471,6 +1475,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     delete:
       tags: [Questions]
       operationId: removeQuestionReaction
@@ -1490,6 +1496,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/representative-questions/{representative_question_id}:
     parameters:
