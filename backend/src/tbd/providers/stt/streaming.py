@@ -11,6 +11,10 @@ class StreamingSTTUnavailableError(Exception):
     """The configured live provider cannot currently accept audio."""
 
 
+class StreamingSTTInvalidResultError(Exception):
+    """A provider returned data that cannot safely enter the realtime boundary."""
+
+
 @dataclass(frozen=True)
 class STTPartial:
     utterance_id: str
@@ -33,6 +37,29 @@ class STTFinal:
 
 
 type StreamingSTTResult = STTPartial | STTFinal
+
+
+def validate_streaming_results(
+    results: Sequence[StreamingSTTResult],
+) -> tuple[StreamingSTTResult, ...]:
+    """Reject malformed provider output before it can become an event or a DB row."""
+
+    validated: list[StreamingSTTResult] = []
+    for result in results:
+        if not isinstance(result, (STTPartial, STTFinal)):
+            raise StreamingSTTInvalidResultError
+        if (
+            not result.utterance_id.strip()
+            or not result.text.strip()
+            or result.audio_sequence_start > result.audio_sequence_end
+            or result.start_ms < 0
+            or result.end_ms < result.start_ms
+        ):
+            raise StreamingSTTInvalidResultError
+        if isinstance(result, STTPartial) and result.revision < 1:
+            raise StreamingSTTInvalidResultError
+        validated.append(result)
+    return tuple(validated)
 
 
 class StreamingSTTProvider(Protocol):

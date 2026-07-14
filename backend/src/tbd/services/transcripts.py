@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.auth.security import AuthCrypto
@@ -49,6 +49,14 @@ class _TimelineItem:
     start_ms: int
     item_id: UUID
     value: TranscriptSegment | TranscriptGap
+
+
+@dataclass(frozen=True)
+class TranscriptVersionPage:
+    """A version page whose cursor cannot be replayed for another Session."""
+
+    items: list[TranscriptVersionResponse]
+    next_cursor: str | None
 
 
 class TranscriptCursorCodec:
@@ -107,6 +115,10 @@ class TranscriptService:
         lecture_session = await self._require_member(
             session, session_id=session_id, user_id=user_id
         )
+        if (
+            start_sequence is not None or end_sequence is not None
+        ) and transcript_version_id is None:
+            raise InvalidTranscriptAnchorError
         selected, aggregate = await self._select_version(
             session,
             lecture_session=lecture_session,
@@ -185,20 +197,45 @@ class TranscriptService:
         *,
         session_id: UUID,
         user_id: UUID,
+        cursor: str | None,
         limit: int,
-    ) -> list[TranscriptVersionResponse]:
+    ) -> TranscriptVersionPage:
         lecture_session = await self._require_member(
             session, session_id=session_id, user_id=user_id
         )
-        versions = list(
-            await session.scalars(
-                select(TranscriptVersion)
-                .where(TranscriptVersion.session_id == session_id)
-                .order_by(TranscriptVersion.version.desc(), TranscriptVersion.id.desc())
-                .limit(limit)
-            )
+        scope = {"kind": "versions", "session": str(session_id)}
+        after = self._decode_version_cursor(cursor, scope=scope)
+        statement = (
+            select(TranscriptVersion)
+            .where(TranscriptVersion.session_id == session_id)
+            .order_by(TranscriptVersion.version.desc(), TranscriptVersion.id.desc())
         )
-        return [self._project_version(version, lecture_session) for version in versions]
+        if after is not None:
+            try:
+                after_id = UUID(after[1])
+            except ValueError as exc:
+                raise InvalidTranscriptCursorError from exc
+            statement = statement.where(
+                or_(
+                    TranscriptVersion.version < after[0],
+                    and_(
+                        TranscriptVersion.version == after[0],
+                        TranscriptVersion.id < after_id,
+                    ),
+                )
+            )
+        versions = list(await session.scalars(statement.limit(limit + 1)))
+        page = versions[:limit]
+        next_cursor = None
+        if len(versions) > limit and page:
+            last = page[-1]
+            next_cursor = self._cursor_codec.encode(
+                {**scope, "position": [last.version, str(last.id)]}
+            )
+        return TranscriptVersionPage(
+            items=[self._project_version(version, lecture_session) for version in page],
+            next_cursor=next_cursor,
+        )
 
     async def get_segment(
         self,
@@ -326,6 +363,25 @@ class TranscriptService:
         ):
             raise InvalidTranscriptCursorError
         return position[0], 0 if position[1] == "SEGMENT" else 1, position[2]
+
+    def _decode_version_cursor(
+        self, cursor: str | None, *, scope: dict[str, object]
+    ) -> tuple[int, str] | None:
+        if cursor is None:
+            return None
+        payload = self._cursor_codec.decode(cursor)
+        if payload is None or any(payload.get(key) != value for key, value in scope.items()):
+            raise InvalidTranscriptCursorError
+        position = payload.get("position")
+        if (
+            not isinstance(position, list)
+            or len(position) != 2
+            or not isinstance(position[0], int)
+            or position[0] < 1
+            or not isinstance(position[1], str)
+        ):
+            raise InvalidTranscriptCursorError
+        return position[0], position[1]
 
     @staticmethod
     def _item_key(item: _TimelineItem) -> tuple[int, int, str]:

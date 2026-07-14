@@ -106,20 +106,19 @@ async def list_session_transcript_versions(
     cursor: Annotated[str | None, Query(min_length=1, max_length=1024)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> TranscriptVersionListResponse:
-    """List visible provenance metadata; cursor pagination is added with the record API."""
+    """List visible provenance metadata with a Session-bound stable cursor."""
 
-    if cursor is not None:
-        raise ApiError(400, "INVALID_CURSOR", "Transcript 목록 cursor를 확인해 주세요.")
     try:
-        items = await _service(settings).list_versions(
+        page = await _service(settings).list_versions(
             session,
             session_id=session_id,
             user_id=user_id,
+            cursor=cursor,
             limit=limit,
         )
     except Exception as exc:
         _raise_timeline_error(exc)
-    return TranscriptVersionListResponse(items=items, next_cursor=None)
+    return TranscriptVersionListResponse(items=page.items, next_cursor=page.next_cursor)
 
 
 @router.get(

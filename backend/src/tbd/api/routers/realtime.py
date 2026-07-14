@@ -19,7 +19,13 @@ from tbd.api.dependencies import (
 from tbd.core.config import Settings
 from tbd.core.errors import ApiError
 from tbd.db import transaction
-from tbd.providers.stt import StreamingSTTUnavailableError, STTFinal, STTPartial
+from tbd.providers.stt import (
+    StreamingSTTInvalidResultError,
+    StreamingSTTUnavailableError,
+    STTFinal,
+    STTPartial,
+    validate_streaming_results,
+)
 from tbd.realtime.audio import AudioFrameError, parse_audio_frame
 from tbd.realtime.cursors import RealtimeCursorCodec
 from tbd.realtime.hub import RealtimeConnection, RealtimeHub
@@ -35,6 +41,7 @@ from tbd.schemas.realtime import (
 from tbd.services.live_audio import (
     AudioPublisherConflictError,
     AudioResumeRejectedError,
+    AudioServerStateLostError,
     LiveAudioAccessDeniedError,
     LiveAudioService,
     LiveAudioSessionClosingError,
@@ -54,6 +61,8 @@ CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 
 RESYNC_RESOURCES = ["SESSION", "TRANSCRIPT", "QUESTIONS", "CLUSTERS", "ANSWERS", "JOBS"]
+LIVE_STT_TIMEOUT_SECONDS = 5
+LIVE_AUDIO_MAX_IN_FLIGHT = 1
 
 
 @router.post(
@@ -402,6 +411,19 @@ async def session_audio_websocket(
             )
             await websocket.close(code=4409)
             return
+        except AudioServerStateLostError:
+            async with database.session_factory() as session:
+                async with transaction(session):
+                    await service.record_resume_rejection(
+                        session,
+                        session_id=session_id,
+                        reason="SERVER_STATE_LOST",
+                    )
+            await websocket.send_json(
+                {"type": "audio.resume_rejected", "reason": "SERVER_STATE_LOST"}
+            )
+            await websocket.close(code=4409)
+            return
         except LiveAudioSessionNotFoundError:
             await websocket.close(code=4404)
             return
@@ -427,7 +449,7 @@ async def session_audio_websocket(
                     "channels": 1,
                 },
                 "max_chunk_bytes": 32_768,
-                "max_in_flight": 10,
+                "max_in_flight": LIVE_AUDIO_MAX_IN_FLIGHT,
                 "last_received_sequence": _sequence_or_none(claim.last_received_sequence),
                 "last_processed_sequence": _sequence_or_none(claim.last_processed_sequence),
             }
@@ -449,12 +471,25 @@ async def session_audio_websocket(
                         retryable=False,
                     )
                     continue
+                async with database.session_factory() as session:
+                    async with transaction(session):
+                        progress = await service.get_progress(
+                            session,
+                            session_id=session_id,
+                            recording_id=claim.recording_id,
+                        )
                 await websocket.send_json(
                     {
                         "type": "audio.stopped",
-                        "last_received_sequence": _sequence_or_none(claim.last_received_sequence),
-                        "last_processed_sequence": _sequence_or_none(claim.last_processed_sequence),
-                        "last_final_transcript_sequence": None,
+                        "last_received_sequence": _sequence_or_none(
+                            progress.last_received_sequence
+                        ),
+                        "last_processed_sequence": _sequence_or_none(
+                            progress.last_processed_sequence
+                        ),
+                        "last_final_transcript_sequence": _sequence_or_none(
+                            progress.last_final_transcript_sequence
+                        ),
                     }
                 )
                 del stop
@@ -502,8 +537,11 @@ async def session_audio_websocket(
                 )
             if not accepted.duplicate:
                 try:
-                    results = await websocket.app.state.streaming_stt_provider.transcribe(frame)
-                except StreamingSTTUnavailableError:
+                    async with asyncio.timeout(LIVE_STT_TIMEOUT_SECONDS):
+                        results = validate_streaming_results(
+                            await websocket.app.state.streaming_stt_provider.transcribe(frame)
+                        )
+                except (StreamingSTTUnavailableError, StreamingSTTInvalidResultError, TimeoutError):
                     await _audio_error(
                         websocket,
                         code="STT_UNAVAILABLE",

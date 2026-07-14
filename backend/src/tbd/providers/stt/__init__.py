@@ -2,12 +2,14 @@
 
 from tbd.providers.stt.streaming import (
     DeterministicStreamingSTTProvider,
+    StreamingSTTInvalidResultError,
     StreamingSTTProvider,
     StreamingSTTResult,
     StreamingSTTUnavailableError,
     STTFinal,
     STTPartial,
     UnavailableStreamingSTTProvider,
+    validate_streaming_results,
 )
 
 __all__ = [
@@ -16,6 +18,8 @@ __all__ = [
     "STTPartial",
     "StreamingSTTProvider",
     "StreamingSTTResult",
+    "StreamingSTTInvalidResultError",
     "StreamingSTTUnavailableError",
     "UnavailableStreamingSTTProvider",
+    "validate_streaming_results",
 ]

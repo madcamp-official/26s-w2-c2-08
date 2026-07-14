@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.auth.security import AuthCrypto
@@ -44,6 +44,10 @@ class AudioResumeRejectedError(Exception):
     """The persistent ACK watermark cannot safely resume the requested stream."""
 
 
+class AudioServerStateLostError(Exception):
+    """A prior accepted frame has no durable processing completion after reconnect."""
+
+
 @dataclass(frozen=True)
 class AudioFrameAcceptance:
     """The durable ACK watermark after one frame is accepted or deduplicated."""
@@ -78,6 +82,15 @@ class PersistedTranscriptFinal:
     text: str
     created_at: datetime
     utterance_id: str
+
+
+@dataclass(frozen=True)
+class AudioStreamProgress:
+    """Current durable watermarks for the explicit audio.stop acknowledgement."""
+
+    last_received_sequence: int
+    last_processed_sequence: int
+    last_final_transcript_sequence: int
 
 
 class LiveAudioService:
@@ -153,6 +166,8 @@ class LiveAudioService:
             raise LiveAudioSessionClosingError
         if resume_from_sequence != recording.last_received_sequence:
             raise AudioResumeRejectedError
+        if recording.last_processed_sequence < recording.last_received_sequence:
+            raise AudioServerStateLostError
         recording.live_audio_lease_expires_at = timestamp + LIVE_AUDIO_LEASE
         recording.version += 1
         await session.flush()
@@ -251,6 +266,15 @@ class LiveAudioService:
             session, session_id=session_id, recording_id=recording_id
         )
         if recording.status != "CAPTURING":
+            if lecture_session.status == "PROCESSING":
+                await self._append_live_gap(
+                    session,
+                    lecture_session=lecture_session,
+                    start_ms=result.start_ms,
+                    end_ms=result.end_ms,
+                    reason="BACKPRESSURE_DROP",
+                    is_final=True,
+                )
             return None
         live_version = await self._lock_live_version(session, lecture_session.id)
         if live_version.status != "FINALIZING":
@@ -294,12 +318,37 @@ class LiveAudioService:
         )
         return projection
 
+    async def get_progress(
+        self,
+        session: AsyncSession,
+        *,
+        session_id: UUID,
+        recording_id: UUID,
+    ) -> AudioStreamProgress:
+        """Read the current ACK and durable final watermark without exposing PCM state."""
+
+        recording = await self._lock_recording(
+            session, session_id=session_id, recording_id=recording_id
+        )
+        live_version = await self._lock_live_version(session, session_id)
+        last_final = await session.scalar(
+            select(func.max(TranscriptSegment.sequence)).where(
+                TranscriptSegment.transcript_version_id == live_version.id
+            )
+        )
+        return AudioStreamProgress(
+            last_received_sequence=recording.last_received_sequence,
+            last_processed_sequence=recording.last_processed_sequence,
+            last_final_transcript_sequence=last_final if last_final is not None else -1,
+        )
+
     async def record_resume_rejection(
         self,
         session: AsyncSession,
         *,
         session_id: UUID,
         recording_id: UUID | None = None,
+        reason: str = "SEQUENCE_GAP",
     ) -> None:
         """Keep an observable Gap when a client cannot resume the persistent watermark."""
 
@@ -317,7 +366,7 @@ class LiveAudioService:
             lecture_session=lecture_session,
             start_ms=recording.last_captured_offset_ms,
             end_ms=recording.last_captured_offset_ms,
-            reason="SEQUENCE_GAP",
+            reason=reason,
         )
 
     async def _lock_live_or_draining_session(
@@ -370,6 +419,7 @@ class LiveAudioService:
         start_ms: int,
         end_ms: int,
         reason: str,
+        is_final: bool = False,
     ) -> None:
         version = await self._lock_live_version(session, lecture_session.id)
         session.add(
@@ -379,7 +429,7 @@ class LiveAudioService:
                 transcript_version_id=version.id,
                 start_ms=min(start_ms, end_ms),
                 end_ms=max(start_ms, end_ms),
-                is_final=False,
+                is_final=is_final,
                 reason=reason,
                 details={},
             )
