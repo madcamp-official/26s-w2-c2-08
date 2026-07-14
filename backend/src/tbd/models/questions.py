@@ -166,7 +166,7 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         CheckConstraint(
             "job_type IN ('MATERIAL_PROCESSING', 'QUESTION_CLUSTERING', 'LIVE_SUMMARY', "
             "'FINAL_SUMMARY', 'CHAT_RESPONSE', 'SESSION_POSTPROCESSING', "
-            "'RECORDING_TRANSCRIPTION', 'ANSWER_ORGANIZATION')",
+            "'RECORDING_TRANSCRIPTION', 'ANSWER_ORGANIZATION', 'KNOWLEDGE_INDEXING')",
             name="ai_jobs_type_ck",
         ),
         CheckConstraint("visibility IN ('SHARED', 'REQUESTER_ONLY')", name="ai_jobs_visibility_ck"),
