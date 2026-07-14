@@ -8,7 +8,7 @@
 
 ## 1. 범위와 표기
 
-전체 물리 모델은 32개 테이블로 구성된다. 한 그림에 모두 넣으면 핵심 관계가 흐려지므로 인증·Course, 수업 기록, 질문·답변, AI 요약·Chat, 공통 Knowledge의 다섯 도메인으로 나눴다. 같은 테이블이 여러 그림에 반복되며 모두 동일한 실제 테이블을 뜻한다.
+전체 물리 모델은 33개 테이블로 구성된다. 한 그림에 모두 넣으면 핵심 관계가 흐려지므로 인증·Course, 수업 기록, 질문·답변, AI 요약·Chat, 공통 Knowledge의 다섯 도메인으로 나눴다. 같은 테이블이 여러 그림에 반복되며 모두 동일한 실제 테이블을 뜻한다.
 
 - `PK`: Primary Key
 - `FK`: Foreign Key
@@ -74,6 +74,7 @@ erDiagram
         bytea join_code_nonce
         smallint join_code_lookup_key_version
         smallint join_code_key_version
+        timestamptz deleted_at
         bigint version
     }
 
@@ -119,6 +120,20 @@ erDiagram
         timestamptz expires_at
     }
 
+    storageDeletionLedgers["storage_deletion_ledgers"] {
+        uuid id PK
+        uuid course_id FK
+        uuid resource_id
+        text resource_type
+        text storage_key UK
+        bigint byte_size
+        text state
+        integer attempt
+        timestamptz next_attempt_at
+        timestamptz lease_expires_at
+        timestamptz succeeded_at
+    }
+
     users ||--o{ userAuthIdentities : has
     users ||--o| userPasswordCredentials : owns
     users ||--o{ authSessions : owns
@@ -131,6 +146,7 @@ erDiagram
     lectureSessions ||--o{ realtimeTickets : authorizes
     users ||--o{ idempotencyRecords : submits
     lectureSessions o|--o{ idempotencyRecords : scopes_live_purge
+    courses o|--o{ storageDeletionLedgers : schedules
 ```
 
 `oauth_transactions`는 callback 성공 전에는 User가 확정되지 않으므로 의도적으로 User FK를 갖지 않는다. `course_members(course_id) WHERE role = 'PROFESSOR'` partial UNIQUE와 deferrable constraint trigger가 Course마다 owner와 일치하는 교수자 membership이 정확히 하나인지 transaction 종료 시 검증한다. 일반 `idempotency_records` terminal 행은 `expires_at = completed_at + interval '24 hours'`다. `purge_on_session_end=true`는 non-null `session_id`를 요구하고 개인 LIVE Summary·Chat 생성·Message와 관련 Job retry write의 원 리소스 purge scope를 표시한다. Session 종료 transaction은 결과·Job을 삭제하고 terminal record의 암호화 응답을 `410 LIVE_AI_RESULT_PURGED`로 재작성한다. Session FK는 `ON DELETE SET NULL`이다.
@@ -185,6 +201,8 @@ erDiagram
         bigint byte_size
         bigint duration_ms
         text storage_key UK
+        timestamptz deleted_at
+        timestamptz retention_expires_at
         bigint version
     }
 
@@ -274,6 +292,16 @@ erDiagram
         timestamptz published_at
     }
 
+    storageDeletionLedgers["storage_deletion_ledgers"] {
+        uuid id PK
+        uuid course_id FK
+        uuid resource_id
+        text resource_type
+        text storage_key UK
+        text state
+        timestamptz next_attempt_at
+    }
+
     lectureSessions ||--o{ lectureMaterials : contains
     users o|--o{ lectureMaterials : uploads
     aiJobs o|--o| lectureMaterials : processes
@@ -295,6 +323,7 @@ erDiagram
     lectureMaterials o|--o{ aiJobs : targeted_by
     sessionRecordings o|--o{ aiJobs : transcription_target
     lectureSessions o|--o{ outboxEvents : scopes
+    courses o|--o{ storageDeletionLedgers : schedules
 ```
 
 `lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않되 Session 잠금과 trigger가 연결된 행을 최대 10개로 제한한다. `session_recordings.session_id` UNIQUE는 Session당 논리 Recording을 최대 하나로, `recording_uploads(recording_id) WHERE status = 'ACTIVE'` partial UNIQUE는 active Upload을 최대 하나로 제한한다. 첫 Recording insert는 publisher `client_stream_id` HMAC claim과 원자적으로 commit하고 같은 claim만 reconnect·resume한다. `last_received_sequence`·`last_processed_sequence`·`last_captured_offset_ms`는 process 재시작 뒤에도 duplicate PCM을 제거하고 Gap을 계산하는 내부 ACK watermark이며 원문 audio나 client stream ID는 아니다. 45초 liveness 만료는 다른 stream의 takeover를 허용하지 않는다. Material·Recording final·Upload temp storage key는 API·공유 event·로그에 노출하지 않는다. MVP에서 하나의 RecordingUpload는 temporary object 하나를 final object 하나로 promote하는 논리 manifest이며 physical key·fragment는 공개하지 않는다.
@@ -956,16 +985,15 @@ Mermaid cardinality만으로 표현할 수 없는 규칙은 다음과 같다.
 
 ## 8. 삭제 관계 요약
 
-- Course 삭제는 불변 owner만 요청할 수 있고 CourseMember와 LectureSession aggregate를 삭제한다. active class가 있을 때의 허용 여부와 삭제 후 복구 유예는 아직 미정이다.
+- Course 삭제는 불변 owner만 요청할 수 있고 `READY`, `LIVE`, `PROCESSING` class가 하나라도 있으면 거부한다. 허용하면 Course `deleted_at`과 CourseMember 제거로 접근을 즉시 차단하고 Course·완료 기록 aggregate는 참조 무결성을 위해 복구 없는 tombstone으로 남긴다.
 - LectureSession 삭제는 owner가 `READY`, `COMPLETED`에서만 실행한다. Material, Recording, Upload, TranscriptVersion, Segment, Gap, Answer mapping, Answer organization, clustering state, 대표 질문, Cluster membership, Question, Cluster, Answer, Summary, Chat, KnowledgeChunk, AIJob을 같은 transaction에서 삭제하며 `LIVE`, `PROCESSING`에서는 거부한다.
 - Material 연결 해제는 교수자가 Session `READY`, `LIVE`, `COMPLETED`에서 `detached_at`을 기록하는 tombstone 처리다. `PROCESSING`에서는 거부하고, 결과가 없는 `PENDING`·`RUNNING`·`FAILED` Material Job을 함께 제거한 뒤 commit 즉시 목록·상세·content·RAG에서 제외한다. 결과 provenance로 참조되는 `SUCCEEDED` Job은 보존한다.
-- User 탈퇴는 공유 학습 기록을 지우지 않고 User 행을 익명화한다. 인증 정보와 개인 Chat·LIVE Summary는 제거한다.
+- User 탈퇴는 삭제되지 않은 owner Course가 없을 때만 공유 학습 기록을 지우지 않고 User 행을 익명화한다. 인증 정보·membership·reaction·멱등성 응답을 제거하며, 탈퇴 계정은 다시 인증할 수 없다.
 - Session `LIVE → PROCESSING`은 purge-scoped idempotency 행을 먼저 잠근 뒤 LIVE Summary, LIVE Chat·Message·Evidence와 관련 `REQUESTER_ONLY` Job을 같은 deferred transaction에서 삭제한다. FINAL Summary·REVIEW Chat은 유지하며, 종료 뒤 이전 Job·Chat·Summary ID는 `404`, purge-scoped terminal 응답은 같은 key·request hash에 `410 LIVE_AI_RESULT_PURGED`다.
 - Cluster generation 교체 시 membership을 함께 삭제한다. old AI 대표 질문은 Answer target이면 `lifecycle_status=PRESERVED` child와 immutable `target_text_snapshot`으로 유지한다. 미답변이면 Evidence가 없을 때 hard delete하고, 있으면 `DISCARDED` tombstone으로 전이해 공개·UI·RAG에서 제외한다.
 - 결과→AIJob, Answer mapping→후처리 Job, Answer organization→정리 Job과 Evidence→KnowledgeChunk는 deferred `NO ACTION`으로 독립 삭제를 막되 aggregate 전체 삭제는 허용한다. Answer 삭제는 organization을 cascade하지만 target Answer→Job FK 때문에 관련 Job을 함께 처리하지 않으면 commit되지 않는다.
 - 대표질문→KnowledgeChunk `ON DELETE CASCADE`와 Evidence→KnowledgeChunk deferred `NO ACTION`은 참조 중인 대표질문 hard delete를 막는다. `DISCARDED`는 관련 Evidence 최소 1건을 가져야 하고 마지막 Evidence 삭제 transaction이 대표질문과 Chunk를 함께 hard delete한다. Evidence 삭제 시점·보관 기간은 Evidence 정책을 따르며 Course·Session aggregate 삭제는 모두 같은 deferred transaction에서 cascade한다.
 - 일반 삭제는 `Course → purge-scoped IdempotencyRecord → Session → Material → Recording → Upload → TranscriptVersion → ClusteringState → Answer → AIJob` 잠금 순서를 사용하고 Session 단독 삭제·LIVE 종료도 purge-scoped 행을 Session보다 먼저 잠근다. Material lifecycle은 `Session → Material → AIJob`, Recording·HQ lifecycle은 `Session → Recording → Upload → TranscriptVersion → AIJob`, 질문 lifecycle은 `Session → ClusteringState → AIJob → Question/RepresentativeQuestion`, Answer organization lifecycle은 `Session → Answer → AnswerMapping → AIJob` 순서를 사용한다. Material·HQ·organization 늦은 결과는 기존 version·attempt·run token fence에서, 종료된 LIVE clustering 결과는 Job 상태·run token·state revision·Session 상태 fence에서, purge된 개인 AI 결과는 Job·target 존재 fence에서 폐기한다.
-- PDF·Recording final object와 Upload temp object는 DB 행 삭제 전 key를 수집해 같은 transaction의 내부 outbox task로 background 정리한다. object 삭제는 멱등 재시도하고 정리 실패가 삭제된 aggregate를 다시 노출하지 않는다.
+- PDF·Recording final object는 Course 삭제·Material detach·Recording 삭제 transaction에서 `storage_deletion_ledgers`에 key를 기록해 background worker가 멱등 재시도한다. object 정리 실패가 이미 삭제된 aggregate를 다시 노출하지 않는다.
 - 연결 해제 Material의 원문 content link는 제공하지 않는다. 기존 Evidence는 안전한 label을 유지하고 공개 link를 `NULL`로 반환한다. Evidence가 참조하는 Material source Chunk의 보관 기간, 별도 source snapshot으로의 FK 전환과 Material·Chunk hard delete 시점은 미정이다. 결정 전에는 deferred `NO ACTION` FK와 Material tombstone을 유지하고 참조 행을 임의로 삭제하지 않는다.
-- Recording이 없어도 Session 종료는 허용한다. Session `ended_at + 10 minutes`에는 남은 blocking Job과 비terminal Recording·Upload를 `FAILED`로 만들고 성공·실패와 관계없이 완료 predicate를 평가한다. HQ 실패 또는 HQ 결과 없이 deadline에 도달하면 LIVE 포인터를 보존하되 이를 완료 기록의 final source로 인정할지는 미정이다. MVP는 Course member playback·publisher professor upload와 하나의 temporary/final object mapping을 사용한다. Browser 동의 UI, 보관·삭제, quota·backup·RPO·RTO는 후속 정책이며 physical key를 추가 테이블이나 공개 응답에 넣지 않는다.
-- Course owner 탈퇴 시 aggregate와 owner membership을 어떻게 처리할지는 미정이며, 현재는 공유 참조를 보존하는 User tombstone 원칙만 있다.
+- Recording이 없어도 Session 종료는 허용한다. Session `ended_at + 10 minutes`에는 남은 blocking Job과 비terminal Recording·Upload를 `FAILED`로 만들고 성공·실패와 관계없이 완료 predicate를 평가한다. HQ 실패 또는 HQ 결과 없이 deadline에 도달하면 LIVE 포인터를 보존하되 이를 완료 기록의 final source로 인정할지는 미정이다. MVP는 Course member playback·publisher professor upload와 하나의 temporary/final object mapping을 사용하며, `COMPLETED`부터 30일 보관 또는 owner 조기 삭제 후 ledger worker가 final object를 정리한다. Browser 법적 동의 증빙, quota·backup·RPO·RTO는 후속 정책이며 physical key를 공개 응답에 넣지 않는다.

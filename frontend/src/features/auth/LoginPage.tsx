@@ -13,6 +13,7 @@ export function LoginPage() {
   const returnTo = safeReturnTo(searchParams.get('return_to'))
   const authError = searchParams.get('auth_error')
   const loggedOut = searchParams.get('logged_out') === '1'
+  const withdrawn = searchParams.get('withdrawn') === '1'
   const currentUser = useQuery(currentUserQueryOptions)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -83,6 +84,11 @@ export function LoginPage() {
             {loggedOut && (
               <p className="auth-notice" role="status">
                 안전하게 로그아웃했습니다.
+              </p>
+            )}
+            {withdrawn && (
+              <p className="auth-notice" role="status">
+                계정을 탈퇴했습니다. 다시 이용하려면 새 계정으로 로그인하세요.
               </p>
             )}
             <form className="email-auth-form" onSubmit={submitEmailLogin}>

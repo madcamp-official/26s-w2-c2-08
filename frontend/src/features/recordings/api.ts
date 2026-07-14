@@ -34,6 +34,26 @@ export function getSessionRecording(sessionId: string, signal?: AbortSignal) {
   )
 }
 
+export async function deleteSessionRecording(
+  sessionId: string,
+  idempotencyKey: string,
+) {
+  try {
+    const { error, response } = await apiClient.DELETE(
+      '/api/v1/sessions/{session_id}/recording',
+      {
+        params: {
+          path: { session_id: sessionId },
+          header: headers(idempotencyKey),
+        },
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
 export function createRecordingUpload(
   sessionId: string,
   input: components['schemas']['RecordingUploadCreateRequest'],

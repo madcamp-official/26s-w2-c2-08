@@ -45,6 +45,12 @@ from tbd.services.courses import (
     CourseNotFoundError,
     CourseRoleRequiredError,
 )
+from tbd.services.lifecycle import (
+    LifecycleAccessDeniedError,
+    LifecycleResourceNotFoundError,
+    LifecycleService,
+    RecordingDeletionConflictError,
+)
 from tbd.services.recordings import (
     RecordingChecksumMismatchError,
     RecordingChunkTooLargeError,
@@ -245,6 +251,21 @@ def _raise_recording_error(error: Exception) -> NoReturn:
         raise ApiError(
             503, "STORAGE_UNAVAILABLE", "파일 저장소를 일시적으로 사용할 수 없습니다."
         ) from error
+    if isinstance(error, LifecycleResourceNotFoundError):
+        raise ApiError(404, "RECORDING_NOT_FOUND", "요청한 녹음을 찾을 수 없습니다.") from error
+    if isinstance(error, LifecycleAccessDeniedError):
+        raise ApiError(
+            403,
+            "ROLE_REQUIRED",
+            "Course를 처음 생성한 교수자만 녹음을 삭제할 수 있습니다.",
+            details={"required_role": "COURSE_CREATOR_PROFESSOR"},
+        ) from error
+    if isinstance(error, RecordingDeletionConflictError):
+        raise ApiError(
+            409,
+            "RECORDING_DELETE_CONFLICT",
+            "COMPLETED class의 업로드 완료 녹음만 삭제할 수 있습니다.",
+        ) from error
     raise error
 
 
@@ -270,6 +291,72 @@ async def get_session_recording(
     except Exception as exc:
         _raise_recording_error(exc)
     return recording_response(recording)
+
+
+@router.delete(
+    "/sessions/{session_id}/recording",
+    status_code=204,
+    dependencies=[Depends(require_allowed_origin)],
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def delete_session_recording(
+    session_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    idempotency: OptionalIdempotency,
+    idempotency_key: IdempotencyHeader,
+) -> Response:
+    """Allow the Course owner to remove an uploaded completed-class recording early."""
+
+    key = _require_idempotency_key(idempotency_key)
+    now = datetime.now(UTC)
+    try:
+        async with transaction(session):
+            acquired = await _acquire(
+                session,
+                idempotency,
+                user_id=user_id,
+                key=key,
+                method="DELETE",
+                route_key="/api/v1/sessions/{session_id}/recording",
+                body={},
+                now=now,
+            )
+            if isinstance(acquired, ReplayIdempotencyRecord):
+                return Response(status_code=acquired.status_code)
+            await LifecycleService().delete_recording(
+                session,
+                session_id=session_id,
+                user_id=user_id,
+                now=now,
+            )
+            assert isinstance(acquired, AcquiredIdempotencyRecord)
+            assert idempotency is not None
+            await idempotency.complete(
+                session,
+                record_id=acquired.record_id,
+                status_code=204,
+                body={},
+                now=now,
+            )
+    except (
+        LifecycleResourceNotFoundError,
+        LifecycleAccessDeniedError,
+        RecordingDeletionConflictError,
+    ) as exc:
+        _raise_recording_error(exc)
+    except IdempotencyKeyReusedError as exc:
+        raise ApiError(
+            409, "IDEMPOTENCY_KEY_REUSED", "같은 멱등 키가 다른 요청에 사용되었습니다."
+        ) from exc
+    return Response(status_code=204)
 
 
 @router.post(

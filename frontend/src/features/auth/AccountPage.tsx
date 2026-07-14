@@ -7,7 +7,7 @@ import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
-import { logoutCurrentSession } from './api'
+import { logoutCurrentSession, withdrawCurrentUser } from './api'
 import { currentUserQueryKey, currentUserQueryOptions } from './queries'
 
 export function AccountPage() {
@@ -16,7 +16,9 @@ export function AccountPage() {
   const location = useLocation()
   const { showToast } = useToast()
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [logoutCompleted, setLogoutCompleted] = useState(false)
+  const [withdrawCompleted, setWithdrawCompleted] = useState(false)
   const logout = useMutation({
     mutationFn: logoutCurrentSession,
     onSuccess: () => {
@@ -31,9 +33,30 @@ export function AccountPage() {
       })
     },
   })
+  const withdraw = useMutation({
+    mutationFn: withdrawCurrentUser,
+    onSuccess: () => {
+      queryClient.clear()
+      setWithdrawOpen(false)
+      setWithdrawCompleted(true)
+    },
+    onError: (error) => {
+      showToast({
+        tone: 'error',
+        message:
+          error instanceof ApiError &&
+          error.code === 'OWNED_COURSE_REQUIRES_DELETION'
+            ? '생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.'
+            : '계정을 탈퇴하지 못했습니다. 현재 Session은 그대로 유지됩니다.',
+      })
+    },
+  })
 
   if (logoutCompleted) {
     return <Navigate replace to="/login?logged_out=1" />
+  }
+  if (withdrawCompleted) {
+    return <Navigate replace to="/login?withdrawn=1" />
   }
 
   if (currentUser.isPending) {
@@ -119,6 +142,9 @@ export function AccountPage() {
           <Button variant="danger" onClick={() => setLogoutOpen(true)}>
             로그아웃
           </Button>
+          <Button variant="ghost" onClick={() => setWithdrawOpen(true)}>
+            계정 탈퇴
+          </Button>
         </aside>
       </div>
 
@@ -147,6 +173,36 @@ export function AccountPage() {
         }
       >
         <p>다시 이용하려면 Google 또는 이메일로 로그인해야 합니다.</p>
+      </Dialog>
+      <Dialog
+        open={withdrawOpen}
+        title="GOAL 계정을 탈퇴할까요?"
+        description="탈퇴 후에는 현재 Session이 종료되며 계정을 복구할 수 없습니다."
+        onOpenChange={setWithdrawOpen}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              disabled={withdraw.isPending}
+              onClick={() => setWithdrawOpen(false)}
+            >
+              취소
+            </Button>
+            <Button
+              variant="danger"
+              disabled={withdraw.isPending}
+              onClick={() => withdraw.mutate()}
+            >
+              {withdraw.isPending ? '탈퇴 중…' : '계정 탈퇴'}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          직접 생성한 Course가 있으면 먼저 Course를 삭제해야 합니다. 기존 완료
+          기록의 공유 참조는 비식별 처리되지만 현재 계정으로는 다시 접근할 수
+          없습니다.
+        </p>
       </Dialog>
     </section>
   )

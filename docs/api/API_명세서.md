@@ -411,6 +411,17 @@ GET /api/v1/me
 - 응답: 계정 ID, 표시 이름, 이메일, 프로필 이미지
 - 사용자가 수정할 수 있는 프로필 필드의 범위는 TBD이다.
 
+### 5.2 계정 탈퇴
+
+```http
+DELETE /api/v1/me
+```
+
+- 권한: 인증 사용자. exact Origin allowlist를 검사한다. 성공 응답은 현재 서버 Session cookie를 만료시키므로 같은 browser 요청의 재시도는 새 인증 없이는 `401`이다.
+- 삭제되지 않은 owner Course가 하나라도 있으면 `409 OWNED_COURSE_REQUIRES_DELETION`이다. 서버가 owner Course를 자동 삭제하지 않는다.
+- 성공하면 모든 인증 세션·OAuth identity·비밀번호 credential·Course membership·reaction·계정 멱등 응답을 정리하고, User row는 이메일·avatar를 지우고 표시 이름을 `탈퇴한 사용자`로 바꾼 tombstone으로 남긴다. 기존 질문·Answer와 완료 기록의 내부 참조는 유지하지만 탈퇴 계정으로 다시 인증할 수 없다.
+- 탈퇴는 복구하지 않으며 같은 외부 identity 또는 이메일은 새 계정으로만 다시 가입할 수 있다.
+
 ## 6. Course API
 
 ### 6.1 Course 목록
@@ -500,7 +511,8 @@ Idempotency-Key: <key>
 - 권한: Course `PROFESSOR`
 - `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
 - Course에는 종료 상태나 종료 API가 없으며 삭제만 제공한다.
-- active Session이 있는 Course의 삭제 허용 여부와 삭제·보관 방식은 미정이다. 이 정책을 확정하기 전에는 구현 계약을 추가로 정해야 한다.
+- `READY`, `LIVE`, `PROCESSING` Session이 하나라도 있으면 `409 COURSE_HAS_ACTIVE_SESSION`이다. `COMPLETED` Session만 남은 Course는 삭제할 수 있다.
+- 성공 commit과 동시에 모든 Course API·WebSocket 재연결·참여 코드 조회는 `404 RESOURCE_NOT_FOUND`로 접근을 차단한다. 복구 API는 없다. Course와 완료 기록은 참조 무결성을 위해 내부 tombstone으로 남기며, PDF·녹음 final object는 deletion ledger가 멱등적으로 정리한다.
 - 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 `204`를 반환한다.
 - 삭제가 허용되는 Course의 성공 응답은 `204 No Content`이다.
 
@@ -1273,6 +1285,17 @@ GET /api/v1/sessions/{session_id}/recording
 - 모든 조회에서 현재 인증과 Course 접근 권한을 다시 확인한다. MVP에서 현재 Course 멤버는 metadata와 playback을 조회할 수 있고, upload는 첫 publisher인 Course `PROFESSOR`만 수행한다. 브라우저는 capture 전에 녹음 동의를 받고 PR-22 UI는 Blob을 IndexedDB에만 저장한다. 보관 정책은 PR-28 범위이며 이 HTTP API와 브라우저 동의는 법적 동의를 증명하지 않는다.
 - Recording이 없거나 존재를 공개하지 않으면 `404 RECORDING_NOT_FOUND`를 반환한다.
 
+### 15.2.1 녹음 조기 삭제와 보관
+
+```http
+DELETE /api/v1/sessions/{session_id}/recording
+Idempotency-Key: <key>
+```
+
+- 권한: 해당 Course를 생성한 `PROFESSOR`. Session이 `COMPLETED`이고 final object가 있는 Recording만 삭제할 수 있다. 다른 상태는 `409 RECORDING_DELETE_CONFLICT`다.
+- 완료 시점부터 30일 뒤에도 같은 삭제 흐름을 자동 실행한다. 성공 commit 뒤 metadata·playback은 즉시 `404 RECORDING_NOT_FOUND`이고, final object는 내부 deletion ledger가 재시도해 삭제한다.
+- 삭제는 복구하지 않으며 Transcript·Question·Answer와 완료 기록의 다른 영역은 유지한다.
+
 | 상태             | 의미                                                                |
 | ---------------- | ------------------------------------------------------------------- |
 | `CAPTURING`      | 첫 publisher가 같은 microphone source로 live PCM과 로컬 녹음을 생성 |
@@ -1737,7 +1760,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | 항목                               | 현재 상태                                                                                                                                                                                       | 결정 시 영향                   |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | ID 형식                            | 불투명 string                                                                                                                                                                                   | OpenAPI `format`, DB PK        |
-| active Course 삭제                 | active Session 보유 시 삭제·보관 방식 TBD                                                                                                                                                       | Course 삭제 응답·트랜잭션      |
 | Material 표시명                    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD                                                                                                       | 업로드·목록·다운로드 파일명    |
 | Material 분리 근거                 | 안전한 label snapshot과 `link=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD                                                                                                   | Chat 근거·DB 삭제 정책         |
 | 종료 후 텍스트 Answer              | `COMPLETED`에서 생성·보강은 확정; 최대 길이, 빈 문자열·삭제, KnowledgeChunk 재생성 세부 정책 TBD                                                                                                | Answer 요청·응답               |
@@ -1749,7 +1771,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | 녹음 upload                        | offset 조회 `GET`/`HEAD`, chunk method·header·Content-Type·크기, checksum algorithm·status, expiry 값 TBD                                                                                       | resumable protocol·정리        |
 | 오디오 publisher                   | 첫 `client_stream_id` claim과 동일 stream resume은 확정; 비정상 단절 lease·재획득·takeover TBD                                                                                                  | 중복 탭·장치 충돌              |
 | 실시간 임계값                      | `DEGRADED` 기준, audio stop timeout과 event replay window TBD                                                                                                                                   | 상태 표시·종료·재연결          |
-| 녹음 정책·전달                     | 동의, 역할별 접근, 보관·삭제와 playback proxy 또는 opaque signed URL 방식 TBD                                                                                                                   | 권한·개인정보·Range 전송       |
 | HQ Transcript 실패 후 final source | `RECORDING_TRANSCRIPTION` 실패 version과 LIVE canonical은 모두 보존; LIVE를 완료 기록·Summary final source로 사용할지 TBD                                                                       | Transcript·Summary·복구 UI     |
 | HQ STT 개별 Job timeout            | 일반 후처리 기본 5분에서 `RECORDING_TRANSCRIPTION`은 제외; HQ 개별 상한은 TBD. heartbeat 15초·lease 60초·Session 전체 10분은 확정                                                               | Worker watchdog·운영 모니터링  |
 | Answer 재매핑 세부                 | canonical 전체 범위 mapping 상태는 공개; 일부 매핑·미매핑 이유 enum과 수동 복구 정책 TBD                                                                                                        | Answer 응답·완료 기록 UI       |

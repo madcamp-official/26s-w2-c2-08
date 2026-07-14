@@ -22,6 +22,15 @@ export async function logoutCurrentSession() {
   }
 }
 
+export async function withdrawCurrentUser() {
+  try {
+    const { error, response } = await apiClient.DELETE('/api/v1/me')
+    if (error) throw apiErrorFromResponse(response, error)
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
 export async function loginWithEmailPassword(input: {
   email: string
   password: string
