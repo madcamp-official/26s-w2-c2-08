@@ -118,7 +118,7 @@ describe('authentication flow', () => {
         return new HttpResponse(null, { status: 204 })
       }),
     )
-    renderAt('/account')
+    const router = renderAt('/account')
 
     expect(
       await screen.findByRole('heading', { name: '내 정보' }),
@@ -132,6 +132,12 @@ describe('authentication flow', () => {
         name: '강의의 흐름으로 다시 들어오세요.',
       }),
     ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(router.state.location).toMatchObject({
+        pathname: '/login',
+        search: '?logged_out=1',
+      }),
+    )
     expect(
       await screen.findByText('안전하게 로그아웃했습니다.'),
     ).toBeInTheDocument()
