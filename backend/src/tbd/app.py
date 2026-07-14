@@ -7,6 +7,8 @@ from fastapi import FastAPI
 
 from tbd.api.router import api_router
 from tbd.core.config import Settings, get_settings
+from tbd.core.errors import install_exception_handlers
+from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
 
 
@@ -33,5 +35,7 @@ def create_app(
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
+    app.add_middleware(RequestIdMiddleware)
+    install_exception_handlers(app)
     app.include_router(api_router)
     return app
