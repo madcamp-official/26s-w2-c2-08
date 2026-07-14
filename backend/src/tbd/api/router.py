@@ -9,6 +9,7 @@ from tbd.api.routers.jobs import router as jobs_router
 from tbd.api.routers.materials import router as materials_router
 from tbd.api.routers.questions import router as questions_router
 from tbd.api.routers.realtime import router as realtime_router
+from tbd.api.routers.recordings import router as recordings_router
 from tbd.api.routers.sessions import router as sessions_router
 from tbd.api.routers.transcripts import router as transcripts_router
 from tbd.api.routers.users import router as users_router
@@ -23,6 +24,7 @@ v1_router.include_router(courses_router)
 v1_router.include_router(jobs_router)
 v1_router.include_router(materials_router)
 v1_router.include_router(questions_router)
+v1_router.include_router(recordings_router)
 v1_router.include_router(realtime_router)
 v1_router.include_router(sessions_router)
 v1_router.include_router(transcripts_router)

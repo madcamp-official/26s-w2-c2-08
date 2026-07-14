@@ -18,6 +18,7 @@ from tbd.schemas.realtime import RealtimeEvent
 PUBLIC_EVENT_TYPES = frozenset(
     {
         "session.updated",
+        "recording.updated",
         "job.updated",
         "question.created",
         "question.updated",

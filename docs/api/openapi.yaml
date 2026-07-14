@@ -2412,9 +2412,10 @@ paths:
       operationId: getSessionRecording
       summary: Session 녹음 메타데이터 조회
       description: |
-        첫 성공 audio.start가 만든 논리 SessionRecording aggregate를 반환한다. 물리 저장물이
-        파일 하나인지 여러 fragment와 manifest인지는 공개하지 않는다. 현재 인증과 Course
-        접근 권한을 매번 다시 확인하며 동의와 역할별 세부 접근 범위는 아직 미정이다.
+        첫 성공 audio.start가 만든 논리 SessionRecording aggregate를 반환한다. 하나의
+        RecordingUpload가 private temporary object를 이어 쓰고 final object로 promote하지만
+        storage key·경로·fragment·manifest는 공개하지 않는다. 현재 인증과 Course 접근 권한을
+        매번 다시 확인하며 MVP에서 현재 Course 멤버는 metadata와 playback을 조회할 수 있다.
         storage key, 서버 경로, fragment key와 manifest는 반환하지 않는다.
       responses:
         "200":
@@ -2432,6 +2433,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/RecordingNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/recording/uploads:
     parameters:
@@ -2441,11 +2444,10 @@ paths:
       tags: [Recordings]
       operationId: createRecordingUpload
       summary: 녹음 resumable upload 초기화
-      x-contract-status: provisional
       description: |
         첫 publisher와 같은 client_stream_id를 사용하는 Course PROFESSOR가 PROCESSING
-        Session의 UPLOAD_PENDING Recording에 active upload를 하나 만든다. codec·container,
-        허용 content_type, 브라우저 로컬 저장 방식, 최대 크기와 정확한 expiry 값은 TBD이다.
+        Session의 UPLOAD_PENDING Recording에 active upload를 하나 만든다. 허용 content type은
+        audio/webm과 audio/mp4이고 total_bytes는 100,000,000 이하이며 expiry는 생성부터 24시간이다.
       parameters:
         - $ref: "#/components/parameters/RequiredIdempotencyKey"
       requestBody:
@@ -2476,10 +2478,14 @@ paths:
           $ref: "#/components/responses/RecordingNotFound"
         "409":
           $ref: "#/components/responses/RecordingUploadConflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedRecordingFormat"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
   /api/v1/recording-uploads/{upload_id}:
     parameters:
@@ -2488,11 +2494,10 @@ paths:
     get:
       tags: [Recordings]
       operationId: getRecordingUploadOffset
-      summary: 녹음 upload offset 조회 초안
-      x-contract-status: provisional
+      summary: 녹음 upload offset 조회
       description: |
-        현재 upload 상태와 offset_bytes를 조회하는 비규범적 placeholder다. 최종 protocol에서
-        GET과 HEAD 중 무엇을 사용할지, offset header와 응답 status는 TBD이다.
+        현재 upload 상태와 서버가 확인한 offset_bytes를 조회한다. 재시작 뒤 재개 위치는 이
+        값이며, upload·playback 권한과 같은 현재 Course 권한을 매 요청 다시 확인한다.
       responses:
         "200":
           description: 현재 RecordingUpload 상태와 byte offset
@@ -2511,15 +2516,31 @@ paths:
           $ref: "#/components/responses/RecordingUploadNotFound"
         "410":
           $ref: "#/components/responses/RecordingUploadExpired"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     patch:
       tags: [Recordings]
       operationId: uploadRecordingChunk
-      summary: 녹음 binary chunk 전송 초안
-      x-contract-status: provisional
+      summary: 녹음 binary chunk 전송
       description: |
-        현재 서버 byte offset부터 녹음 chunk를 이어 쓰는 비규범적 placeholder다. PATCH 사용
-        여부, offset 전달 header, request Content-Type, chunk 크기와 성공 status·응답 offset
-        전달 방식은 TBD이다. 아래 application/octet-stream과 200 응답은 최종 wire 계약이 아니다.
+        Upload-Offset에서 시작하는 최대 8,388,608 bytes의 chunk를 이어 쓴다.
+        X-Chunk-SHA256은 body의 SHA-256 lowercase hex와 일치해야 한다. 같은 offset의
+        경쟁 요청은 하나만 성공하며, 응답의 offset_bytes가 다음 재개 위치다.
+      parameters:
+        - name: Upload-Offset
+          in: header
+          required: true
+          description: 서버가 마지막으로 확인한 다음 write 위치
+          schema:
+            type: integer
+            minimum: 0
+        - name: X-Chunk-SHA256
+          in: header
+          required: true
+          description: body bytes의 lowercase SHA-256 hex digest
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
       requestBody:
         required: true
         content:
@@ -2527,7 +2548,7 @@ paths:
             schema:
               type: string
               format: binary
-              description: 실제 media type과 chunk 크기는 resumable upload protocol에서 확정
+              maxLength: 8388608
       responses:
         "200":
           description: chunk가 수락된 뒤의 임시 RecordingUpload 표현
@@ -2548,8 +2569,14 @@ paths:
           $ref: "#/components/responses/RecordingUploadChunkConflict"
         "410":
           $ref: "#/components/responses/RecordingUploadExpired"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedRecordingFormat"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
   /api/v1/recording-uploads/{upload_id}/complete:
     parameters:
@@ -2559,17 +2586,22 @@ paths:
       tags: [Recordings]
       operationId: completeRecordingUpload
       summary: 녹음 upload 완료와 HQ STT 시작 gate
-      x-contract-status: provisional
       description: |
-        전체 byte 수와 향후 확정할 checksum 규칙을 검증해 Recording을 UPLOADED로 확정한 뒤
+        전체 byte 수와 request sha256을 검증해 Recording을 UPLOADED로 확정한 뒤
         source=RECORDING, status=FINALIZING인 다음 TranscriptVersion과
         RECORDING_TRANSCRIPTION Job을 같은 transaction에서 생성한다. Job은 target RECORDING,
         visibility SHARED, blocks_session_completion=true이며 성공 result는 TRANSCRIPT_VERSION이다.
         upload wire protocol은 provisional이지만 이 처리 결과 계약은 규범적이다.
       parameters:
         - $ref: "#/components/parameters/RequiredIdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordingUploadCompleteRequest"
       x-checksum-mismatch-response:
-        status: TBD
+        status: 422
         code: RECORDING_CHECKSUM_MISMATCH
         message: 녹음 무결성 검증에 실패했습니다.
       responses:
@@ -2592,6 +2624,10 @@ paths:
           $ref: "#/components/responses/RecordingUploadCompleteConflict"
         "410":
           $ref: "#/components/responses/RecordingUploadExpired"
+        "422":
+          $ref: "#/components/responses/RecordingChecksumMismatch"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
   /api/v1/recordings/{recording_id}/playback:
     parameters:
@@ -2603,9 +2639,9 @@ paths:
       summary: 권한 재검증 녹음 playback
       description: |
         UPLOADED인 논리 Recording을 전체 또는 HTTP byte Range로 재생한다. 요청마다 현재 인증과
-        Course 접근을 다시 확인한다. proxy streaming과 권한 확인 뒤 opaque signed delivery
-        URL로 redirect하는 방식, codec·container와 실제 응답 MIME은 TBD이다. 어느 방식도
-        내부 storage key, 서버 경로, fragment key나 manifest를 공개하지 않는다.
+        Course 접근을 다시 확인한다. API는 final object를 proxy stream하며 audio/webm 또는
+        audio/mp4 MIME을 그대로 반환한다. 어느 방식도 내부 storage key, 서버 경로,
+        fragment key나 manifest를 공개하지 않는다.
       parameters:
         - name: Range
           in: header
@@ -2625,7 +2661,11 @@ paths:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
           content:
-            application/octet-stream:
+            audio/webm:
+              schema:
+                type: string
+                format: binary
+            audio/mp4:
               schema:
                 type: string
                 format: binary
@@ -2644,17 +2684,14 @@ paths:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
           content:
-            application/octet-stream:
+            audio/webm:
               schema:
                 type: string
                 format: binary
-        "307":
-          description: opaque signed delivery URL 방식을 선택할 때의 임시 redirect 초안
-          headers:
-            Location:
-              description: 내부 storage key나 서버 경로를 노출하지 않는 짧은 수명 URL
+            audio/mp4:
               schema:
                 type: string
+                format: binary
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2665,6 +2702,10 @@ paths:
           $ref: "#/components/responses/RecordingNotReady"
         "416":
           $ref: "#/components/responses/RangeNotSatisfiable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
 components:
   securitySchemes:
@@ -3122,7 +3163,7 @@ components:
                 current_status: UPLOADING
                 required_status: UPLOADED
     RecordingUploadExpired:
-      description: 녹음 upload가 만료됨. 정확한 expiry 값은 TBD
+      description: 녹음 upload가 생성 시각부터 24시간 뒤 만료됨
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
@@ -3137,7 +3178,7 @@ components:
               request_id: req_01HXYZ
               details: null
     UnsupportedRecordingFormat:
-      description: 지원하지 않는 녹음 codec·container 또는 Content-Type. 지원 목록은 TBD
+      description: 지원하지 않는 녹음 Content-Type. MVP 허용 목록은 audio/webm, audio/mp4
       headers:
         X-Request-ID:
           $ref: "#/components/headers/RequestId"
@@ -3149,6 +3190,21 @@ components:
             error:
               code: UNSUPPORTED_RECORDING_FORMAT
               message: 지원하지 않는 녹음 형식입니다.
+              request_id: req_01HXYZ
+              details: null
+    RecordingChecksumMismatch:
+      description: chunk 또는 전체 녹음 SHA-256이 요청 checksum과 일치하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: RECORDING_CHECKSUM_MISMATCH
+              message: 녹음 무결성 검증에 실패했습니다.
               request_id: req_01HXYZ
               details: null
     RangeNotSatisfiable:
@@ -4315,8 +4371,9 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Session의 논리 녹음 aggregate를 나타내는 안전한 외부 표현이다. 물리 저장물이 단일
-        파일인지 fragment와 manifest인지, storage key와 서버 경로가 무엇인지는 노출하지 않는다.
+        Session의 논리 녹음 aggregate를 나타내는 안전한 외부 표현이다. MVP는 하나의
+        RecordingUpload temporary object를 하나의 final object로 promote하지만 storage key와
+        서버 경로는 노출하지 않는다.
       required:
         - id
         - session_id
@@ -4341,7 +4398,8 @@ components:
           description: recording.updated의 오래된 갱신을 거르기 위한 리소스 버전
         content_type:
           type: [string, "null"]
-          description: upload format 확정 전 또는 아직 upload되지 않았으면 null
+          enum: [audio/webm, audio/mp4, null]
+          description: 아직 upload되지 않았으면 null
         byte_size:
           type: [integer, "null"]
           minimum: 1
@@ -4353,8 +4411,8 @@ components:
         playback_url:
           type: [string, "null"]
           description: |
-            현재 권한으로 UPLOADED 녹음을 조회할 상대 API 경로. 준비 전이거나 접근 정책상
-            재생할 수 없으면 null이며 내부 storage URL을 반환하지 않는다.
+            UPLOADED 녹음을 조회할 상대 API 경로. 준비 전이면 null이며 내부 storage URL을
+            반환하지 않는다. 요청마다 권한을 다시 확인한다.
         created_at:
           type: string
           format: date-time
@@ -4373,12 +4431,11 @@ components:
           description: 첫 audio.start에서 publisher를 claim한 동일한 client stream ID
         content_type:
           type: string
-          minLength: 1
-          description: 허용 codec·container와 MIME 목록은 TBD
+          enum: [audio/webm, audio/mp4]
         total_bytes:
           type: integer
           minimum: 1
-          description: 최대 녹음 크기는 TBD
+          maximum: 100000000
         duration_ms:
           type: integer
           minimum: 0
@@ -4388,8 +4445,8 @@ components:
       type: object
       additionalProperties: false
       description: |
-        resumable upload의 안전한 공개 상태다. 임시 storage 경로, storage key, fragment와
-        manifest는 포함하지 않는다. offset 전달 header와 wire protocol은 아직 미정이다.
+        resumable upload의 안전한 공개 상태다. 임시 storage 경로와 storage key는 포함하지
+        않는다. PATCH는 Upload-Offset·X-Chunk-SHA256 header와 binary body를 사용한다.
       required:
         - id
         - recording_id
@@ -4416,7 +4473,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: 정확한 upload 유효 기간은 TBD
+          description: 생성 시각부터 정확히 24시간 뒤
         created_at:
           type: string
           format: date-time
@@ -4441,6 +4498,16 @@ components:
           description: |
             target RECORDING, visibility SHARED, blocks_session_completion=true인
             RECORDING_TRANSCRIPTION Job. 성공 result는 TRANSCRIPT_VERSION이다.
+
+    RecordingUploadCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [sha256]
+      properties:
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: 전체 temporary object의 lowercase SHA-256 hex digest
 
     LectureMaterial:
       type: object
@@ -7510,7 +7577,7 @@ components:
           type: [string, "null"]
 
 x-recording-contract:
-  status: draft-with-explicit-tbd
+  status: mvp-v1
   live_capture:
     source: same browser microphone source
     branches:
@@ -7525,13 +7592,19 @@ x-recording-contract:
     tab_exit_warning: UI responsibility during capture or upload; release condition is TBD, not a WebSocket control message
   recording:
     public_cardinality: zero before audio.start and exactly one logical SessionRecording after the first successful start
-    physical_storage: TBD whether one object or multiple fragments, rows and a manifest; public cardinality does not decide DB or object-store cardinality
+    physical_storage: one private temporary object per active RecordingUpload promotes to one private final object; RecordingUpload is the logical resumable manifest
     safe_metadata: storage keys, server paths, fragment keys and manifests are never exposed
   upload:
     lifecycle: init, offset lookup, binary chunk transfer, complete
-    provisional_operations:
-      - GET /api/v1/recording-uploads/{upload_id}
-      - PATCH /api/v1/recording-uploads/{upload_id}
+    operations:
+      offset_lookup: GET /api/v1/recording-uploads/{upload_id}
+      chunk: PATCH /api/v1/recording-uploads/{upload_id} with Upload-Offset and X-Chunk-SHA256
+      complete: POST /api/v1/recording-uploads/{upload_id}/complete with whole-object sha256
+    accepted_content_types: [audio/webm, audio/mp4]
+    maximum_total_bytes: 100000000
+    maximum_chunk_bytes: 8388608
+    expiry: 24 hours from upload creation
+    checksum: SHA-256 lowercase hex for every chunk and the complete request
     checksum_error_code: RECORDING_CHECKSUM_MISMATCH
     hq_stt_gate: successful upload complete atomically creates a RECORDING/FINALIZING TranscriptVersion and SHARED blocking RECORDING_TRANSCRIPTION Job
   transcript:
@@ -7553,19 +7626,15 @@ x-recording-contract:
     answer_remap: SESSION_POSTPROCESSING later commits PENDING, SUCCEEDED or FAILED whole-range mapping; failure never rolls back HQ canonical and partial or unmapped detail enum is TBD
   playback:
     endpoint: GET /api/v1/recordings/{recording_id}/playback
-    authorization: revalidated on every request
+    authorization: current Course member revalidated on every request; only the original publisher professor may upload
     range: supports full response and byte Range when UPLOADED
+    delivery: API proxy stream only; no download endpoint or signed redirect
   tbd:
-    - resumable offset lookup GET versus HEAD
-    - chunk method, offset header, request media type, chunk size and success status
-    - checksum algorithm, transport location, verification point and mismatch HTTP status
-    - exact upload expiry duration and cleanup behavior
-    - recording codec, container, accepted content types, browser-local storage and maximum size
-    - physical single object versus fragments and manifest
+    - browser local-storage implementation and MediaRecorder support remain PR-22 scope
     - publisher disconnect lease, reacquisition and explicit takeover
     - transcript DEGRADED threshold, audio stop timeout and event replay window
-    - recording consent, role-based access, retention and deletion
-    - permission-checked proxy playback versus opaque short-lived signed delivery URL
+    - recording consent UX and legal operating policy remain PR-22 scope
+    - final recording retention, deletion and quota release remain PR-28 scope
     - whether the preserved LIVE canonical is eligible as the completed record and Summary final source after RECORDING_TRANSCRIPTION failure or no-result deadline
     - exact per-Job timeout for RECORDING_TRANSCRIPTION, which is excluded from the generic 5-minute postprocessing default while the 10-minute Session deadline remains fixed
     - partial or unmapped Answer remap detail enum and manual recovery policy

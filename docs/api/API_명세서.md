@@ -241,7 +241,7 @@ POST /api/v1/auth/logout
 | `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
-녹음 checksum 불일치의 공개 오류 코드는 `RECORDING_CHECKSUM_MISMATCH`로 고정한다. checksum algorithm, 검증 시점과 이 오류의 HTTP status는 resumable upload protocol과 함께 TBD이다.
+녹음 checksum 불일치의 공개 오류 코드는 `RECORDING_CHECKSUM_MISMATCH`로 고정한다. chunk와 전체 object는 모두 lowercase hexadecimal SHA-256으로 검증하며, 불일치는 `422`를 반환하고 기존 upload bytes·offset은 유지한다.
 
 #### 3.1.1 질문·초안·Chat USER 텍스트 검증
 
@@ -1256,9 +1256,9 @@ GET /api/v1/sessions/{session_id}/recording
 ```
 
 - 첫 성공 `audio.start` 전에는 Recording이 없고, 성공 뒤에는 Session당 외부에 정확히 하나의 논리 Recording aggregate를 만들고 `CAPTURING`으로 전이한다. 같은 `client_stream_id`의 reconnect는 이 Recording을 재사용한다.
-- Recording은 브라우저 로컬 녹음과 upload·HQ STT·playback의 외부 상태를 나타낸다. 이 논리 cardinality는 DB row나 object storage cardinality를 확정하지 않는다. 물리 저장물이 파일 하나인지 여러 fragment·row와 manifest인지는 TBD이며 외부 API에 노출하지 않는다.
+- Recording은 브라우저 로컬 녹음과 upload·HQ STT·playback의 외부 상태를 나타낸다. MVP는 하나의 `RecordingUpload`가 하나의 비공개 temporary object를 이어 쓰고, 완료 시 하나의 final object로 promote하는 논리 manifest를 사용한다. part·fragment 행과 물리 key는 만들거나 외부 API에 노출하지 않는다.
 - 응답은 `id`, `session_id`, 공개 상태, `version`, nullable `content_type`·`byte_size`·`duration_ms`·`playback_url`과 생성·갱신 시각만 포함한다. storage key, 서버 경로, fragment key와 manifest는 포함하지 않는다.
-- 모든 조회에서 현재 인증과 Course 접근 권한을 다시 확인한다. 녹음 동의와 교수자·학생별 세부 접근 범위는 TBD이다.
+- 모든 조회에서 현재 인증과 Course 접근 권한을 다시 확인한다. MVP에서 현재 Course 멤버는 metadata와 playback을 조회할 수 있고, upload는 첫 publisher인 Course `PROFESSOR`만 수행한다. 브라우저는 capture 전에 녹음 동의를 받아야 하지만 동의 UI·보관 정책은 PR-22·PR-28 범위이며 이 HTTP API는 법적 동의를 증명하지 않는다.
 - Recording이 없거나 존재를 공개하지 않으면 `404 RECORDING_NOT_FOUND`를 반환한다.
 
 | 상태             | 의미                                                                |
@@ -1280,41 +1280,47 @@ Content-Type: application/json
 ```json
 {
   "client_stream_id": "stable-client-stream-id",
-  "content_type": "audio/format-tbd",
+  "content_type": "audio/webm",
   "total_bytes": 12345678,
   "duration_ms": 3600000
 }
 ```
 
-- 15.3~15.5절의 init·offset 조회·chunk·complete operation은 모두 provisional 초안이다. resource lifecycle과 오류 의미를 연결하지만 미정인 wire 세부를 규범 계약으로 간주하지 않는다.
 - `Idempotency-Key`는 필수이며 같은 요청의 재실행은 기존 upload를 반환한다.
 - 첫 publisher와 같은 `client_stream_id`를 사용하는 Course `PROFESSOR`만 초기화할 수 있다.
 - Session은 `PROCESSING`, Recording은 `UPLOAD_PENDING`이어야 한다. 아니면 `409 RECORDING_STATE_CONFLICT`를 반환한다.
 - 이미 다른 active upload가 있으면 `409 RECORDING_UPLOAD_CONFLICT`를 반환한다.
-- 성공: `201 Created`. Recording을 `UPLOADING`으로 바꾸고 불투명 upload ID, 현재 byte offset, 전체 byte 수와 만료 시각을 반환한다.
-- codec·container와 허용 `content_type`, 브라우저 로컬 저장 방식, 최대 크기와 정확한 expiry 값은 TBD이다.
+- 허용 `content_type`은 parameter를 제외하고 정규화한 `audio/webm`, `audio/mp4`다. `total_bytes`는 1~100,000,000 bytes, `duration_ms`는 0 이상이어야 한다. 다른 형식은 `415 UNSUPPORTED_RECORDING_FORMAT`, 크기 위반은 `413 FILE_TOO_LARGE`다.
+- 성공: `201 Created`. Recording을 `UPLOADING`으로 바꾸고 불투명 upload ID, 현재 byte offset, 전체 byte 수와 생성 시각부터 정확히 24시간 뒤의 만료 시각을 반환한다.
 
 ### 15.4 upload offset 조회와 chunk 전송
 
 ```http
 GET /api/v1/recording-uploads/{upload_id}
 PATCH /api/v1/recording-uploads/{upload_id}
+Upload-Offset: <현재 서버 offset>
+X-Chunk-SHA256: <64자 lowercase hex>
+Content-Type: application/octet-stream
 ```
 
-- 위 `GET`과 `PATCH`는 resource와 오류 형태를 연결하기 위한 비규범적 protocol 초안이다. offset 조회를 `GET` 또는 `HEAD`로 할지, chunk method·offset header·request Content-Type·응답 status·chunk 크기는 TBD이다.
-- offset 조회는 최소한 upload ID, 상태, `offset_bytes`, `total_bytes`, `expires_at`을 반환해야 한다.
+- `GET`은 upload ID, 상태, `offset_bytes`, `total_bytes`, `expires_at`을 반환한다. 서버 또는 DB 재시작 뒤에도 이 offset이 재개 위치의 진실이다.
+- `PATCH`는 최대 8,388,608 bytes의 binary chunk를 받는다. `Upload-Offset`과 `X-Chunk-SHA256`은 필수이며 chunk checksum은 SHA-256 lowercase hex다.
+- chunk 자체가 8,388,608 bytes를 넘으면 `413 FILE_TOO_LARGE`로 거부한다. `offset + chunk byte`가 `total_bytes`를 넘으면 `409 UPLOAD_OFFSET_MISMATCH`를 반환한다.
 - chunk 요청은 서버가 확인한 현재 byte offset에서만 이어 쓴다. 다른 offset이면 `409 UPLOAD_OFFSET_MISMATCH`와 안전한 현재 offset을 반환한다.
 - upload가 없거나 존재를 공개하지 않으면 `404 RECORDING_UPLOAD_NOT_FOUND`, 만료됐으면 `410 RECORDING_UPLOAD_EXPIRED`를 반환한다.
-- codec·container 검증에 실패하면 `415 UNSUPPORTED_RECORDING_FORMAT`을 반환한다. 검사 시점과 지원 형식은 TBD이다.
+- checksum 형식·chunk checksum 불일치는 `422 RECORDING_CHECKSUM_MISMATCH`를 반환하며 bytes를 이어 쓰지 않는다.
 - 각 요청은 인증, Course 권한과 최초 publisher 연결을 다시 검증한다. 내부 임시 경로와 storage key는 반환하거나 로그에 남기지 않는다.
 
-RecordingUpload의 공개 상태는 `ACTIVE`, `COMPLETED`, `EXPIRED`, `FAILED`이다. 정확한 expiry 값, 만료·실패 후 Recording 전이와 새 upload 재시작 정책은 TBD이다.
+RecordingUpload의 공개 상태는 `ACTIVE`, `COMPLETED`, `EXPIRED`, `FAILED`이다. 만료된 active upload는 temporary object 정리 후 `EXPIRED`로 terminal 처리되고 Recording을 `UPLOAD_PENDING`으로 되돌린다. 실패 terminal도 새 init을 허용하며 동시에 active upload는 하나뿐이다.
 
 ### 15.5 upload 완료
 
 ```http
 POST /api/v1/recording-uploads/{upload_id}/complete
 Idempotency-Key: <key>
+Content-Type: application/json
+
+{"sha256":"<전체 녹음의 64자 lowercase hex>"}
 ```
 
 - `Idempotency-Key`는 필수이다. 동일 요청은 최초 응답을 재사용하고 새 Job을 중복 생성하지 않는다.
@@ -1322,7 +1328,7 @@ Idempotency-Key: <key>
 - 같은 transaction에서 Recording을 `UPLOADED`로 확정하고 `source=RECORDING`, `status=FINALIZING`인 다음 Transcript version과 `RECORDING_TRANSCRIPTION` Job을 생성한다.
 - Job은 `target=RECORDING`, `visibility=SHARED`, `blocks_session_completion=true`이며 성공 후 `result=TRANSCRIPT_VERSION`을 가리킨다.
 - 성공: `202 Accepted`, `UPLOADED` Recording, 생성된 Transcript version과 Job을 반환한다. 같은 멱등 요청은 세 리소스를 그대로 재사용한다.
-- checksum 불일치는 `RECORDING_CHECKSUM_MISMATCH`를 사용한다. checksum algorithm, 전달 위치, 검증 시점과 HTTP status는 TBD이다.
+- 전체 object SHA-256이 request의 `sha256`과 다르면 `422 RECORDING_CHECKSUM_MISMATCH`를 반환하고 Upload는 재시도 가능한 `ACTIVE` 상태를 유지한다.
 - Transcript version·canonical 전환, Segment recording offset과 Gap final 표시는 `RECORDING_TRANSCRIPTION`, 그 후 Answer 재매핑·Knowledge 연결은 `SESSION_POSTPROCESSING` 계약을 따른다.
 
 ### 15.6 녹음 playback
@@ -1332,11 +1338,11 @@ GET /api/v1/recordings/{recording_id}/playback
 Range: bytes=<start>-<end>
 ```
 
-- 요청마다 현재 인증, Course 접근과 향후 녹음 접근 정책을 다시 검증한다.
+- 요청마다 현재 인증과 Course 접근을 다시 검증한다. MVP에서는 현재 Course 멤버가 재생할 수 있고 upload 권한과 분리된 별도 download API는 제공하지 않는다.
 - `UPLOADED` Recording만 재생할 수 있다. 그 전에는 `409 RECORDING_NOT_READY`, 없거나 비가시면 `404 RECORDING_NOT_FOUND`를 반환한다.
 - 전체 재생은 `200 OK`, 유효한 byte Range 재생은 `206 Partial Content`를 사용한다. 범위가 유효하지 않으면 `416 RANGE_NOT_SATISFIABLE`을 반환한다.
-- proxy streaming과 권한 확인 뒤 짧은 opaque signed delivery URL로 redirect하는 방식은 TBD이다. 어느 방식이든 내부 storage key와 서버 경로를 외부에 노출하지 않는다.
-- 응답 MIME은 codec·container 결정 후 확정한다. 별도 녹음 다운로드 API는 추가하지 않으며 Transcript 문장 seek는 9절의 nullable recording offset을 사용한다.
+- API는 final object를 proxy stream한다. `audio/webm` 또는 `audio/mp4` MIME을 유지하고 `Accept-Ranges`, `Content-Length`, 필요한 경우 `Content-Range`를 반환한다. 내부 storage key와 서버 경로를 외부에 노출하지 않는다.
+- Transcript 문장 seek는 9절의 nullable recording offset을 사용한다.
 
 ## 16. WebSocket과 음성 스트리밍
 
