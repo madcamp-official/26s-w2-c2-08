@@ -2,7 +2,7 @@
 
 import asyncio
 import base64
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -193,3 +193,162 @@ def test_concurrent_session_creation_keeps_one_active_class(
     migrated_database_url: str,
 ) -> None:
     asyncio.run(_exercise_concurrent_session_creation(migrated_database_url))
+
+
+async def _seed_session_cursor_pages(
+    database_url: str,
+    *,
+    owner_id: UUID,
+) -> tuple[UUID, UUID, list[UUID], UUID]:
+    """Create two Courses and deterministic history rows without running postprocessing."""
+
+    settings = _settings(database_url)
+    codec = settings.course_join_code_codec
+    assert codec is not None
+    database = create_database(settings)
+    try:
+        async with database.session_factory() as session:
+            async with transaction(session):
+                course, _ = await CourseService(codec).create(
+                    session,
+                    user_id=owner_id,
+                    title="페이지 수업",
+                    semester="2026 여름학기",
+                )
+                other_course, _ = await CourseService(codec).create(
+                    session,
+                    user_id=owner_id,
+                    title="다른 수업",
+                    semester="2026 여름학기",
+                )
+                course_id = course.course.id
+                completed_specs = [
+                    (
+                        UUID("00000000-0000-0000-0000-000000000101"),
+                        datetime(2026, 7, 15, 9, tzinfo=UTC),
+                        date(2026, 7, 1),
+                    ),
+                    (
+                        UUID("00000000-0000-0000-0000-000000000103"),
+                        datetime(2026, 7, 14, 9, tzinfo=UTC),
+                        date(2026, 7, 31),
+                    ),
+                    (
+                        UUID("00000000-0000-0000-0000-000000000102"),
+                        datetime(2026, 7, 14, 9, tzinfo=UTC),
+                        date(2026, 7, 30),
+                    ),
+                    (
+                        UUID("00000000-0000-0000-0000-000000000104"),
+                        datetime(2026, 7, 13, 9, tzinfo=UTC),
+                        date(2026, 7, 29),
+                    ),
+                ]
+                for session_id, started_at, lecture_date in completed_specs:
+                    session.add(
+                        LectureSession(
+                            id=session_id,
+                            course_id=course_id,
+                            created_by_user_id=owner_id,
+                            title=f"완료 {session_id}",
+                            lecture_date=lecture_date,
+                            status="COMPLETED",
+                            started_at=started_at,
+                            ended_at=started_at + timedelta(hours=1),
+                            completed_at=started_at + timedelta(hours=2),
+                            version=1,
+                        )
+                    )
+                ready_id = UUID("00000000-0000-0000-0000-0000000001ff")
+                session.add(
+                    LectureSession(
+                        id=ready_id,
+                        course_id=course_id,
+                        created_by_user_id=owner_id,
+                        title="시작 전 class",
+                        lecture_date=date(2026, 8, 1),
+                        status="READY",
+                        version=1,
+                    )
+                )
+                await session.flush()
+                return (
+                    course_id,
+                    other_course.course.id,
+                    [item[0] for item in completed_specs],
+                    ready_id,
+                )
+    finally:
+        await database.dispose()
+
+
+def test_session_list_uses_scoped_signed_keyset_cursor(
+    migrated_database_url: str,
+) -> None:
+    """Completed history is stable while tampered or cross-scope cursors fail closed."""
+
+    owner_id = asyncio.run(_seed_user(migrated_database_url))
+    outsider_id = asyncio.run(_seed_user(migrated_database_url))
+    course_id, other_course_id, expected_ids, ready_id = asyncio.run(
+        _seed_session_cursor_pages(migrated_database_url, owner_id=owner_id)
+    )
+    current_user = {"id": owner_id}
+    settings = _settings(migrated_database_url)
+    database = create_database(settings)
+    app = create_app(settings=settings, database=database)
+    app.dependency_overrides[get_current_user_id] = lambda: current_user["id"]
+
+    with TestClient(app) as client:
+        first = client.get(
+            f"/api/v1/courses/{course_id}/sessions",
+            params={"status": "COMPLETED", "limit": 2},
+        )
+        assert first.status_code == 200
+        assert [UUID(item["id"]) for item in first.json()["items"]] == expected_ids[:2]
+        cursor = first.json()["next_cursor"]
+        assert isinstance(cursor, str)
+
+        second = client.get(
+            f"/api/v1/courses/{course_id}/sessions",
+            params={"status": "COMPLETED", "limit": 2, "cursor": cursor},
+        )
+        assert second.status_code == 200
+        assert [UUID(item["id"]) for item in second.json()["items"]] == expected_ids[2:]
+        assert second.json()["next_cursor"] is None
+
+        all_statuses = client.get(f"/api/v1/courses/{course_id}/sessions", params={"limit": 10})
+        assert all_statuses.status_code == 200
+        assert UUID(all_statuses.json()["items"][-1]["id"]) == ready_id
+
+        replacement = "A" if cursor[-1] != "A" else "B"
+        invalid_requests = [
+            (
+                f"/api/v1/courses/{course_id}/sessions",
+                {"status": "COMPLETED", "cursor": f"{cursor[:-1]}{replacement}"},
+            ),
+            (
+                f"/api/v1/courses/{other_course_id}/sessions",
+                {"status": "COMPLETED", "cursor": cursor},
+            ),
+            (
+                f"/api/v1/courses/{course_id}/sessions",
+                {"status": "LIVE", "cursor": cursor},
+            ),
+            (
+                f"/api/v1/courses/{course_id}/sessions",
+                {"cursor": cursor},
+            ),
+        ]
+        for path, params in invalid_requests:
+            response = client.get(path, params=params)
+            assert response.status_code == 400
+            assert response.json()["error"]["code"] == "INVALID_CURSOR"
+
+        current_user["id"] = outsider_id
+        forbidden = client.get(f"/api/v1/courses/{course_id}/sessions")
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "COURSE_ACCESS_DENIED"
+
+        missing = client.get(f"/api/v1/courses/{uuid4()}/sessions")
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "RESOURCE_NOT_FOUND"

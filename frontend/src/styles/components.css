@@ -962,6 +962,165 @@
   gap: var(--space-5);
 }
 
+.course-workspace-page {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.course-workspace {
+  display: grid;
+  grid-template-columns: 180px 260px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.course-workspace-nav {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.course-workspace-nav__link {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  font-weight: 800;
+  background: var(--color-surface);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+
+.course-workspace-nav__link:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand-dark);
+}
+
+.course-workspace-nav__link--active {
+  border-color: var(--color-brand);
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+}
+
+.course-class-rail-shell {
+  min-width: 0;
+}
+
+.course-class-rail-shell > summary {
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.course-class-rail,
+.course-class-rail__live,
+.course-class-rail__history,
+.course-class-rail__state {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.course-class-rail {
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.course-class-rail__live,
+.course-class-rail__history {
+  padding: var(--space-5);
+}
+
+.course-class-rail__live {
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-brand-soft);
+}
+
+.course-class-rail__live strong {
+  font-size: 20px;
+}
+
+.course-class-rail__live span,
+.course-class-rail__history > p,
+.course-class-rail__state p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.course-class-rail__session-link {
+  min-height: 44px;
+  align-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-brand-dark);
+  font-weight: 800;
+}
+
+.course-class-rail__heading h2 {
+  margin: var(--space-2) 0 0;
+  font-size: 22px;
+}
+
+.course-class-rail__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-class-rail__list a {
+  display: grid;
+  min-height: 56px;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.course-class-rail__list a:hover {
+  background: var(--color-brand-soft);
+}
+
+.course-class-rail__list span {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.course-workspace__content {
+  min-width: 0;
+}
+
+.course-archive-placeholder {
+  display: grid;
+  min-height: 320px;
+  gap: var(--space-4);
+  align-content: start;
+}
+
+.course-archive-placeholder h2,
+.course-archive-placeholder p {
+  margin: 0;
+}
+
+.course-archive-placeholder h2 {
+  margin-top: var(--space-2);
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: -0.04em;
+}
+
+.course-archive-placeholder p:last-child {
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+
 .current-session-card,
 .professor-controls,
 .student-course-note {
@@ -1813,6 +1972,31 @@
   .record-processing {
     grid-template-columns: 1fr;
   }
+
+  .course-workspace {
+    grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  }
+
+  .course-workspace-nav {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .course-class-rail-shell > summary {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-3);
+  }
+}
+
+@media (min-width: 901px) {
+  .course-class-rail-shell > summary {
+    display: none;
+  }
+
+  .course-class-rail-shell:not([open]) > .course-class-rail {
+    display: grid;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1871,6 +2055,14 @@
 
   .course-grid {
     grid-template-columns: 1fr;
+  }
+
+  .course-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .course-workspace-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .join-code-box {

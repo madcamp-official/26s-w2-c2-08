@@ -6,6 +6,7 @@ export type Course = components['schemas']['Course']
 export type CourseRoleFilter = components['schemas']['CourseRoleFilter']
 export type CourseCreateInput = components['schemas']['CourseCreateRequest']
 export type LectureSession = components['schemas']['LectureSession']
+export type LectureSessionStatus = components['schemas']['LectureSessionStatus']
 export type LectureSessionCreateInput =
   components['schemas']['LectureSessionCreateRequest']
 
@@ -124,13 +125,25 @@ export async function deleteCourse(courseId: string, idempotencyKey: string) {
 
 export async function listCourseSessions(
   courseId: string,
+  {
+    status,
+    cursor,
+    limit = 20,
+  }: {
+    status?: LectureSessionStatus
+    cursor?: string
+    limit?: number
+  } = {},
   signal?: AbortSignal,
 ) {
   try {
     const { data, error, response } = await apiClient.GET(
       '/api/v1/courses/{course_id}/sessions',
       {
-        params: { path: { course_id: courseId }, query: { limit: 20 } },
+        params: {
+          path: { course_id: courseId },
+          query: { status, cursor, limit },
+        },
         signal,
       },
     )

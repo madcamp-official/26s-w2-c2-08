@@ -1,18 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import {
+  Link,
+  useNavigate,
+  useOutletContext,
+  useParams,
+} from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
-import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
+import type { CourseWorkspaceContextValue } from '../course-workspace/context'
 import { deleteCourse, rotateCourseJoinCode } from './api'
-import {
-  courseDetailQueryOptions,
-  courseKeys,
-  courseSessionsQueryOptions,
-} from './queries'
+import { courseKeys } from './queries'
 
 function sessionCopy(status?: string) {
   switch (status) {
@@ -30,8 +31,7 @@ function sessionCopy(status?: string) {
 export function CourseDetailPage() {
   const { courseId = '' } = useParams()
   const navigate = useNavigate()
-  const course = useQuery(courseDetailQueryOptions(courseId))
-  const sessions = useQuery(courseSessionsQueryOptions(courseId))
+  const { course: courseData } = useOutletContext<CourseWorkspaceContextValue>()
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const [rotateOpen, setRotateOpen] = useState(false)
@@ -68,33 +68,6 @@ export function CourseDetailPage() {
     },
   })
 
-  if (course.isPending) {
-    return <StatePanel kind="loading" title="Course를 불러오는 중" />
-  }
-  if (course.error instanceof ApiError && course.error.status === 403) {
-    return (
-      <StatePanel
-        kind="forbidden"
-        title="이 Course에 접근할 권한이 없습니다"
-        description="현재 계정의 Course 멤버십을 확인해 주세요."
-      />
-    )
-  }
-  if (course.error instanceof ApiError && course.error.status === 404) {
-    return <StatePanel kind="not-found" title="Course를 찾을 수 없습니다" />
-  }
-  if (course.isError) {
-    return (
-      <StatePanel
-        kind="error"
-        title="Course를 불러오지 못했습니다"
-        actionLabel="다시 시도"
-        onAction={() => void course.refetch()}
-      />
-    )
-  }
-
-  const courseData = course.data
   const professor = courseData.role === 'PROFESSOR'
   const [sessionState, sessionDescription] = sessionCopy(
     courseData.current_session?.status,
@@ -112,17 +85,6 @@ export function CourseDetailPage() {
 
   return (
     <div className="course-detail-page">
-      <header className="course-detail-hero">
-        <div>
-          <span className="badge">{professor ? '교수자' : '학생'}</span>
-          <h1>{courseData.title}</h1>
-          <p>{courseData.semester}</p>
-        </div>
-        <Link className="button button--ghost" to="/">
-          대시보드로 돌아가기
-        </Link>
-      </header>
-
       <div className="course-detail-grid">
         <section
           className="panel current-session-card"
@@ -217,40 +179,6 @@ export function CourseDetailPage() {
           </aside>
         )}
       </div>
-
-      <section
-        className="panel session-history"
-        aria-labelledby="session-history-title"
-      >
-        <div>
-          <p className="eyebrow">Class history</p>
-          <h2 id="session-history-title">지난 class</h2>
-        </div>
-        {sessions.isPending ? (
-          <p>class 목록을 불러오는 중입니다.</p>
-        ) : sessions.isError ? (
-          <p>
-            class 목록을 불러오지 못했습니다. Course 상태는 계속 확인할 수
-            있습니다.
-          </p>
-        ) : sessions.data.items.filter((item) => item.status === 'COMPLETED')
-            .length === 0 ? (
-          <p>아직 완료된 class가 없습니다.</p>
-        ) : (
-          <ul className="session-history__list">
-            {sessions.data.items
-              .filter((item) => item.status === 'COMPLETED')
-              .map((item) => (
-                <li key={item.id}>
-                  <Link to={`/sessions/${item.id}`}>
-                    <strong>{item.title}</strong>
-                    <span>{item.lecture_date} · 완료</span>
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        )}
-      </section>
 
       {professor && (
         <Dialog

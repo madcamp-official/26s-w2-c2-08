@@ -36,6 +36,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 | Course      | Course 참여             | `COURSE_JOIN_PAGE`       | `course-join.html`           | 확인 가능 |
 | Course      | 교수자 Course           | `COURSE_PAGE_PROF`       | `course-professor.html`      | 확인 가능 |
 | Course      | 학생 Course             | `COURSE_PAGE_STUD`       | `course-student.html`        | 확인 가능 |
+| Course      | Course 기록 workspace   | `COURSE_WORKSPACE_NAV`   | `course-workspace.html`      | 확인 가능 |
 | 수업 준비   | class 생성·PDF          | `CLASS_CREATE_PAGE`      | `class-create.html`          | 확인 가능 |
 | 실시간 수업 | 교수자 실시간 class     | `LIVE_CLASS_PAGE_PROF`   | `class-live-professor.html`  | 확인 가능 |
 | 실시간 수업 | 학생 실시간 class       | `LIVE_CLASS_PAGE_STUD`   | `class-live-student.html`    | 확인 가능 |
@@ -60,6 +61,21 @@ python3 -m http.server 4173 --directory docs/prototypes
 | Material 삭제 경합·이미 삭제      | [`materials=delete-conflict`](class-create.html?stage=ready&materials=delete-conflict), [`materials=delete-missing`](class-create.html?stage=ready&materials=delete-missing)                                                 |
 
 참여 코드는 trim·대문자화 뒤 `[A-Z]{6}`이며 자동 만료되지 않는다. READY Material은 active `N/10`, 파일당 100 MB(100,000,000 bytes), 동일 이름 suffix, 권한 확인 원본 열기와 즉시 detach 목 상태를 제공한다. `PROCESSING` Material만 class 시작을 막고 PDF가 없거나 `UPLOADED`, `READY`, `FAILED`만 있으면 시작 가능하다.
+
+## Course workspace 정책 검토 경로
+
+Course workspace Prototype은 실제 archive API를 호출하지 않는다. 좌측에는 정확히 `PDF 자료`, `Transcript`, `AI 요약`, `질의응답` 네 route만 제공하고, 그 오른쪽 class rail의 `LIVE CLASS` slot을 현재 class 유무와 관계없이 유지한다. 완료 class 목록과 archive 본문은 독립 상태이므로 한 영역 오류가 다른 영역을 가리지 않는다.
+
+| 검토 항목                               | 대표 경로                                                                                                                                                                                                               |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 네 archive route                        | [`PDF 자료`](course-workspace.html?archive=materials), [`Transcript`](course-workspace.html?archive=transcripts), [`AI 요약`](course-workspace.html?archive=summaries), [`질의응답`](course-workspace.html?archive=qna) |
+| LIVE CLASS 실제 상태                    | [`LIVE`](course-workspace.html?session=live), [`READY`](course-workspace.html?session=ready), [`PROCESSING`](course-workspace.html?session=processing), [`없음`](course-workspace.html?session=none)                    |
+| 완료 class 목록 독립 상태               | [`로딩`](course-workspace.html?classes=loading), [`빈 상태`](course-workspace.html?classes=empty), [`오류`](course-workspace.html?classes=error)                                                                        |
+| 선택 archive 본문 독립 상태             | [`로딩`](course-workspace.html?content=loading), [`빈 상태`](course-workspace.html?content=empty), [`오류`](course-workspace.html?content=error)                                                                        |
+| class rail 오류 중 Transcript 본문 유지 | [`classes=error&archive=transcripts`](course-workspace.html?archive=transcripts&classes=error&content=normal)                                                                                                           |
+| archive 오류 중 현재 class 없음 유지    | [`session=none&content=error`](course-workspace.html?archive=qna&session=none&classes=normal&content=error)                                                                                                             |
+
+데스크톱 1440px에서는 archive navigation·class rail·본문을 세 열로, 768px에서는 상단 4열 navigation·접이식 class rail·본문으로 배치한다. 375px에서는 navigation을 2열로 바꾸고 rail과 본문을 한 열로 쌓는다. 모든 주요 동작은 최소 44px이며 기본 공통 focus와 reduced motion 규칙을 따른다.
 
 ## LIVE class 정책 검토 경로
 

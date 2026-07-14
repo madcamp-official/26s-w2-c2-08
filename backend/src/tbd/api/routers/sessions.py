@@ -66,7 +66,10 @@ SessionStatus = Literal["READY", "LIVE", "PROCESSING", "COMPLETED"]
 
 
 def _service(settings: Settings) -> SessionService:
-    return SessionService(timezone_name=settings.app_timezone)
+    return SessionService(
+        timezone_name=settings.app_timezone,
+        auth_secret=settings.auth_secret_key.get_secret_value(),
+    )
 
 
 def _project(lecture_session: object) -> LectureSessionResponse:
@@ -156,6 +159,7 @@ def _raise_domain_error(error: Exception) -> None:
     "/courses/{course_id}/sessions",
     response_model=LectureSessionListResponse,
     responses={
+        400: {"model": ErrorResponse},
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
@@ -173,7 +177,7 @@ async def list_course_sessions(
     """List the current member's classes without relying on WebSocket state."""
 
     try:
-        items = await _service(settings).list_for_member(
+        result = await _service(settings).list_for_member(
             session,
             course_id=course_id,
             user_id=user_id,
@@ -183,7 +187,10 @@ async def list_course_sessions(
         )
     except Exception as exc:
         _raise_domain_error(exc)
-    return LectureSessionListResponse(items=[_project(item) for item in items], next_cursor=None)
+    return LectureSessionListResponse(
+        items=[_project(item) for item in result.items],
+        next_cursor=result.next_cursor,
+    )
 
 
 @router.post(

@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="GOAL Course workspace archive 정적 프로토타입"
+    />
+    <title>GOAL · 알고리즘 · Course workspace</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/course-workspace.css" />
+    <script type="module" src="assets/js/prototype.js"></script>
+    <script type="module" src="assets/js/course-workspace.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#archiveContent">archive 본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 실제 Course archive API를 호출하지 않습니다
+    </div>
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="dashboard.html" aria-label="GOAL 대시보드">
+          <span class="brand__mark" aria-hidden="true">G</span>
+          <span class="brand__copy"
+            ><strong>GOAL</strong><small>God of all lectures</small></span
+          >
+        </a>
+        <nav class="primary-nav" aria-label="주요 메뉴">
+          <a href="dashboard.html">홈</a
+          ><a href="course-student.html" aria-current="page">내 Course</a
+          ><a href="course-workspace.html?archive=materials">Course 기록</a>
+        </nav>
+        <div class="header-actions">
+          <button
+            class="profile-button"
+            type="button"
+            data-profile-trigger
+            aria-expanded="false"
+            aria-controls="profilePopover"
+          >
+            <span class="avatar" aria-hidden="true">김</span
+            ><span class="profile-button__name">김도현</span
+            ><span aria-hidden="true">⌄</span>
+          </button>
+          <nav
+            class="profile-popover"
+            id="profilePopover"
+            data-profile-popover
+            hidden
+          >
+            <div class="profile-popover__summary">
+              <strong>김도현</strong><small>dohyun@example.com</small>
+            </div>
+            <a href="my-info.html">내 정보</a
+            ><a href="main.html?auth=default">로그아웃 상태 보기</a>
+          </nav>
+        </div>
+      </div>
+      <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
+        <a href="dashboard.html">홈</a
+        ><a href="course-student.html" aria-current="page">Course</a
+        ><a href="course-workspace.html?archive=materials">기록</a>
+      </nav>
+    </header>
+
+    <main class="container page-main course-workspace-page" id="mainContent">
+      <nav class="breadcrumb" aria-label="현재 위치">
+        <a href="dashboard.html">대시보드</a><span aria-hidden="true">/</span
+        ><a href="course-student.html">알고리즘</a
+        ><span aria-hidden="true">/</span
+        ><span aria-current="page" data-archive-title>PDF 자료</span>
+      </nav>
+
+      <header class="workspace-heading">
+        <div>
+          <p class="eyebrow">COURSE WORKSPACE · Course 구성원 공통</p>
+          <h1>알고리즘 Course 기록</h1>
+          <p>
+            왼쪽의 네 archive와 class rail은 서로 독립적으로 유지됩니다. 한
+            영역을 불러오지 못해도 이미 확인한 다른 영역은 그대로 남습니다.
+          </p>
+        </div>
+        <aside class="workspace-review-tools" aria-label="Prototype 상태 도구">
+          <div class="workspace-review-tools__row">
+            <strong>LIVE CLASS</strong>
+            <div class="state-switcher" aria-label="현재 class 모의 상태">
+              <button
+                type="button"
+                data-query-param="session"
+                data-query-value="live"
+                aria-pressed="true"
+              >
+                LIVE</button
+              ><button
+                type="button"
+                data-query-param="session"
+                data-query-value="ready"
+                aria-pressed="false"
+              >
+                READY</button
+              ><button
+                type="button"
+                data-query-param="session"
+                data-query-value="processing"
+                aria-pressed="false"
+              >
+                정리 중</button
+              ><button
+                type="button"
+                data-query-param="session"
+                data-query-value="none"
+                aria-pressed="false"
+              >
+                없음
+              </button>
+            </div>
+          </div>
+          <div class="workspace-review-tools__row">
+            <strong>완료 목록</strong>
+            <div class="state-switcher" aria-label="완료 class 목록 모의 상태">
+              <button
+                type="button"
+                data-query-param="classes"
+                data-query-value="normal"
+                aria-pressed="true"
+              >
+                정상</button
+              ><button
+                type="button"
+                data-query-param="classes"
+                data-query-value="loading"
+                aria-pressed="false"
+              >
+                로딩</button
+              ><button
+                type="button"
+                data-query-param="classes"
+                data-query-value="empty"
+                aria-pressed="false"
+              >
+                빈 상태</button
+              ><button
+                type="button"
+                data-query-param="classes"
+                data-query-value="error"
+                aria-pressed="false"
+              >
+                오류
+              </button>
+            </div>
+          </div>
+          <div class="workspace-review-tools__row">
+            <strong>archive</strong>
+            <div class="state-switcher" aria-label="archive 본문 모의 상태">
+              <button
+                type="button"
+                data-query-param="content"
+                data-query-value="normal"
+                aria-pressed="true"
+              >
+                정상</button
+              ><button
+                type="button"
+                data-query-param="content"
+                data-query-value="loading"
+                aria-pressed="false"
+              >
+                로딩</button
+              ><button
+                type="button"
+                data-query-param="content"
+                data-query-value="empty"
+                aria-pressed="false"
+              >
+                빈 상태</button
+              ><button
+                type="button"
+                data-query-param="content"
+                data-query-value="error"
+                aria-pressed="false"
+              >
+                오류
+              </button>
+            </div>
+          </div>
+        </aside>
+      </header>
+
+      <div class="course-workspace">
+        <nav class="course-workspace-nav" aria-label="Course 기록 archive">
+          <a href="?archive=materials" data-archive-link="materials">
+            <span class="course-workspace-nav__icon" aria-hidden="true"
+              >PDF</span
+            ><span>PDF 자료</span>
+          </a>
+          <a href="?archive=transcripts" data-archive-link="transcripts">
+            <span class="course-workspace-nav__icon" aria-hidden="true"
+              >TXT</span
+            ><span>Transcript</span>
+          </a>
+          <a href="?archive=summaries" data-archive-link="summaries">
+            <span class="course-workspace-nav__icon" aria-hidden="true">AI</span
+            ><span>AI 요약</span>
+          </a>
+          <a href="?archive=qna" data-archive-link="qna">
+            <span class="course-workspace-nav__icon" aria-hidden="true"
+              >Q&amp;A</span
+            ><span>질의응답</span>
+          </a>
+        </nav>
+
+        <details class="course-class-rail" open>
+          <summary>class 목록</summary>
+          <div class="course-class-rail__body">
+            <section
+              class="course-class-rail__live"
+              aria-labelledby="liveClassLabel"
+            >
+              <p class="course-class-rail__label" id="liveClassLabel">
+                LIVE CLASS
+              </p>
+              <div
+                class="live-class-slot"
+                id="liveClassSlot"
+                data-demo-state="live"
+                aria-live="polite"
+              >
+                <article data-show-state="live">
+                  <div>
+                    <span class="status-chip status-chip--live">진행 중</span>
+                    <h2>그래프 탐색과 최단 경로</h2>
+                    <p>14:00 시작 · 43분째 진행 중</p>
+                  </div>
+                  <a
+                    class="button button--primary"
+                    href="class-live-student.html"
+                    >LIVE class 입장</a
+                  >
+                </article>
+                <article data-show-state="ready" hidden>
+                  <div>
+                    <span class="status-chip status-chip--info">시작 전</span>
+                    <h2>동적 계획법</h2>
+                    <p>교수자가 class를 시작할 때까지 기다립니다.</p>
+                  </div>
+                  <span class="notice notice--info">READY · 입장 전</span>
+                </article>
+                <article data-show-state="processing" hidden>
+                  <div>
+                    <span class="status-chip status-chip--warning"
+                      >정리 중</span
+                    >
+                    <h2>그리디 알고리즘</h2>
+                    <p>Transcript와 최종 기록을 정리하고 있습니다.</p>
+                  </div>
+                  <a
+                    class="button button--secondary"
+                    href="class-processing.html?role=student"
+                    >정리 상태 보기</a
+                  >
+                </article>
+                <div
+                  class="live-class-slot__empty"
+                  data-show-state="none"
+                  hidden
+                >
+                  <div>
+                    <span class="status-chip status-chip--info"
+                      >현재 class 없음</span
+                    >
+                    <h2>진행 중인 class가 없습니다</h2>
+                    <p>다음 class가 준비되면 이 고정 영역에 표시됩니다.</p>
+                  </div>
+                  <span class="text-small text-muted"
+                    >LIVE로 표시하지 않음</span
+                  >
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="course-class-list"
+              id="completedClassList"
+              data-demo-state="normal"
+              aria-labelledby="completedClassTitle"
+              aria-live="polite"
+            >
+              <div class="course-class-list__heading">
+                <div>
+                  <h2 id="completedClassTitle">완료 class</h2>
+                  <p>실제 시작 시각 최신순</p>
+                </div>
+                <span class="badge">5</span>
+              </div>
+              <div data-show-state="normal">
+                <div class="course-class-list__items">
+                  <a
+                    class="course-class-item"
+                    href="?class=f2"
+                    data-class-select="f2"
+                    aria-current="true"
+                  >
+                    <time datetime="2026-07-10T15:30:00+09:00"
+                      >7월 10일 · 15:30</time
+                    ><strong>합성곱 신경망 심화</strong
+                    ><small>PDF 2 · Transcript 완료</small>
+                  </a>
+                  <a
+                    class="course-class-item"
+                    href="?class=a1"
+                    data-class-select="a1"
+                    aria-current="false"
+                  >
+                    <time datetime="2026-07-10T15:30:00+09:00"
+                      >7월 10일 · 15:30</time
+                    ><strong>합성곱 신경망 기초</strong
+                    ><small>동일 시각 · Session ID tie-break</small>
+                  </a>
+                  <a
+                    class="course-class-item"
+                    href="?class=s8"
+                    data-class-select="s8"
+                    aria-current="false"
+                  >
+                    <time datetime="2026-07-08T13:00:00+09:00"
+                      >7월 8일 · 13:00</time
+                    ><strong>신경망 기초</strong
+                    ><small>요약 완료 · 질문 5</small>
+                  </a>
+                  <a
+                    class="course-class-item"
+                    href="?class=s7"
+                    data-class-select="s7"
+                    aria-current="false"
+                    data-later-class
+                    hidden
+                  >
+                    <time datetime="2026-07-03T14:00:00+09:00"
+                      >7월 3일 · 14:00</time
+                    ><strong>퍼셉트론과 활성화 함수</strong
+                    ><small>다음 cursor에서 추가됨</small>
+                  </a>
+                  <a
+                    class="course-class-item"
+                    href="?class=s6"
+                    data-class-select="s6"
+                    aria-current="false"
+                    data-later-class
+                    hidden
+                  >
+                    <time datetime="2026-06-28T14:00:00+09:00"
+                      >6월 28일 · 14:00</time
+                    ><strong>기계학습 개요</strong
+                    ><small>다음 cursor에서 추가됨</small>
+                  </a>
+                </div>
+                <button
+                  class="button button--secondary button--block"
+                  type="button"
+                  data-class-load-more
+                >
+                  완료 class 더 보기
+                </button>
+              </div>
+              <div data-show-state="loading" hidden aria-busy="true">
+                <div class="rail-state">
+                  <div
+                    class="skeleton skeleton--title"
+                    aria-hidden="true"
+                  ></div>
+                  <div class="skeleton skeleton--line" aria-hidden="true"></div>
+                  <div class="skeleton skeleton--line" aria-hidden="true"></div>
+                  <span class="sr-only"
+                    >완료 class 목록을 불러오는 중입니다.</span
+                  >
+                </div>
+              </div>
+              <div class="rail-state" data-show-state="empty" hidden>
+                <h3>완료된 class가 없습니다</h3>
+                <p>LIVE CLASS 영역은 현재 상태와 관계없이 위에 유지됩니다.</p>
+              </div>
+              <div
+                class="rail-state"
+                data-show-state="error"
+                hidden
+                role="alert"
+              >
+                <h3>완료 class를 불러오지 못했습니다</h3>
+                <p>선택한 archive와 LIVE CLASS 상태는 계속 볼 수 있습니다.</p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-query-param="classes"
+                  data-query-value="normal"
+                >
+                  목록만 다시 시도
+                </button>
+              </div>
+            </section>
+          </div>
+        </details>
+
+        <section
+          class="course-archive"
+          id="archiveContent"
+          data-demo-state="normal"
+          tabindex="-1"
+          aria-labelledby="archiveHeading"
+          aria-live="polite"
+        >
+          <header class="course-archive__heading">
+            <div>
+              <p class="eyebrow">Course 전체 archive</p>
+              <h2 id="archiveHeading" data-archive-title>PDF 자료</h2>
+              <p data-archive-description>
+                모든 class에 현재 연결된 PDF를 모아 봅니다.
+              </p>
+            </div>
+            <span class="badge badge--prototype">Static prototype</span>
+          </header>
+
+          <div data-show-state="normal">
+            <div class="archive-preview" data-archive-panel="materials">
+              <article class="archive-preview-card">
+                <header class="archive-preview-card__header">
+                  <div>
+                    <h3>합성곱 신경망 심화 · 7월 10일</h3>
+                    <p>
+                      현재 class에 연결된 PDF만 표시하는 archive preview입니다.
+                    </p>
+                  </div>
+                  <span class="status-chip status-chip--success">READY</span>
+                </header>
+                <div class="archive-preview-card__meta">
+                  <span>CNN_심화.pdf</span><span>4.8 MB</span><span>PDF</span>
+                </div>
+                <div class="archive-preview-card__actions">
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-toast="inline 원문 열기를 모의했습니다."
+                  >
+                    브라우저에서 열기</button
+                  ><button
+                    class="button button--primary"
+                    type="button"
+                    data-toast="개별 PDF attachment 다운로드를 모의했습니다."
+                  >
+                    PDF 다운로드
+                  </button>
+                </div>
+              </article>
+              <article class="archive-preview-card">
+                <header class="archive-preview-card__header">
+                  <div>
+                    <h3>신경망 기초 · 7월 8일</h3>
+                    <p>실패 파일은 원문 동작 없이 상태만 표시합니다.</p>
+                  </div>
+                  <span class="status-chip status-chip--danger">FAILED</span>
+                </header>
+              </article>
+            </div>
+
+            <div
+              class="archive-preview"
+              data-archive-panel="transcripts"
+              hidden
+            >
+              <article class="archive-preview-card">
+                <header class="archive-preview-card__header">
+                  <div>
+                    <h3>합성곱 신경망 심화 · canonical Transcript</h3>
+                    <p>
+                      timeline은 선택한 class를 펼친 뒤 Session cursor로 따로
+                      불러옵니다. 파일 다운로드는 제공하지 않습니다.
+                    </p>
+                  </div>
+                  <span class="status-chip status-chip--success"
+                    >FINALIZED</span
+                  >
+                </header>
+                <div class="archive-preview-card__meta">
+                  <span>RECORDING provenance</span><span>문장 84개</span
+                  ><span>gap 1개</span>
+                </div>
+                <div class="archive-preview-card__actions">
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-toast="선택한 class timeline의 첫 cursor 조회를 모의했습니다."
+                  >
+                    Transcript 펼치기
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <div class="archive-preview" data-archive-panel="summaries" hidden>
+              <article class="archive-preview-card">
+                <header class="archive-preview-card__header">
+                  <div>
+                    <h3>합성곱 신경망 심화 · FINAL 요약</h3>
+                    <p>
+                      합성곱 계층의 지역 수용 영역과 parameter 공유가 이미지
+                      특징 추출에 주는 효과를 정리했습니다.
+                    </p>
+                  </div>
+                  <span class="status-chip status-chip--success"
+                    >공유 완료</span
+                  >
+                </header>
+                <div class="archive-preview-card__meta">
+                  <span>COURSE_MEMBERS</span><span>FINAL</span
+                  ><span>개인 LIVE 결과 제외</span>
+                </div>
+              </article>
+            </div>
+
+            <div class="archive-preview" data-archive-panel="qna" hidden>
+              <article class="archive-preview-card">
+                <header class="archive-preview-card__header">
+                  <div>
+                    <h3>padding을 적용하면 출력 크기는 어떻게 계산하나요?</h3>
+                    <p>학생 질문 · 작성자 정보 미표시</p>
+                  </div>
+                  <span class="status-chip status-chip--success"
+                    >답변 완료</span
+                  >
+                </header>
+                <div class="archive-preview-card__answer">
+                  <strong>Answer target snapshot</strong>
+                  <p>
+                    입력 크기, kernel, stride와 padding을 식에 대입해 정수 출력
+                    크기를 계산합니다.
+                  </p>
+                </div>
+                <div class="archive-preview-card__actions">
+                  <a
+                    class="button button--secondary"
+                    href="class-ended-student.html#questionSection"
+                    >class 기록에서 보기</a
+                  >
+                </div>
+              </article>
+              <article class="archive-preview-card">
+                <header class="archive-preview-card__header">
+                  <div>
+                    <h3>활성화 함수는 왜 비선형이어야 하나요?</h3>
+                    <p>학생 질문 · 읽기 전용</p>
+                  </div>
+                  <span class="status-chip status-chip--warning">미답변</span>
+                </header>
+              </article>
+            </div>
+          </div>
+
+          <div class="archive-state" data-show-state="loading" hidden>
+            <div class="archive-loading" aria-busy="true">
+              <article class="archive-preview-card">
+                <div class="skeleton skeleton--title" aria-hidden="true"></div>
+                <div class="skeleton skeleton--line" aria-hidden="true"></div>
+                <div class="skeleton skeleton--line" aria-hidden="true"></div>
+              </article>
+              <span class="sr-only" data-archive-title>archive</span>
+              <span class="sr-only">archive 내용을 불러오는 중입니다.</span>
+            </div>
+          </div>
+          <div class="archive-state" data-show-state="empty" hidden>
+            <div class="state-panel">
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">○</span>
+                <h3 data-archive-empty>현재 연결된 자료가 없습니다</h3>
+                <p>
+                  Course와 class rail은 유지하고 이 archive만 비어 있습니다.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            class="archive-state"
+            data-show-state="error"
+            hidden
+            role="alert"
+          >
+            <div class="state-panel">
+              <div class="state-panel__content">
+                <span class="state-panel__icon" aria-hidden="true">!</span>
+                <h3>
+                  <span data-archive-title>archive</span>를 불러오지 못했습니다
+                </h3>
+                <p>
+                  네 archive navigation과 class rail은 그대로 유지합니다. 같은
+                  cursor 요청만 다시 시도합니다.
+                </p>
+                <button
+                  class="button button--secondary"
+                  type="button"
+                  data-query-param="content"
+                  data-query-value="normal"
+                >
+                  이 archive만 다시 시도
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

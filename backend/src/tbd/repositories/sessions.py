@@ -1,9 +1,10 @@
 """Persistence queries and locks for the lecture-session lifecycle."""
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.models.courses import Course, CourseMember
@@ -11,6 +12,14 @@ from tbd.models.materials import LectureMaterial
 from tbd.models.sessions import LectureSession
 
 ACTIVE_SESSION_STATES = ("READY", "LIVE", "PROCESSING")
+
+
+@dataclass(frozen=True)
+class SessionCursorPosition:
+    """The last row of a descending Course Session page."""
+
+    started_at: datetime | None
+    session_id: UUID
 
 
 class SessionRepository:
@@ -61,16 +70,33 @@ class SessionRepository:
         *,
         course_id: UUID,
         status: str | None,
+        after: SessionCursorPosition | None,
         limit: int,
     ) -> list[LectureSession]:
         statement = select(LectureSession).where(LectureSession.course_id == course_id)
         if status is not None:
             statement = statement.where(LectureSession.status == status)
+        if after is not None:
+            if after.started_at is None:
+                statement = statement.where(
+                    LectureSession.started_at.is_(None),
+                    LectureSession.id < after.session_id,
+                )
+            else:
+                statement = statement.where(
+                    or_(
+                        LectureSession.started_at < after.started_at,
+                        and_(
+                            LectureSession.started_at == after.started_at,
+                            LectureSession.id < after.session_id,
+                        ),
+                        LectureSession.started_at.is_(None),
+                    )
+                )
         return list(
             await session.scalars(
                 statement.order_by(
-                    LectureSession.lecture_date.desc(),
-                    LectureSession.started_at.desc().nullsfirst(),
+                    LectureSession.started_at.desc().nullslast(),
                     LectureSession.id.desc(),
                 ).limit(limit)
             )
