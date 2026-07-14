@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +16,7 @@ from tbd.models.enums import (
     TranscriptSource,
     TranscriptStatus,
 )
-from tbd.models.materials import TranscriptVersion
+from tbd.models.materials import SessionRecording, TranscriptVersion
 from tbd.models.questions import AIJob, QuestionClusteringState
 from tbd.models.sessions import LectureSession
 from tbd.repositories.outbox import OutboxRepository
@@ -223,6 +224,19 @@ class SessionService:
         lecture_session.status = "PROCESSING"
         lecture_session.ended_at = timestamp
         lecture_session.version += 1
+        recording = await session.scalar(
+            select(SessionRecording)
+            .where(SessionRecording.session_id == lecture_session.id)
+            .with_for_update()
+        )
+        if recording is not None and recording.status == "CAPTURING":
+            # The PCM socket is not the durable recording object. Preserve the
+            # same logical aggregate for PR-21's resumable browser upload while
+            # immediately fencing further live PCM through Session PROCESSING.
+            recording.status = "UPLOAD_PENDING"
+            recording.capture_ended_at = timestamp
+            recording.live_audio_lease_expires_at = None
+            recording.version += 1
         coordinator = AIJob(
             session_id=lecture_session.id,
             job_type=AIJobType.SESSION_POSTPROCESSING,

@@ -69,7 +69,7 @@
   publisher의 `client_stream_id` HMAC claim과 Recording `CAPTURING` 전이를 같은
   transaction에서 확정한다.
 - 다른 `client_stream_id`는 거부하고 같은 ID의 재연결·resume만 허용한다.
-  lease 만료·재획득·takeover는 미정이다.
+  수락 frame마다 45초 liveness를 갱신하지만 만료가 다른 ID의 takeover를 허용하지 않는다.
 - Recording upload 완결 전에는 HQ STT 후속 처리를 시작하지 않는다. 완료
   transaction은 `RECORDING_TRANSCRIPTION` Job과 RECORDING TranscriptVersion을 만들고,
   검증된 결과만 canonical 전환한다.
@@ -483,6 +483,10 @@ publisher claim, resumable upload의 최종 결과, HQ STT input과 playback met
 | `session_id`                      | `uuid`        |    N | -                   | FK, UNIQUE   | 소속 class                          |
 | `publisher_user_id`               | `uuid`        |    Y | `NULL`              | FK           | 첫 publisher 교수자, 탈퇴 시 익명화 |
 | `publisher_client_stream_id_hash` | `bytea`       |    N | -                   | CHECK        | `client_stream_id` 목적별 HMAC      |
+| `last_received_sequence`          | `bigint`      |    N | `-1`                | CHECK `>= -1`| 영속 ACK 기준 마지막 PCM sequence    |
+| `last_processed_sequence`         | `bigint`      |    N | `-1`                | CHECK        | STT로 넘긴 마지막 PCM sequence       |
+| `last_captured_offset_ms`         | `bigint`      |    N | `0`                 | CHECK `>= 0` | 마지막 수락 frame의 capture offset   |
+| `live_audio_lease_expires_at`     | `timestamptz` |    Y | `NULL`              | -            | 45초 liveness 관측 시각              |
 | `status`                          | `text`        |    N | `'CAPTURING'`       | CHECK        | 공개 Recording 상태                 |
 | `content_type`                    | `text`        |    Y | `NULL`              | CHECK        | finalize 후 검증한 media type       |
 | `byte_size`                       | `bigint`      |    Y | `NULL`              | CHECK `> 0`  | finalize 후 전체 byte               |
@@ -501,6 +505,9 @@ publisher claim, resumable upload의 최종 결과, HQ STT input과 playback met
 - `UNIQUE (session_id)`; Session당 논리 Recording aggregate는 최대 하나다.
 - `UNIQUE (id, session_id)`; HQ STT typed target과 같은 Session 복합 FK의 대상이다.
 - `CHECK (octet_length(publisher_client_stream_id_hash) = 32)`
+- `CHECK (last_received_sequence >= -1)`
+- `CHECK (last_processed_sequence BETWEEN -1 AND last_received_sequence)`
+- `CHECK (last_captured_offset_ms >= 0)`
 - `CHECK (status IN ('CAPTURING', 'UPLOAD_PENDING', 'UPLOADING', 'UPLOADED', 'FAILED'))`
 - `CHECK (byte_size IS NULL OR byte_size > 0)`
 - `CHECK (duration_ms IS NULL OR duration_ms >= 0)`
