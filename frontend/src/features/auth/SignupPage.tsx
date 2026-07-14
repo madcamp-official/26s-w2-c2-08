@@ -4,6 +4,9 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
 import { StatePanel } from '../../components/feedback/StatePanel'
+import { Button } from '../../components/ui/Button'
+import { Field } from '../../components/ui/Field'
+import { AuthPageLayout } from './AuthPageLayout'
 import { registerWithEmailPassword } from './api'
 import { currentUserQueryKey, currentUserQueryOptions } from './queries'
 import { safeReturnTo } from './return-to'
@@ -35,23 +38,32 @@ export function SignupPage() {
 
   function submitRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (registration.isPending) return
     registration.mutate({ display_name: displayName, email, password })
   }
 
-  return (
-    <div className="auth-grid">
-      <section className="auth-copy" aria-labelledby="signup-title">
-        <p className="eyebrow">Email account</p>
-        <h1 className="page-title" id="signup-title">
-          나만의 강의 흐름을 시작하세요.
-        </h1>
-        <p className="page-description">
-          이메일 계정은 Google 로그인과 같은 안전한 서버 Session으로 동작합니다.
-          교수자와 학생 역할은 Course에 참여한 뒤에만 정해집니다.
-        </p>
-      </section>
+  const emailAlreadyRegistered =
+    registration.error instanceof ApiError &&
+    registration.error.code === 'EMAIL_ALREADY_REGISTERED'
+  const emailError = emailAlreadyRegistered
+    ? '이미 등록된 이메일입니다. 기존 로그인 방식을 사용해 주세요.'
+    : undefined
 
-      <section className="panel auth-card" aria-label="이메일 계정 가입">
+  return (
+    <AuthPageLayout
+      description="표시 이름과 이메일로 계정을 만들고, 참여하는 Course마다 교수자 또는 학생 역할로 학습을 시작하세요."
+      eyebrow="Email account"
+      formLabel="이메일 계정 가입"
+      title="나만의 강의 흐름을 시작하세요."
+      titleId="signup-title"
+    >
+      <div className="auth-panel__heading">
+        <p className="eyebrow">Create account</p>
+        <h2>이메일 계정 만들기</h2>
+        <p>가입 후 같은 server Session으로 바로 시작합니다.</p>
+      </div>
+
+      <div className="auth-panel__body">
         {currentUser.isPending && (
           <StatePanel
             kind="loading"
@@ -70,62 +82,76 @@ export function SignupPage() {
         )}
         {unauthenticated && (
           <form
-            className="auth-card__content email-auth-form"
+            aria-busy={registration.isPending}
+            className="auth-form auth-signup-form"
             onSubmit={submitRegistration}
           >
-            <div className="form-field">
-              <label htmlFor={nameId}>표시 이름</label>
+            <Field
+              hint="Course와 강의 기록에 표시할 이름입니다."
+              htmlFor={nameId}
+              label="표시 이름"
+            >
               <input
                 autoComplete="name"
-                id={nameId}
+                disabled={registration.isPending}
                 maxLength={100}
-                onChange={(event) => setDisplayName(event.target.value)}
+                minLength={1}
+                onChange={(event) => {
+                  setDisplayName(event.target.value)
+                  if (registration.isError) registration.reset()
+                }}
                 required
                 value={displayName}
               />
-            </div>
-            <div className="form-field">
-              <label htmlFor={emailId}>이메일</label>
+            </Field>
+            <Field error={emailError} htmlFor={emailId} label="이메일">
               <input
                 autoComplete="email"
-                id={emailId}
-                onChange={(event) => setEmail(event.target.value)}
+                disabled={registration.isPending}
+                maxLength={254}
+                minLength={3}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  if (registration.isError) registration.reset()
+                }}
                 required
                 type="email"
                 value={email}
               />
-            </div>
-            <div className="form-field">
-              <label htmlFor={passwordId}>비밀번호</label>
+            </Field>
+            <Field
+              hint="12자 이상 128자 이하로 입력해 주세요."
+              htmlFor={passwordId}
+              label="비밀번호"
+            >
               <input
                 autoComplete="new-password"
-                id={passwordId}
+                disabled={registration.isPending}
                 maxLength={128}
                 minLength={12}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  if (registration.isError) registration.reset()
+                }}
                 required
                 type="password"
                 value={password}
               />
-              <small>12자 이상 128자 이하로 입력해 주세요.</small>
-            </div>
-            {registration.isError && (
+            </Field>
+            {registration.isError && !emailAlreadyRegistered && (
               <p className="auth-notice auth-notice--warning" role="alert">
-                {registration.error instanceof ApiError &&
-                registration.error.code === 'EMAIL_ALREADY_REGISTERED'
-                  ? '이미 등록된 이메일입니다. 기존 로그인 방식을 사용해 주세요.'
-                  : '계정을 만들지 못했습니다. 입력을 확인한 뒤 다시 시도해 주세요.'}
+                계정을 만들지 못했습니다. 입력을 확인한 뒤 다시 시도해 주세요.
               </p>
             )}
-            <button
-              className="button button--primary"
+            <Button
+              className="auth-submit"
               disabled={registration.isPending}
               type="submit"
             >
               {registration.isPending
                 ? '계정 만드는 중…'
                 : '이메일 계정 만들기'}
-            </button>
+            </Button>
             <p className="auth-switch">
               이미 계정이 있나요?{' '}
               <Link to={`/login?return_to=${encodeURIComponent(returnTo)}`}>
@@ -134,7 +160,7 @@ export function SignupPage() {
             </p>
           </form>
         )}
-      </section>
-    </div>
+      </div>
+    </AuthPageLayout>
   )
 }

@@ -407,6 +407,10 @@
   gap: var(--space-4);
 }
 
+.auth-signup-form {
+  padding-top: var(--space-1);
+}
+
 .auth-submit,
 .auth-form-stack .google-login {
   width: 100%;

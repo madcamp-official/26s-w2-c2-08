@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="GOAL 이메일 계정 가입 프로토타입" />
+    <title>GOAL · 이메일 계정 만들기</title>
+    <link rel="stylesheet" href="assets/css/tokens.css" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/auth.css" />
+    <script type="module" src="assets/js/prototype.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
+    <div class="prototype-bar">
+      Static prototype · 실제 계정·Session을 생성하지 않습니다
+    </div>
+
+    <header class="site-header">
+      <div class="container site-header__inner">
+        <a class="brand" href="main.html" aria-label="GOAL 비로그인 메인">
+          <span class="brand__mark" aria-hidden="true">G</span>
+          <span class="brand__copy">
+            <strong>GOAL</strong>
+            <small>God of all lectures</small>
+          </span>
+        </a>
+        <nav class="primary-nav" aria-label="인증 메뉴">
+          <a href="main.html">서비스 소개</a>
+          <a href="index.html">Prototype 목록</a>
+        </nav>
+        <div class="header-actions">
+          <a class="button button--secondary" href="login.html?return_to=%2F">
+            로그인
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="container prototype-auth-page" id="mainContent">
+      <section class="prototype-auth-intro" aria-labelledby="signupTitle">
+        <div>
+          <p class="eyebrow">EMAIL ACCOUNT</p>
+          <h1 id="signupTitle">나만의 강의 흐름을 시작하세요.</h1>
+          <p>
+            표시 이름과 이메일로 계정을 만들고, 참여하는 Course마다 교수자 또는
+            학생 역할로 학습을 시작하세요.
+          </p>
+        </div>
+        <ol class="prototype-auth-loop" aria-label="GOAL 학습 흐름">
+          <li>
+            <span>01</span>
+            <div>
+              <strong>계정 만들기</strong>
+              <p>필요한 정보만 입력합니다.</p>
+            </div>
+          </li>
+          <li>
+            <span>02</span>
+            <div>
+              <strong>Course 참여</strong>
+              <p>Course마다 역할이 정해집니다.</p>
+            </div>
+          </li>
+          <li>
+            <span>03</span>
+            <div>
+              <strong>학습 시작</strong>
+              <p>강의 흐름과 기록을 이어 갑니다.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section
+        class="panel prototype-auth-panel"
+        aria-labelledby="signupFormTitle"
+      >
+        <header>
+          <p class="eyebrow">CREATE ACCOUNT</p>
+          <h2 id="signupFormTitle">이메일 계정 만들기</h2>
+          <p>가입 후 같은 server Session으로 바로 시작합니다.</p>
+        </header>
+
+        <div
+          class="prototype-auth-flow"
+          id="signupFlow"
+          data-demo-state="default"
+          data-query-state="state"
+          data-query-default="default"
+          aria-live="polite"
+        >
+          <div data-show-state="default">
+            <form
+              class="prototype-auth-form"
+              data-demo-form
+              data-state-target="#signupFlow"
+              data-success-state="submitting"
+              data-success-toast="계정 생성 제출 상태를 표시했습니다."
+              novalidate
+            >
+              <div class="field">
+                <label for="signupName">표시 이름</label>
+                <input
+                  id="signupName"
+                  name="display_name"
+                  type="text"
+                  autocomplete="name"
+                  minlength="1"
+                  maxlength="100"
+                  required
+                  aria-describedby="signupNameHelp signupNameError"
+                />
+                <p class="field__help" id="signupNameHelp">
+                  Course와 강의 기록에 표시할 이름입니다.
+                </p>
+                <p
+                  class="field__error"
+                  id="signupNameError"
+                  data-field-error-for="signupName"
+                  hidden
+                >
+                  표시 이름을 입력해 주세요.
+                </p>
+              </div>
+              <div class="field">
+                <label for="signupEmail">이메일</label>
+                <input
+                  id="signupEmail"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  minlength="3"
+                  maxlength="254"
+                  required
+                  aria-describedby="signupEmailError"
+                />
+                <p
+                  class="field__error"
+                  id="signupEmailError"
+                  data-field-error-for="signupEmail"
+                  hidden
+                >
+                  이메일을 입력해 주세요.
+                </p>
+              </div>
+              <div class="field">
+                <label for="signupPassword">비밀번호</label>
+                <input
+                  id="signupPassword"
+                  name="password"
+                  type="password"
+                  autocomplete="new-password"
+                  minlength="12"
+                  maxlength="128"
+                  required
+                  aria-describedby="signupPasswordHelp signupPasswordError"
+                />
+                <p class="field__help" id="signupPasswordHelp">
+                  12자 이상 128자 이하로 입력해 주세요.
+                </p>
+                <p
+                  class="field__error"
+                  id="signupPasswordError"
+                  data-field-error-for="signupPassword"
+                  hidden
+                >
+                  비밀번호를 입력해 주세요.
+                </p>
+              </div>
+              <button class="button button--primary" type="submit">
+                이메일 계정 만들기
+              </button>
+            </form>
+            <p class="prototype-auth-switch">
+              이미 계정이 있나요?
+              <a href="login.html?return_to=%2F">로그인</a>
+            </p>
+          </div>
+
+          <div class="state-panel" data-show-state="session-checking" hidden>
+            <span class="auth-spinner" aria-hidden="true"></span>
+            <div class="state-panel__content">
+              <h3>기존 로그인 확인 중</h3>
+              <p>남아 있는 server Session을 확인하고 있습니다.</p>
+            </div>
+          </div>
+
+          <div
+            class="state-panel"
+            data-show-state="session-error"
+            hidden
+            role="alert"
+          >
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <div class="state-panel__content">
+              <h3>로그인 상태를 확인하지 못했습니다</h3>
+              <p>네트워크를 확인한 뒤 Session 확인을 다시 시도해 주세요.</p>
+              <button
+                class="button button--secondary"
+                type="button"
+                data-state-action
+                data-state-target="#signupFlow"
+                data-state="session-checking"
+              >
+                다시 확인
+              </button>
+            </div>
+          </div>
+
+          <div class="state-panel" data-show-state="submitting" hidden>
+            <span class="auth-spinner" aria-hidden="true"></span>
+            <div class="state-panel__content">
+              <h3>계정 만드는 중</h3>
+              <p>중복 요청을 만들지 않고 결과를 기다립니다.</p>
+            </div>
+          </div>
+
+          <div
+            class="state-panel"
+            data-show-state="email-exists"
+            hidden
+            role="alert"
+          >
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <div class="state-panel__content">
+              <h3>이미 등록된 이메일입니다</h3>
+              <p>자동 연결을 시도하지 않고 기존 로그인 방식을 안내합니다.</p>
+              <a
+                class="button button--secondary"
+                href="login.html?return_to=%2F"
+              >
+                로그인으로 이동
+              </a>
+            </div>
+          </div>
+
+          <div
+            class="state-panel"
+            data-show-state="validation-error"
+            hidden
+            role="alert"
+          >
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <div class="state-panel__content">
+              <h3>입력 내용을 확인해 주세요</h3>
+              <p>표시 이름·이메일·비밀번호 조건을 다시 확인합니다.</p>
+              <button
+                class="button button--secondary"
+                type="button"
+                data-state-action
+                data-state-target="#signupFlow"
+                data-state="default"
+              >
+                다시 입력
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="state-panel"
+            data-show-state="request-error"
+            hidden
+            role="alert"
+          >
+            <span class="state-panel__icon" aria-hidden="true">!</span>
+            <div class="state-panel__content">
+              <h3>계정을 만들지 못했습니다</h3>
+              <p>내부 오류 정보 없이 잠시 후 재시도할 수 있게 안내합니다.</p>
+              <button
+                class="button button--secondary"
+                type="button"
+                data-state-action
+                data-state-target="#signupFlow"
+                data-state="default"
+              >
+                가입으로 돌아가기
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="state-panel"
+            data-show-state="authenticated"
+            hidden
+            role="status"
+          >
+            <span class="state-panel__icon" aria-hidden="true">✓</span>
+            <div class="state-panel__content">
+              <h3>이메일 계정을 만들었습니다</h3>
+              <p>발급된 Session으로 검증된 return_to 경로에 이동합니다.</p>
+              <a class="button button--primary" href="dashboard.html">
+                대시보드로 이동
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="prototype-auth-controls"
+        aria-labelledby="signupStateTitle"
+      >
+        <div>
+          <p class="eyebrow">REVIEW CONTROLS</p>
+          <h2 id="signupStateTitle">가입 계약 상태</h2>
+        </div>
+        <div
+          class="state-switcher"
+          data-state-switcher
+          data-state-target="#signupFlow"
+          aria-label="가입 상태 선택"
+        >
+          <button type="button" data-state="default" aria-pressed="true">
+            기본
+          </button>
+          <button
+            type="button"
+            data-state="session-checking"
+            aria-pressed="false"
+          >
+            Session 확인
+          </button>
+          <button type="button" data-state="session-error" aria-pressed="false">
+            Session 오류
+          </button>
+          <button type="button" data-state="submitting" aria-pressed="false">
+            제출 중
+          </button>
+          <button type="button" data-state="email-exists" aria-pressed="false">
+            이메일 중복
+          </button>
+          <button
+            type="button"
+            data-state="validation-error"
+            aria-pressed="false"
+          >
+            입력 오류
+          </button>
+          <button type="button" data-state="request-error" aria-pressed="false">
+            요청 오류
+          </button>
+          <button type="button" data-state="authenticated" aria-pressed="false">
+            가입 완료
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <div
+      class="toast-region"
+      data-toast-region
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
+</html>

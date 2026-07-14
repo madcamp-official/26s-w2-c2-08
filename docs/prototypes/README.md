@@ -31,6 +31,7 @@ python3 -m http.server 4173 --directory docs/prototypes
 | ----------- | ----------------------- | ------------------------ | ---------------------------- | --------- |
 | 서비스 진입 | 비로그인 메인           | `MAIN_PAGE`              | `main.html`                  | 확인 가능 |
 | 서비스 진입 | Google·이메일 로그인    | `LOGIN_PAGE`             | `login.html`                 | 확인 가능 |
+| 서비스 진입 | 이메일 계정 가입        | `EMAIL_SIGNUP_PAGE`      | `signup.html`                | 확인 가능 |
 | 서비스 진입 | 로그인 후 대시보드      | `MAIN_PAGE_AUTH`         | `dashboard.html`             | 확인 가능 |
 | 서비스 진입 | 내 정보                 | `MY_INFO_PAGE`           | `my-info.html`               | 확인 가능 |
 | Course      | Course 생성             | `COURSE_CREATE_PAGE`     | `course-create.html`         | 확인 가능 |
@@ -54,6 +55,8 @@ python3 -m http.server 4173 --directory docs/prototypes
 | 비로그인 Session 확인 상태        | [`main.html?session=checking`](main.html?session=checking), [`main.html?session=error`](main.html?session=error)                                                                                                             |
 | 로그인 정보·요청 오류             | [`login.html?state=invalid-credentials`](login.html?state=invalid-credentials), [`login.html?state=request-error`](login.html?state=request-error)                                                                           |
 | 로그인 독립 안내                  | [`취소`](login.html?notice=cancelled), [`로그아웃`](login.html?notice=logged-out), [`탈퇴`](login.html?notice=withdrawn)                                                                                                     |
+| 가입 이메일 중복·입력 오류        | [`signup.html?state=email-exists`](signup.html?state=email-exists), [`signup.html?state=validation-error`](signup.html?state=validation-error)                                                                               |
+| 가입 Session·요청 오류            | [`signup.html?state=session-error`](signup.html?state=session-error), [`signup.html?state=request-error`](signup.html?state=request-error)                                                                                   |
 | 인증 공통 대시보드 빈 목록        | [`dashboard.html?owned=empty&joined=empty`](dashboard.html?owned=empty&joined=empty)                                                                                                                                         |
 | Course 생성·무기한 참여 코드      | [`course-create.html?state=success`](course-create.html?state=success)                                                                                                                                                       |
 | 참여 코드 공통 실패               | [`course-join.html?state=invalid`](course-join.html?state=invalid)                                                                                                                                                           |

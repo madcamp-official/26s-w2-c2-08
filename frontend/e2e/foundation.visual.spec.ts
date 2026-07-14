@@ -41,6 +41,7 @@ const scenarios: FoundationScenario[] = [
     path: '/signup',
     auth: 'signed-out',
     heading: '나만의 강의 흐름을 시작하세요.',
+    checkpoint: { level: 2, name: '이메일 계정 만들기' },
     requiredRequests: ['GET /api/v1/me'],
   },
   {

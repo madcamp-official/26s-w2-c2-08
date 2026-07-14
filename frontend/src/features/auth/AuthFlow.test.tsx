@@ -138,6 +138,72 @@ describe('authentication flow', () => {
     expect(await screen.findByLabelText('표시 이름')).toBeInTheDocument()
   })
 
+  it('creates an email account and restores the requested route', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/register', async ({ request }) => {
+        expect(await request.json()).toEqual({
+          display_name: '김도현',
+          email: 'dohyun@example.test',
+          password: 'correct horse battery staple',
+        })
+        return HttpResponse.json({ user })
+      }),
+    )
+    renderAt('/signup?return_to=/account')
+
+    fireEvent.change(await screen.findByLabelText('표시 이름'), {
+      target: { value: '김도현' },
+    })
+    fireEvent.change(screen.getByLabelText('이메일'), {
+      target: { value: 'dohyun@example.test' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'correct horse battery staple' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '이메일 계정 만들기' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '내 정보' }),
+    ).toBeInTheDocument()
+  })
+
+  it('connects an existing email error to the signup email field', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/register', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'EMAIL_ALREADY_REGISTERED',
+              message: '이미 사용 중인 이메일입니다.',
+              request_id: 'req_signup',
+              details: null,
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    renderAt('/signup')
+
+    fireEvent.change(await screen.findByLabelText('표시 이름'), {
+      target: { value: '김도현' },
+    })
+    const emailInput = screen.getByLabelText('이메일')
+    fireEvent.change(emailInput, {
+      target: { value: 'registered@example.test' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'correct horse battery staple' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '이메일 계정 만들기' }))
+
+    const error = await screen.findByText(
+      '이미 등록된 이메일입니다. 기존 로그인 방식을 사용해 주세요.',
+    )
+    expect(emailInput).toHaveAttribute('aria-invalid', 'true')
+    expect(emailInput).toHaveAttribute('aria-describedby', error.id)
+  })
+
   it('navigates only after logout succeeds', async () => {
     let authenticated = true
     server.use(
