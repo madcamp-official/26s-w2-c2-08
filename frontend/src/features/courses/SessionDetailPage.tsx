@@ -299,7 +299,10 @@ export function SessionDetailPage() {
       )}
       {data.status === 'COMPLETED' && (
         <>
-          <RecordingPlaybackPanel sessionId={data.id} />
+          <RecordingPlaybackPanel
+            sessionId={data.id}
+            professor={Boolean(professor)}
+          />
           <AnswerPanel
             sessionId={data.id}
             professor={professor}

@@ -105,6 +105,23 @@ export async function rotateCourseJoinCode(
   }
 }
 
+export async function deleteCourse(courseId: string, idempotencyKey: string) {
+  try {
+    const { error, response } = await apiClient.DELETE(
+      '/api/v1/courses/{course_id}',
+      {
+        params: {
+          path: { course_id: courseId },
+          header: { 'Idempotency-Key': idempotencyKey },
+        },
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
 export async function listCourseSessions(
   courseId: string,
   signal?: AbortSignal,

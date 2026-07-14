@@ -183,4 +183,83 @@ describe('authentication flow', () => {
       ).toBeInTheDocument(),
     )
   })
+
+  it('ends the current session only after account withdrawal succeeds', async () => {
+    let authenticated = true
+    server.use(
+      http.get('*/api/v1/me', () =>
+        authenticated
+          ? HttpResponse.json(user)
+          : HttpResponse.json(
+              {
+                error: {
+                  code: 'AUTHENTICATION_REQUIRED',
+                  message: '로그인이 필요합니다.',
+                  request_id: 'req_test',
+                  details: null,
+                },
+              },
+              { status: 401 },
+            ),
+      ),
+      http.delete('*/api/v1/me', () => {
+        authenticated = false
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    const router = renderAt('/account')
+
+    fireEvent.click(await screen.findByRole('button', { name: '계정 탈퇴' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: '계정 탈퇴',
+      }),
+    )
+
+    expect(
+      await screen.findByText(
+        '계정을 탈퇴했습니다. 다시 이용하려면 새 계정으로 로그인하세요.',
+      ),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(router.state.location).toMatchObject({
+        pathname: '/login',
+        search: '?withdrawn=1',
+      }),
+    )
+  })
+
+  it('keeps the account screen when an owner Course blocks withdrawal', async () => {
+    server.use(
+      http.get('*/api/v1/me', () => HttpResponse.json(user)),
+      http.delete('*/api/v1/me', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'OWNED_COURSE_REQUIRES_DELETION',
+              message: '생성한 Course를 먼저 삭제해야 합니다.',
+              request_id: 'req_test',
+              details: null,
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    renderAt('/account')
+
+    fireEvent.click(await screen.findByRole('button', { name: '계정 탈퇴' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: '계정 탈퇴',
+      }),
+    )
+
+    expect(
+      await screen.findByText(
+        '생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '내 정보' })).toBeInTheDocument()
+  })
 })
