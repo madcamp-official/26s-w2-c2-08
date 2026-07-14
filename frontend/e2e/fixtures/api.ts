@@ -77,6 +77,14 @@ export async function installApiFixture(
       return
     }
 
+    if (
+      request.method() === 'POST' &&
+      url.pathname === '/api/v1/courses/join'
+    ) {
+      await fulfillJson(route, studentCourse, 201)
+      return
+    }
+
     unhandled.push(key)
     await fulfillJson(
       route,

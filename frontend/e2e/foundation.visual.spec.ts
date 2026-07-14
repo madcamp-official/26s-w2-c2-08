@@ -137,6 +137,31 @@ test('COURSE_CREATE_PAGE success renders from its production mutation', async ({
   })
 })
 
+test('COURSE_JOIN_PAGE success renders from its production mutation', async ({
+  page,
+}, testInfo) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+  const api = await installApiFixture(page, 'signed-in')
+
+  await page.goto('/courses/join')
+  await page.getByLabel('참여 코드').fill('GOALAB')
+  await page.getByRole('button', { name: 'Course 참여하기' }).click()
+  await expect(
+    page.getByRole('heading', {
+      level: 1,
+      name: '운영체제 Course에 참여했습니다',
+    }),
+  ).toBeFocused()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await settleVisualPage(page)
+  await verifyVisualPage(page, testInfo, runtimeErrors, {
+    requiredRequests: ['GET /api/v1/me', 'POST /api/v1/courses/join'],
+    screenId: 'COURSE_JOIN_PAGE_SUCCESS',
+    unhandledRequests: api.unhandled,
+    requested: api.requested,
+  })
+})
+
 test('MY_INFO_PAGE keeps keyboard focus inside the logout dialog and returns it', async ({
   page,
 }) => {

@@ -1295,6 +1295,21 @@
   gap: var(--space-5);
 }
 
+.course-code-field input {
+  min-height: 64px;
+  padding-inline: var(--space-4);
+  color: var(--color-brand-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(24px, 4vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.course-code-field input::placeholder {
+  color: var(--color-line-strong);
+}
+
 .course-onboarding-form__footer {
   display: flex;
   gap: var(--space-5);

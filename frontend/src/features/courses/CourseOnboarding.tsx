@@ -43,7 +43,7 @@ interface CourseFlowResultProps {
   actions: ReactNode
   children?: ReactNode
   description: ReactNode
-  details: Array<{ label: string; value: ReactNode }>
+  details?: Array<{ label: string; value: ReactNode }>
   statusLabel: string
   statusTone?: StatusTone
   title: string
@@ -53,7 +53,7 @@ export function CourseFlowResult({
   actions,
   children,
   description,
-  details,
+  details = [],
   statusLabel,
   statusTone = 'success',
   title,
@@ -74,14 +74,16 @@ export function CourseFlowResult({
           </h1>
           <p>{description}</p>
         </div>
-        <dl className="course-flow-result__summary">
-          {details.map((detail) => (
-            <div key={detail.label}>
-              <dt>{detail.label}</dt>
-              <dd>{detail.value}</dd>
-            </div>
-          ))}
-        </dl>
+        {details.length > 0 && (
+          <dl className="course-flow-result__summary">
+            {details.map((detail) => (
+              <div key={detail.label}>
+                <dt>{detail.label}</dt>
+                <dd>{detail.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         {children}
         <div className="course-flow-result__actions">{actions}</div>
       </Card>
