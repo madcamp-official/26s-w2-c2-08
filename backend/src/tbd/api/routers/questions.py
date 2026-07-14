@@ -27,6 +27,11 @@ from tbd.repositories.idempotency import (
     ProcessingIdempotencyRecord,
     ReplayIdempotencyRecord,
 )
+from tbd.schemas.clustering import (
+    QuestionClusterListResponse,
+    QuestionClusterMemberListResponse,
+    RepresentativeQuestionResponse,
+)
 from tbd.schemas.errors import ErrorResponse
 from tbd.schemas.questions import (
     QuestionCreateRequest,
@@ -34,6 +39,10 @@ from tbd.schemas.questions import (
     QuestionListResponse,
     QuestionReactionState,
     QuestionResponse,
+)
+from tbd.services.question_clusters import (
+    InvalidClusterCursorError,
+    QuestionClusterService,
 )
 from tbd.services.questions import (
     InvalidQuestionCursorError,
@@ -58,10 +67,15 @@ IdempotencyHeader = Annotated[str | None, Header(alias="Idempotency-Key")]
 PROCESSING_LEASE = timedelta(seconds=60)
 QuestionStatus = Literal["OPEN", "SELECTED", "ANSWERED"]
 QuestionSort = Literal["POPULAR", "RECENT"]
+QuestionClusterScope = Literal["CURRENT", "FINAL"]
 
 
 def _service(settings: Settings) -> QuestionService:
     return QuestionService(auth_secret=settings.auth_secret_key.get_secret_value())
+
+
+def _cluster_service(settings: Settings) -> QuestionClusterService:
+    return QuestionClusterService(auth_secret=settings.auth_secret_key.get_secret_value())
 
 
 def _project(question: object, *, reacted_by_me: bool) -> QuestionResponse:
@@ -89,6 +103,8 @@ def _raise_error(error: Exception, *, hide_access: bool = False) -> None:
         raise ApiError(409, "SELF_REACTION_FORBIDDEN", "내 질문에는 반응할 수 없습니다.") from error
     if isinstance(error, InvalidQuestionCursorError):
         raise ApiError(400, "INVALID_CURSOR", "질문 목록 커서를 다시 확인해 주세요.") from error
+    if isinstance(error, InvalidClusterCursorError):
+        raise ApiError(400, "INVALID_CURSOR", "클러스터 목록 커서를 다시 확인해 주세요.") from error
     if isinstance(error, QuestionContentValidationError):
         raise ApiError(
             422,
@@ -102,6 +118,87 @@ def _raise_error(error: Exception, *, hide_access: bool = False) -> None:
             },
         ) from error
     raise error
+
+
+@router.get(
+    "/sessions/{session_id}/question-clusters",
+    response_model=QuestionClusterListResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def list_question_clusters(
+    session_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+    scope: Annotated[QuestionClusterScope, Query()] = "CURRENT",
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> QuestionClusterListResponse:
+    try:
+        return await _cluster_service(settings).list_for_member(
+            session,
+            session_id=session_id,
+            user_id=user_id,
+            scope=scope,
+            cursor=cursor,
+            limit=limit,
+        )
+    except Exception as exc:
+        _raise_error(exc)
+
+
+@router.get(
+    "/sessions/{session_id}/question-clusters/{cluster_id}/members",
+    response_model=QuestionClusterMemberListResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def list_question_cluster_members(
+    session_id: UUID,
+    cluster_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> QuestionClusterMemberListResponse:
+    try:
+        return await _cluster_service(settings).list_members_for_member(
+            session,
+            session_id=session_id,
+            cluster_id=cluster_id,
+            user_id=user_id,
+            cursor=cursor,
+            limit=limit,
+        )
+    except Exception as exc:
+        _raise_error(exc, hide_access=True)
+
+
+@router.get(
+    "/representative-questions/{representative_question_id}",
+    response_model=RepresentativeQuestionResponse,
+    responses={401: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+)
+async def get_representative_question(
+    representative_question_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+) -> RepresentativeQuestionResponse:
+    try:
+        return await _cluster_service(settings).get_representative_for_member(
+            session, representative_id=representative_question_id, user_id=user_id
+        )
+    except Exception as exc:
+        _raise_error(exc, hide_access=True)
 
 
 async def _acquire(

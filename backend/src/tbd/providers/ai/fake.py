@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 
+from tbd.providers.ai.clustering import ClusteringInput, ClusterSuggestion
 from tbd.providers.ai.contracts import (
     AIProviderError,
     EmbeddingRequest,
@@ -88,6 +90,23 @@ class FakeEmbeddingProvider:
         )
 
 
+class FakeQuestionClusteringProvider:
+    """Group Questions by a deterministic first Korean/word token for tests."""
+
+    async def cluster(self, inputs: tuple[ClusteringInput, ...]) -> tuple[ClusterSuggestion, ...]:
+        groups: dict[str, list[ClusteringInput]] = {}
+        for item in inputs:
+            token = _cluster_token(item.content)
+            groups.setdefault(token, []).append(item)
+        return tuple(
+            ClusterSuggestion(
+                representative=f"{token} 관련 질문",
+                question_ids=tuple(item.question_id for item in grouped),
+            )
+            for token, grouped in sorted(groups.items())
+        )
+
+
 async def _apply_behavior(behavior: FakeProviderBehavior) -> None:
     if behavior.delay.total_seconds() > 0:
         await asyncio.sleep(behavior.delay.total_seconds())
@@ -98,3 +117,8 @@ async def _apply_behavior(behavior: FakeProviderBehavior) -> None:
 def _vector_for(purpose: str, text: str, dimension: int) -> tuple[float, ...]:
     digest = hashlib.sha256(f"{purpose}\x1f{text}".encode()).digest()
     return tuple((digest[index % len(digest)] / 127.5) - 1.0 for index in range(dimension))
+
+
+def _cluster_token(content: str) -> str:
+    match = re.search(r"[0-9A-Za-z가-힣]+", content)
+    return match.group(0).casefold() if match else "기타"

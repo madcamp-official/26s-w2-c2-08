@@ -9,6 +9,10 @@ export type QuestionCreateResponse =
 export type QuestionReactionState =
   components['schemas']['QuestionReactionState']
 export type QuestionSort = components['schemas']['QuestionSort']
+export type QuestionClusterListResponse =
+  components['schemas']['QuestionClusterListResponse']
+export type QuestionClusterMemberListResponse =
+  components['schemas']['QuestionClusterMemberListResponse']
 
 interface ListQuestionsInput {
   sessionId: string
@@ -38,6 +42,56 @@ export async function listSessionQuestions({
     )
     if (error) throw apiErrorFromResponse(response, error)
     if (!data) throw new Error('질문 목록 응답이 비어 있습니다.')
+    return data
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
+export async function listQuestionClusters(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<QuestionClusterListResponse> {
+  try {
+    const { data, error, response } = await apiClient.GET(
+      '/api/v1/sessions/{session_id}/question-clusters',
+      {
+        params: {
+          path: { session_id: sessionId },
+          query: { scope: 'CURRENT', limit: 20 },
+        },
+        signal,
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    if (!data) throw new Error('클러스터 목록 응답이 비어 있습니다.')
+    // OpenAPI's conditional FINAL schema is represented as a wider union by
+    // openapi-typescript. This request fixes scope=CURRENT, so the generated
+    // runtime response is the public list projection used by this feature.
+    return data as unknown as QuestionClusterListResponse
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
+export async function listQuestionClusterMembers(
+  sessionId: string,
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<QuestionClusterMemberListResponse> {
+  try {
+    const { data, error, response } = await apiClient.GET(
+      '/api/v1/sessions/{session_id}/question-clusters/{cluster_id}/members',
+      {
+        params: {
+          path: { session_id: sessionId, cluster_id: clusterId },
+          query: { limit: 20 },
+        },
+        signal,
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    if (!data) throw new Error('클러스터 구성원 응답이 비어 있습니다.')
     return data
   } catch (error) {
     throw normalizeApiError(error)

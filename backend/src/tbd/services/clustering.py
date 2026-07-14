@@ -1,0 +1,466 @@
+"""Fenced LIVE incremental Question clustering worker."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from tbd.jobs.kernel import JobKernel
+from tbd.models.clustering import AIRepresentativeQuestion, QuestionCluster, QuestionClusterMember
+from tbd.models.enums import AIJobStatus, AIJobType, AIJobVisibility, LectureSessionStatus
+from tbd.models.questions import AIJob, Question, QuestionClusteringState
+from tbd.models.sessions import LectureSession
+from tbd.providers.ai.clustering import (
+    ClusteringInput,
+    ClusterSuggestion,
+    QuestionClusteringProvider,
+)
+from tbd.repositories.jobs import ClaimedJob
+from tbd.repositories.outbox import OutboxRepository
+from tbd.services.questions import QuestionService
+
+CLUSTERING_LEASE = timedelta(minutes=2)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedClusteringWork:
+    job_id: UUID
+    session_id: UUID
+    attempt: int
+    run_token: UUID
+    input_through_sequence: int
+    base_revision: int
+    inputs: tuple[ClusteringInput, ...]
+
+
+class QuestionClusteringWorker:
+    """Process one immutable LIVE watermark and publish a fenced generation."""
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        provider: QuestionClusteringProvider,
+        *,
+        kernel: JobKernel | None = None,
+        outbox: OutboxRepository | None = None,
+    ) -> None:
+        self.session_factory = session_factory
+        self.provider = provider
+        self.kernel = kernel or JobKernel()
+        self.outbox = outbox or OutboxRepository()
+
+    async def run_once(self, *, now: datetime | None = None) -> bool:
+        timestamp = now or datetime.now(UTC)
+        await self._requeue_one_retry(timestamp)
+        claimed = await self._claim(timestamp)
+        if claimed is None:
+            return False
+        try:
+            suggestions = await self.provider.cluster(claimed.inputs)
+            self._validate_partition(claimed.inputs, suggestions)
+        except Exception:
+            await self._fail(claimed, timestamp)
+        else:
+            await self._succeed(claimed, suggestions, timestamp)
+        return True
+
+    async def _claim(self, now: datetime) -> ClaimedClusteringWork | None:
+        async with self.session_factory() as session:
+            async with session.begin():
+                job = await session.scalar(
+                    select(AIJob)
+                    .where(
+                        AIJob.job_type == AIJobType.QUESTION_CLUSTERING,
+                        AIJob.clustering_mode == "LIVE_INCREMENTAL",
+                        AIJob.status == AIJobStatus.PENDING,
+                        AIJob.available_at <= now,
+                    )
+                    .order_by(AIJob.available_at, AIJob.created_at)
+                    .limit(1)
+                )
+                if job is None:
+                    return None
+                lecture_session = await session.scalar(
+                    select(LectureSession)
+                    .where(LectureSession.id == job.session_id)
+                    .with_for_update()
+                )
+                state = await session.scalar(
+                    select(QuestionClusteringState)
+                    .where(QuestionClusteringState.session_id == job.session_id)
+                    .with_for_update()
+                )
+                if (
+                    lecture_session is None
+                    or state is None
+                    or lecture_session.status != LectureSessionStatus.LIVE
+                    or job.input_through_sequence is None
+                    or job.base_revision is None
+                ):
+                    await self.kernel.supersede(session, job.id, now=now)
+                    return None
+                run = await self.kernel.claim_shared_by_id(
+                    session,
+                    job.id,
+                    now=now,
+                    lease_duration=CLUSTERING_LEASE,
+                    job_type=AIJobType.QUESTION_CLUSTERING,
+                )
+                if run is None:
+                    return None
+                state.last_job_id = job.id
+                state.last_job_attempt = job.attempt
+                state.last_job_status = str(AIJobStatus.RUNNING)
+                await self._emit_state(session, state, active=job)
+                questions = tuple(
+                    await session.scalars(
+                        select(Question)
+                        .where(
+                            Question.session_id == job.session_id,
+                            Question.clustering_sequence > state.applied_sequence,
+                            Question.clustering_sequence <= job.input_through_sequence,
+                        )
+                        .order_by(Question.clustering_sequence)
+                    )
+                )
+                return ClaimedClusteringWork(
+                    job_id=run.job_id,
+                    session_id=run.session_id,
+                    attempt=run.attempt,
+                    run_token=run.run_token,
+                    input_through_sequence=job.input_through_sequence,
+                    base_revision=job.base_revision,
+                    inputs=tuple(
+                        ClusteringInput(question_id=q.id, content=q.content) for q in questions
+                    ),
+                )
+
+    async def _requeue_one_retry(self, now: datetime) -> bool:
+        """Move one retry-reserved LIVE row to its next fenced attempt.
+
+        The retry preserves the original watermark and revision.  Questions
+        committed while it is reserved remain coalesced for the fresh Job
+        created only after this attempt succeeds.
+        """
+
+        async with self.session_factory() as session:
+            async with session.begin():
+                candidate = await session.execute(
+                    select(QuestionClusteringState.session_id, QuestionClusteringState.retry_job_id)
+                    .where(QuestionClusteringState.retry_job_id.is_not(None))
+                    .order_by(
+                        QuestionClusteringState.updated_at, QuestionClusteringState.session_id
+                    )
+                    .limit(1)
+                )
+                row = candidate.first()
+                if row is None or row.retry_job_id is None:
+                    return False
+                lecture_session = await session.scalar(
+                    select(LectureSession)
+                    .where(LectureSession.id == row.session_id)
+                    .with_for_update()
+                )
+                state = await session.scalar(
+                    select(QuestionClusteringState)
+                    .where(QuestionClusteringState.session_id == row.session_id)
+                    .with_for_update()
+                )
+                if (
+                    lecture_session is None
+                    or state is None
+                    or state.retry_job_id != row.retry_job_id
+                ):
+                    return False
+                if lecture_session.status != LectureSessionStatus.LIVE:
+                    await self.kernel.supersede(session, row.retry_job_id, now=now)
+                    state.retry_job_id = None
+                    state.last_job_status = str(AIJobStatus.SUPERSEDED)
+                    await self._emit_state(session, state, active=None)
+                    return True
+                job = await session.get(AIJob, row.retry_job_id, with_for_update=True)
+                if (
+                    job is None
+                    or job.status != AIJobStatus.FAILED
+                    or job.clustering_mode != "LIVE_INCREMENTAL"
+                    or job.input_through_sequence is None
+                    or job.base_revision != state.current_revision
+                    or job.input_through_sequence <= state.applied_sequence
+                ):
+                    return False
+                requeued = await self.kernel.retry_failed(session, job.id, now=now)
+                if requeued is None:
+                    return False
+                state.retry_job_id = None
+                state.last_job_id = requeued.id
+                state.last_job_attempt = requeued.attempt
+                state.last_job_status = str(AIJobStatus.PENDING)
+                await self._emit_state(session, state, active=requeued)
+                return True
+
+    async def _succeed(
+        self,
+        claimed: ClaimedClusteringWork,
+        suggestions: tuple[ClusterSuggestion, ...],
+        now: datetime,
+    ) -> None:
+        async with self.session_factory() as session:
+            async with session.begin():
+                lecture_session = await session.scalar(
+                    select(LectureSession)
+                    .where(LectureSession.id == claimed.session_id)
+                    .with_for_update()
+                )
+                state = await session.scalar(
+                    select(QuestionClusteringState)
+                    .where(QuestionClusteringState.session_id == claimed.session_id)
+                    .with_for_update()
+                )
+                job = await session.scalar(
+                    select(AIJob).where(AIJob.id == claimed.job_id).with_for_update()
+                )
+                if (
+                    job is None
+                    or job.status != AIJobStatus.RUNNING
+                    or job.attempt != claimed.attempt
+                    or job.run_token != claimed.run_token
+                ):
+                    return
+                if (
+                    lecture_session is None
+                    or state is None
+                    or lecture_session.status != LectureSessionStatus.LIVE
+                    or state.current_revision != claimed.base_revision
+                ):
+                    await self.kernel.supersede(session, job.id, now=now)
+                    if state is not None:
+                        state.retry_job_id = None
+                        state.last_job_id = job.id
+                        state.last_job_attempt = job.attempt
+                        state.last_job_status = str(AIJobStatus.SUPERSEDED)
+                        await self._emit_state(session, state, active=None)
+                    return
+                generation = (state.current_generation or 0) + 1
+                previous = (
+                    list(
+                        await session.scalars(
+                            select(QuestionCluster)
+                            .where(
+                                QuestionCluster.session_id == claimed.session_id,
+                                QuestionCluster.generation == state.current_generation,
+                            )
+                            .order_by(QuestionCluster.ordinal)
+                        )
+                    )
+                    if state.current_generation
+                    else []
+                )
+                ordinal = 0
+                for old in previous:
+                    copied = QuestionCluster(
+                        logical_cluster_id=old.logical_cluster_id,
+                        session_id=old.session_id,
+                        representative_question_id=old.representative_question_id,
+                        generation=generation,
+                        ordinal=ordinal,
+                        is_final=False,
+                        created_by_job_id=job.id,
+                        created_by_job_attempt=job.attempt,
+                    )
+                    session.add(copied)
+                    await session.flush()
+                    members = await session.scalars(
+                        select(QuestionClusterMember)
+                        .where(QuestionClusterMember.cluster_id == old.id)
+                        .order_by(QuestionClusterMember.position)
+                    )
+                    for member in members:
+                        session.add(
+                            QuestionClusterMember(
+                                cluster_id=copied.id,
+                                session_id=copied.session_id,
+                                generation=generation,
+                                position=member.position,
+                                question_id=member.question_id,
+                                representative_question_id=member.representative_question_id,
+                            )
+                        )
+                    ordinal += 1
+                for suggestion in suggestions:
+                    representative = AIRepresentativeQuestion(
+                        session_id=claimed.session_id,
+                        text=suggestion.representative,
+                        status="OPEN",
+                        lifecycle_status="ACTIVE",
+                        created_by_job_id=job.id,
+                        created_by_job_attempt=job.attempt,
+                        created_in_generation=generation,
+                        version=1,
+                    )
+                    session.add(representative)
+                    await session.flush()
+                    cluster = QuestionCluster(
+                        logical_cluster_id=uuid4(),
+                        session_id=claimed.session_id,
+                        representative_question_id=representative.id,
+                        generation=generation,
+                        ordinal=ordinal,
+                        is_final=False,
+                        created_by_job_id=job.id,
+                        created_by_job_attempt=job.attempt,
+                    )
+                    session.add(cluster)
+                    await session.flush()
+                    for position, question_id in enumerate(suggestion.question_ids):
+                        session.add(
+                            QuestionClusterMember(
+                                cluster_id=cluster.id,
+                                session_id=claimed.session_id,
+                                generation=generation,
+                                position=position,
+                                question_id=question_id,
+                            )
+                        )
+                    ordinal += 1
+                run = self._run_from_job(job)
+                if not await self.kernel.succeed(session, run, now=now):
+                    return
+                state.applied_sequence = claimed.input_through_sequence
+                state.current_revision += 1
+                state.current_generation = generation
+                state.last_job_id, state.last_job_attempt, state.last_job_status = (
+                    job.id,
+                    job.attempt,
+                    "SUCCEEDED",
+                )
+                state.retry_job_id = None
+                for old in previous:
+                    await session.delete(old)
+                next_job = await self._enqueue_next_job(session, state)
+                await self._emit_state(session, state, active=next_job)
+
+    async def _fail(self, claimed: ClaimedClusteringWork, now: datetime) -> None:
+        async with self.session_factory() as session:
+            async with session.begin():
+                job = await session.scalar(
+                    select(AIJob).where(AIJob.id == claimed.job_id).with_for_update()
+                )
+                state = await session.scalar(
+                    select(QuestionClusteringState)
+                    .where(QuestionClusteringState.session_id == claimed.session_id)
+                    .with_for_update()
+                )
+                lecture_session = await session.scalar(
+                    select(LectureSession)
+                    .where(LectureSession.id == claimed.session_id)
+                    .with_for_update()
+                )
+                if (
+                    job is None
+                    or state is None
+                    or job.attempt != claimed.attempt
+                    or job.run_token != claimed.run_token
+                ):
+                    return
+                if job.status != AIJobStatus.RUNNING:
+                    return
+                if (
+                    lecture_session is None
+                    or lecture_session.status != LectureSessionStatus.LIVE
+                    or state.current_revision != claimed.base_revision
+                ):
+                    await self.kernel.supersede(session, job.id, now=now)
+                    state.retry_job_id = None
+                    state.last_job_id = job.id
+                    state.last_job_attempt = job.attempt
+                    state.last_job_status = str(AIJobStatus.SUPERSEDED)
+                    await self._emit_state(session, state, active=None)
+                    return
+                run = self._run_from_job(job)
+                if await self.kernel.fail(
+                    session,
+                    run,
+                    error_code="QUESTION_CLUSTERING_FAILED",
+                    error_message="질문 분류를 완료하지 못했습니다.",
+                    retryable=True,
+                    now=now,
+                ):
+                    state.retry_job_id = job.id
+                    state.last_job_id, state.last_job_attempt, state.last_job_status = (
+                        job.id,
+                        job.attempt,
+                        "FAILED",
+                    )
+                    await self._emit_state(session, state, active=None)
+
+    async def _enqueue_next_job(
+        self, session: AsyncSession, state: QuestionClusteringState
+    ) -> AIJob | None:
+        """Schedule exactly one fresh watermark after a successful coalesced run."""
+
+        if state.requested_sequence <= state.applied_sequence:
+            return None
+        next_job = AIJob(
+            session_id=state.session_id,
+            job_type=AIJobType.QUESTION_CLUSTERING,
+            visibility=AIJobVisibility.SHARED,
+            status=AIJobStatus.PENDING,
+            attempt=1,
+            version=1,
+            clustering_mode="LIVE_INCREMENTAL",
+            input_through_sequence=state.requested_sequence,
+            base_revision=state.current_revision,
+            blocks_session_completion=False,
+            retryable=True,
+        )
+        await self.kernel.enqueue(session, next_job)
+        state.last_job_id = next_job.id
+        state.last_job_attempt = next_job.attempt
+        state.last_job_status = str(AIJobStatus.PENDING)
+        return next_job
+
+    async def _emit_state(
+        self,
+        session: AsyncSession,
+        state: QuestionClusteringState,
+        *,
+        active: AIJob | None,
+    ) -> None:
+        payload = QuestionService.project_clustering_state(state, active=active).model_dump(
+            mode="json"
+        )
+        await self.outbox.enqueue(
+            session,
+            session_id=state.session_id,
+            partition_key=f"session:{state.session_id}",
+            event_type="clustering.updated",
+            resource_version=max(1, state.requested_sequence),
+            payload=payload,
+        )
+
+    @staticmethod
+    def _run_from_job(job: AIJob) -> ClaimedJob:
+        if job.run_token is None:
+            raise ValueError("running clustering job is missing its run token")
+        return ClaimedJob(
+            job_id=job.id,
+            session_id=job.session_id,
+            attempt=job.attempt,
+            run_token=job.run_token,
+            job_type=str(job.job_type),
+        )
+
+    @staticmethod
+    def _validate_partition(
+        inputs: tuple[ClusteringInput, ...], suggestions: tuple[ClusterSuggestion, ...]
+    ) -> None:
+        expected = {item.question_id for item in inputs}
+        actual = [
+            question_id for suggestion in suggestions for question_id in suggestion.question_ids
+        ]
+        if set(actual) != expected or len(actual) != len(set(actual)):
+            raise ValueError("clustering output must partition inputs exactly once")

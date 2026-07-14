@@ -1535,6 +1535,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/question-clusters:
     parameters:
@@ -1585,6 +1587,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/question-clusters/{cluster_id}/members:
     parameters:
@@ -1624,6 +1628,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/answers:
     parameters:
