@@ -344,3 +344,98 @@ def test_me_updates_last_seen_without_extending_expiry(migrated_database_url: st
         assert before is not None and after is not None
         assert after[0] == before[0]
         assert after[1] > before[1]
+
+
+def test_email_registration_and_login_share_the_server_session_contract(
+    migrated_database_url: str,
+) -> None:
+    """A local account can create Course-capable authentication without Google."""
+
+    client, _, settings = _client(migrated_database_url)
+    crypto = AuthCrypto(settings.auth_secret_key.get_secret_value())
+    payload = {
+        "display_name": "이메일 사용자",
+        "email": "  STUDENT@Example.Test ",
+        "password": "correct horse battery staple",
+    }
+    with client:
+        forbidden = client.post("/api/v1/auth/email/register", json=payload)
+        registered = client.post(
+            "/api/v1/auth/email/register",
+            json=payload,
+            headers={"Origin": "http://localhost:5173"},
+        )
+        first_token = client.cookies.get("goal_session")
+
+        assert forbidden.status_code == 403
+        assert registered.status_code == 201
+        assert registered.json()["user"] == {
+            "id": registered.json()["user"]["id"],
+            "display_name": "이메일 사용자",
+            "email": "student@example.test",
+            "avatar_url": None,
+        }
+        assert first_token is not None
+
+        client.cookies.clear()
+        failed = client.post(
+            "/api/v1/auth/email/login",
+            json={"email": "student@example.test", "password": "wrong password"},
+            headers={"Origin": "http://localhost:5173"},
+        )
+        logged_in = client.post(
+            "/api/v1/auth/email/login",
+            json={"email": "STUDENT@example.test", "password": payload["password"]},
+            headers={"Origin": "http://localhost:5173"},
+        )
+        second_token = client.cookies.get("goal_session")
+
+        assert failed.status_code == 401
+        assert failed.json()["error"]["code"] == "INVALID_CREDENTIALS"
+        assert logged_in.status_code == 200
+        assert second_token is not None and second_token != first_token
+        assert client.get("/api/v1/me").status_code == 200
+
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            password_hash = connection.execute(
+                "SELECT password_hash FROM user_password_credentials"
+            ).fetchone()
+            token_hash = connection.execute(
+                "SELECT token_hash FROM auth_sessions WHERE token_hash = %s",
+                (crypto.hash_token("session", second_token),),
+            ).fetchone()
+        assert password_hash is not None
+        assert payload["password"] not in password_hash[0]
+        assert token_hash is not None
+
+
+def test_email_registration_does_not_take_over_google_identity(
+    migrated_database_url: str,
+) -> None:
+    """The same email cannot silently create a second login path or user account."""
+
+    client, provider, _ = _client(migrated_database_url)
+    payload = {
+        "display_name": "이메일 사용자",
+        "email": "student@example.test",
+        "password": "correct horse battery staple",
+    }
+    with client:
+        registered = client.post(
+            "/api/v1/auth/email/register",
+            json=payload,
+            headers={"Origin": "http://localhost:5173"},
+        )
+        duplicate = client.post(
+            "/api/v1/auth/email/register",
+            json=payload,
+            headers={"Origin": "http://localhost:5173"},
+        )
+        state = _start(client, provider)
+        google_collision = _complete(client, state)
+
+        assert registered.status_code == 201
+        assert duplicate.status_code == 409
+        assert duplicate.json()["error"]["code"] == "EMAIL_ALREADY_REGISTERED"
+        assert google_collision.status_code == 409
+        assert google_collision.json()["error"]["code"] == "IDENTITY_EMAIL_CONFLICT"

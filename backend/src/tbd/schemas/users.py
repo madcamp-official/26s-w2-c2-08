@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class UserResponse(BaseModel):
-    """Current user's provider-backed profile without account-wide roles."""
+    """Current user's authentication-method-neutral profile without global roles."""
 
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 

@@ -7,7 +7,7 @@ info:
 
     - 비즈니스 API는 `/api/v1`을 권장 경로로 사용한다.
     - ID는 형식이 확정되지 않았으므로 불투명 문자열로 정의한다.
-    - Google OAuth/OIDC 완료 후 서버 세션을 만들고 HttpOnly Cookie로 인증한다.
+    - Google OAuth/OIDC 또는 이메일·비밀번호 인증 뒤 서버 세션을 만들고 HttpOnly Cookie로 인증한다.
     - Course 역할은 전역 권한이 아니라 Course 멤버십으로 판정한다.
     - WebSocket과 오디오 스트리밍 계약은 OpenAPI 표준 범위 밖이므로
       최상위 `x-websocket-channels`에 참고용 초안으로 기록한다.
@@ -21,7 +21,7 @@ tags:
   - name: Health
     description: 인증이 필요 없는 상태 점검
   - name: Auth
-    description: Google 로그인과 서버 세션 종료
+    description: Google·이메일 로그인과 서버 세션 종료
   - name: Users
     description: 현재 사용자 정보
   - name: Courses
@@ -200,8 +200,92 @@ paths:
               $ref: "#/components/headers/RequestId"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/auth/email/register:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Auth]
+      operationId: registerWithEmailPassword
+      summary: 이메일 계정 가입
+      description: |
+        표시 이름·이메일·비밀번호로 새 User와 password credential을 만든 뒤 Google 로그인과
+        동일한 HttpOnly `goal_session` Cookie를 발급한다. 이메일은 trim·NFKC·casefold로
+        정규화하며, 활성 계정의 대표 이메일은 하나만 등록할 수 있다. 기존 Google 계정과
+        같은 이메일도 자동 연결하지 않고 `409 EMAIL_ALREADY_REGISTERED`로 거부한다.
+        비밀번호 원문은 저장·로그·응답에 포함하지 않는다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailPasswordRegisterRequest"
+      responses:
+        "201":
+          description: 계정 생성 및 서버 세션 발급 완료
+          headers:
+            Set-Cookie:
+              description: HttpOnly 서버 세션 Cookie
+              schema:
+                type: string
+                example: goal_session=opaque; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedUserResponse"
+        "403":
+          $ref: "#/components/responses/OriginForbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/auth/email/login:
+    parameters:
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Auth]
+      operationId: loginWithEmailPassword
+      summary: 이메일·비밀번호 로그인
+      description: |
+        등록된 이메일·비밀번호를 검증하고 새 HttpOnly `goal_session` Cookie를 발급한다.
+        이메일 미등록과 비밀번호 불일치는 모두 `401 INVALID_CREDENTIALS`로 응답해 계정
+        존재 여부를 구분하지 않는다. 기존 session Cookie가 있으면 새 token으로 회전한다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailPasswordLoginRequest"
+      responses:
+        "200":
+          description: 로그인 및 서버 세션 발급 완료
+          headers:
+            Set-Cookie:
+              description: HttpOnly 서버 세션 Cookie
+              schema:
+                type: string
+                example: goal_session=opaque; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedUserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/OriginForbidden"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
@@ -3909,6 +3993,52 @@ components:
         avatar_url:
           type: [string, "null"]
           format: uri
+
+    EmailPasswordRegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [display_name, email, password]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: NFC 정규화·trim 후 표시할 이름
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: trim·NFKC·casefold 후 저장·조회하는 로그인 식별자
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+          writeOnly: true
+          description: 원문을 저장·응답·로그에 남기지 않는 가입 비밀번호
+
+    EmailPasswordLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: trim·NFKC·casefold 후 조회하는 로그인 식별자
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+
+    AuthenticatedUserResponse:
+      type: object
+      additionalProperties: false
+      required: [user]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
 
     CourseCreateRequest:
       type: object

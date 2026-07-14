@@ -48,7 +48,7 @@ ROOT(0)
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| GOAL 메인 화면 | `MAIN_PAGE` | 1 | 페이지 | `ROOT` | 비로그인 | MVP 필수 | 서비스 가치 소개와 Google 로그인 진입을 제공하고, 로그인 후 대시보드로 전환 | GOAL URL에 비로그인 상태로 접속 |
+| GOAL 메인 화면 | `MAIN_PAGE` | 1 | 페이지 | `ROOT` | 비로그인 | MVP 필수 | 서비스 가치 소개와 Google·이메일 로그인 및 이메일 가입 진입을 제공하고, 로그인 후 대시보드로 전환 | GOAL URL에 비로그인 상태로 접속 |
 | GOAL 메인 화면 로그인 후 | `MAIN_PAGE_AUTH` | 1 | 페이지 | `ROOT` | 공통 | MVP 필수 | 참여·관리 중인 Course 목록, Course 생성·참여와 내 정보 진입을 제공하는 대시보드 | 인증된 사용자가 로그인하거나 서비스에 재접속 |
 
 ### Level 2 · 대시보드 기능 및 페이지
@@ -59,8 +59,9 @@ ROOT(0)
 | 한 학기 Course 만들기 페이지 | `COURSE_CREATE_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 과목명과 학기를 입력해 Course를 만들고 해당 Course의 유일한 교수자 owner가 됨 | 로그인 후 메인 화면에서 Course 만들기 선택 |
 | 한 학기 Course 참여하기 버튼 | `COURSE_JOIN_BUTTON` | 2 | 기능 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 참여 코드를 입력하는 Course 참여 페이지로 이동 | 로그인 후 메인 화면에서 Course 참여하기 선택 |
 | 한 학기 Course 참여하기 | `COURSE_JOIN_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 인증 사용자 공통 | MVP 필수 | 참여 코드를 검증해 해당 Course의 학생이 됨 | 로그인 후 메인 화면에서 Course 참여하기 선택 |
-| 로그인 버튼 | `LOGIN_BUTTON_AREA` | 2 | 기능 | `MAIN_PAGE` | 비로그인 | MVP 필수 | Google 로그인 페이지로 이동하고 성공 시 로그인 후 메인 화면으로 전환 | 비로그인 사용자가 로그인 버튼 선택 |
-| 로그인 페이지 | `LOGIN_PAGE` | 2 | 페이지 | `MAIN_PAGE` | 비로그인 | MVP 필수 | Google 계정으로 인증하며 역할은 계정이 아니라 Course별로 결정 | 메인 화면에서 로그인 버튼 선택 |
+| 로그인 버튼 | `LOGIN_BUTTON_AREA` | 2 | 기능 | `MAIN_PAGE` | 비로그인 | MVP 필수 | Google 또는 이메일 로그인 페이지로 이동하고 성공 시 로그인 후 메인 화면으로 전환 | 비로그인 사용자가 로그인 버튼 선택 |
+| 로그인 페이지 | `LOGIN_PAGE` | 2 | 페이지 | `MAIN_PAGE` | 비로그인 | MVP 필수 | Google 계정 또는 이메일·비밀번호로 인증하며 역할은 계정이 아니라 Course별로 결정 | 메인 화면에서 로그인 버튼 선택 |
+| 이메일 가입 페이지 | `EMAIL_SIGNUP_PAGE` | 2 | 페이지 | `MAIN_PAGE` | 비로그인 | MVP 필수 | 표시 이름·이메일·비밀번호로 계정을 만들고 바로 서버 Session을 발급받는다. 기존 Google 계정과 자동 연결하지 않는다. | 로그인 페이지에서 이메일 가입 선택 |
 | 내가 참여 중인 Course 목록 | `MY_COURSE_LIST` | 2 | 영역 | `MAIN_PAGE_AUTH` | 공통 | MVP 필수 | 학생으로 참여한 Course 카드와 진입 기능을 표시하고 빈 목록에서는 코드 참여를 안내 | 로그인 후 메인 화면에 항상 표시 |
 | 내 정보 조회 버튼 | `MY_INFO_BUTTON` | 2 | 기능 | `MAIN_PAGE_AUTH` | 공통 | MVP 필수 | 내 정보 조회 페이지로 이동 | 로그인 후 프로필 또는 내 정보 버튼 선택 |
 | 내 정보 조회 페이지 | `MY_INFO_PAGE` | 2 | 페이지 | `MAIN_PAGE_AUTH` | 공통 | MVP 필수 | 계정 기본 정보, 로그아웃, 관리·참여 중인 Course 요약을 표시 | 로그인 후 메인 화면에서 내 정보 버튼 선택 |

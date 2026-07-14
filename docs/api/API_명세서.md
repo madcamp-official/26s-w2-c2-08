@@ -31,7 +31,7 @@
 - 버전 경로는 `/api/v1`을 사용한다.
 - JSON 필드는 `snake_case`를 사용한다.
 - 리소스 ID는 API에서 불투명 문자열로 취급한다. UUID 사용 여부는 DB 설계에서 확정한다.
-- Google OAuth/OIDC authorization code 흐름 뒤 서버 세션을 만들고 HttpOnly Cookie로 인증한다.
+- Google OAuth/OIDC 또는 이메일·비밀번호 인증 뒤 서버 세션을 만들고 HttpOnly Cookie로 인증한다.
 - AI 요약과 채팅은 `202 Accepted + AIJob`으로 수락하고 개인 AI 상태와 결과는 요청자가 Job·Summary·Chat REST API를 polling해 확인한다.
 - WebSocket과 오디오 스트리밍은 OpenAPI 표준 범위 밖이므로 본 문서와 YAML의 `x-websocket-channels`에 초안을 기록한다.
 
@@ -59,9 +59,9 @@ Cookie: goal_session=<opaque-session-id>
 ```
 
 - Cookie 속성은 `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`이며 기본 만료는 7일이다.
-- 7일은 로그인 callback에서 발급한 절대 만료다. 일반 요청은 `last_seen_at`만 최대 5분 간격으로 갱신하고 세션 수명을 자동 연장하지 않는다.
-- 브라우저 JavaScript와 localStorage에 Google token 또는 서버 session ID를 저장하지 않는다.
-- 서버에는 session ID의 hash, 사용자 ID, 만료와 폐기 시각만 보관하며 Google access token은 API 호출에 필요하지 않으면 저장하지 않는다.
+- 7일은 Google callback 또는 이메일 가입·로그인에서 발급한 절대 만료다. 일반 요청은 `last_seen_at`만 최대 5분 간격으로 갱신하고 세션 수명을 자동 연장하지 않는다.
+- 브라우저 JavaScript와 localStorage에 Google token·이메일 비밀번호 또는 서버 session ID를 저장하지 않는다.
+- 서버에는 session ID의 hash, 사용자 ID, 만료와 폐기 시각만 보관한다. Google access token과 이메일 비밀번호 원문은 API 호출에 필요하지 않으며 저장하지 않는다.
 - 상태 변경 요청은 설정된 allowlist와 `scheme://host[:port]`가 정확히 일치하는 `Origin`을 필수로 요구한다. `Origin` 누락, `null`, 사용자 정보·path가 포함된 값과 allowlist 불일치는 `403 ORIGIN_NOT_ALLOWED`로 거부한다.
 - 서버는 요청 본문의 `user_id`를 신뢰하지 않는다.
 - 현재 사용자는 인증 컨텍스트에서 확인한다.
@@ -69,7 +69,18 @@ Cookie: goal_session=<opaque-session-id>
 - 권한은 요청 리소스가 속한 Course의 `PROFESSOR` 또는 `STUDENT` 멤버십으로 판단한다.
 - 브라우저 WebSocket에는 access token을 직접 전달하지 않고 인증된 HTTP API가 발급한 60초 만료·1회용 티켓을 사용한다.
 
-#### 2.2.1 Google 로그인 시작
+#### 2.2.1 인증 공통 규칙
+
+- Google OAuth/OIDC와 이메일·비밀번호 로그인은 모두 같은 내부 `User`와 7일 절대 만료
+  HttpOnly `goal_session` Cookie를 사용한다. 로그인 성공 시 기존 Cookie가 있으면 새 token으로
+  회전한다.
+- 이메일은 trim·NFKC·casefold로 정규화한 값을 대표 이메일·로그인 식별자로 사용하며, 활성 User
+  사이에서 유일하다. Google과 이메일 계정은 이메일이 같아도 자동 연결하지 않는다.
+- 비밀번호는 원문을 저장·응답·로그에 남기지 않고 scrypt salt hash만 저장한다. 이메일 소유 확인,
+  비밀번호 재설정, 로그인 방식 연결과 애플리케이션 내부 rate limit은 별도 인증·메일 인프라를
+  결정한 뒤 추가한다.
+
+#### 2.2.2 Google 로그인 시작
 
 ```http
 GET /api/v1/auth/google/start?return_to=/courses
@@ -79,7 +90,7 @@ GET /api/v1/auth/google/start?return_to=/courses
 - `return_to`는 `/`로 시작하되 `//`, scheme·host, 제어 문자와 `/api` 경로가 없는 Frontend 상대 경로만 받는다. 외부 URL과 Backend API 경로는 `400 INVALID_RETURN_TO`로 거부한다.
 - 성공하면 Google 로그인 화면으로 `302 Redirect`한다.
 
-#### 2.2.2 Google callback
+#### 2.2.3 Google callback
 
 ```http
 GET /api/v1/auth/google/callback?code=<code>&state=<state>
@@ -92,8 +103,50 @@ GET /api/v1/auth/google/callback?code=<code>&state=<state>
 - 사용자가 Google 동의를 취소하면 임시 transaction을 소비한 뒤 Frontend `/login?auth_error=cancelled&return_to=...`로 redirect한다.
 - token 교환·OIDC 검증 provider 장애는 `503 DEPENDENCY_UNAVAILABLE`, state·nonce·PKCE 불일치는 `400 INVALID_OAUTH_TRANSACTION`으로 변환한다.
 - Provider 오류 원문과 token을 응답 또는 로그에 남기지 않는다.
+- 새 Google identity의 이메일이 기존 이메일·비밀번호 계정에 이미 연결돼 있으면 자동 계정 합침
+  대신 `409 IDENTITY_EMAIL_CONFLICT`를 반환한다.
 
-#### 2.2.3 로그아웃
+#### 2.2.4 이메일 계정 가입
+
+```http
+POST /api/v1/auth/email/register
+Origin: <AUTH_ALLOWED_ORIGINS 중 하나>
+Content-Type: application/json
+
+{
+  "display_name": "김도현",
+  "email": "dohyun@example.com",
+  "password": "12자 이상의 비밀번호"
+}
+```
+
+- 표시 이름은 NFC·trim 뒤 1~100자, 이메일은 정규화 뒤 유효한 3~254자, 비밀번호는 12~128자로
+  검증한다.
+- 새 User와 하나의 `user_password_credentials` 행, 서버 Session을 같은 transaction으로 만들고
+  `201`과 `{ "user": { ... } }`를 반환한다.
+- 활성 User가 해당 이메일을 이미 사용하면 `409 EMAIL_ALREADY_REGISTERED`를 반환한다. Google
+  계정과의 자동 연결·비밀번호 설정은 하지 않는다.
+- 상태 변경 요청이므로 정확한 Origin이 없거나 맞지 않으면 `403 ORIGIN_NOT_ALLOWED`다.
+
+#### 2.2.5 이메일·비밀번호 로그인
+
+```http
+POST /api/v1/auth/email/login
+Origin: <AUTH_ALLOWED_ORIGINS 중 하나>
+Content-Type: application/json
+
+{
+  "email": "dohyun@example.com",
+  "password": "12자 이상의 비밀번호"
+}
+```
+
+- 성공하면 새 `goal_session` Cookie와 `{ "user": { ... } }`를 반환한다.
+- 이메일이 없거나 비밀번호가 틀린 경우를 구분하지 않고 모두 `401 INVALID_CREDENTIALS`로
+  반환한다. 서버는 존재하지 않는 이메일에도 동일한 password hash 비용을 수행한다.
+- 기존 Session Cookie가 있으면 로그인 성공 transaction에서 폐기하고 새 token을 발급한다.
+
+#### 2.2.6 로그아웃
 
 ```http
 POST /api/v1/auth/logout
@@ -1601,7 +1654,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 
 | 기능 ID               | 기능                | HTTP API                                                        | WebSocket                                                        |
 | --------------------- | ------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
-| AUTH                  | Google 로그인       | Auth start·callback·logout                                      | —                                                                |
+| AUTH                  | Google·이메일 로그인 | Google start·callback, email register·login, logout             | —                                                                |
 | PRE-T-01              | Course 생성         | `POST /courses`                                                 | —                                                                |
 | PRE-T-02              | 참여 코드 발급      | Course 생성·상세·참여 코드 회전                                 | —                                                                |
 | PRE-T-03              | class 관리          | class 생성·제목 수정·삭제                                       | —                                                                |

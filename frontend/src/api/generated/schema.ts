@@ -102,6 +102,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/email/register": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이메일 계정 가입
+         * @description 표시 이름·이메일·비밀번호로 새 User와 password credential을 만든 뒤 Google 로그인과
+         *     동일한 HttpOnly `goal_session` Cookie를 발급한다. 이메일은 trim·NFKC·casefold로
+         *     정규화하며, 활성 계정의 대표 이메일은 하나만 등록할 수 있다. 기존 Google 계정과
+         *     같은 이메일도 자동 연결하지 않고 `409 EMAIL_ALREADY_REGISTERED`로 거부한다.
+         *     비밀번호 원문은 저장·로그·응답에 포함하지 않는다.
+         */
+        post: operations["registerWithEmailPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/email/login": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이메일·비밀번호 로그인
+         * @description 등록된 이메일·비밀번호를 검증하고 새 HttpOnly `goal_session` Cookie를 발급한다.
+         *     이메일 미등록과 비밀번호 불일치는 모두 `401 INVALID_CREDENTIALS`로 응답해 계정
+         *     존재 여부를 구분하지 않는다. 기존 session Cookie가 있으면 새 token으로 회전한다.
+         */
+        post: operations["loginWithEmailPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -1849,6 +1901,28 @@ export interface components {
             email: string | null;
             /** Format: uri */
             avatar_url: string | null;
+        };
+        EmailPasswordRegisterRequest: {
+            /** @description NFC 정규화·trim 후 표시할 이름 */
+            display_name: string;
+            /**
+             * Format: email
+             * @description trim·NFKC·casefold 후 저장·조회하는 로그인 식별자
+             */
+            email: string;
+            /** @description 원문을 저장·응답·로그에 남기지 않는 가입 비밀번호 */
+            password: string;
+        };
+        EmailPasswordLoginRequest: {
+            /**
+             * Format: email
+             * @description trim·NFKC·casefold 후 조회하는 로그인 식별자
+             */
+            email: string;
+            password: string;
+        };
+        AuthenticatedUserResponse: {
+            user: components["schemas"]["User"];
         };
         CourseCreateRequest: {
             /** @description 길이 제한은 제품 검토 후 확정 */
@@ -4249,8 +4323,75 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    registerWithEmailPassword: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailPasswordRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description 계정 생성 및 서버 세션 발급 완료 */
+            201: {
+                headers: {
+                    /** @description HttpOnly 서버 세션 Cookie */
+                    "Set-Cookie"?: string;
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthenticatedUserResponse"];
+                };
+            };
+            403: components["responses"]["OriginForbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    loginWithEmailPassword: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailPasswordLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description 로그인 및 서버 세션 발급 완료 */
+            200: {
+                headers: {
+                    /** @description HttpOnly 서버 세션 Cookie */
+                    "Set-Cookie"?: string;
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthenticatedUserResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["OriginForbidden"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     logout: {

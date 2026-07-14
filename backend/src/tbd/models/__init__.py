@@ -30,7 +30,7 @@ from tbd.models.materials import (
 )
 from tbd.models.questions import AIJob, Question, QuestionClusteringState, QuestionReaction
 from tbd.models.sessions import LectureSession
-from tbd.models.users import User, UserAuthIdentity
+from tbd.models.users import User, UserAuthIdentity, UserPasswordCredential
 
 __all__ = [
     "Base",
@@ -64,6 +64,7 @@ __all__ = [
     "UUIDPrimaryKeyMixin",
     "User",
     "UserAuthIdentity",
+    "UserPasswordCredential",
     "VersionMixin",
     "TranscriptGap",
     "TranscriptSegment",
