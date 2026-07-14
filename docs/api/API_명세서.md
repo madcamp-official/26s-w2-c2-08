@@ -204,7 +204,7 @@ POST /api/v1/auth/logout
 - 동일 요청이 처리 중이면 중복 실행하지 않는다. `PROCESSING` lease는 최초 수락 또는 마지막 인계 뒤 60초이며 lease가 유효하면 `409 IDEMPOTENCY_REQUEST_IN_PROGRESS`를 반환한다. lease가 만료된 record만 새 요청이 소유해 복구할 수 있다. terminal 완료 후에는 저장된 응답을 재사용한다.
 - 같은 키로 다른 `request_hash`를 보내면 `409 IDEMPOTENCY_KEY_REUSED`를 반환한다.
 - terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
-- 단, LIVE Summary 요청·`mode=LIVE` Chat 생성·메시지와 관련 `LIVE_SUMMARY`·LIVE-mode `CHAT_RESPONSE` Job 재시도의 멱등성 원장은 `purge_on_session_end=true`로 범위를 표시한다. `LIVE → PROCESSING` transaction이 개인 LIVE 리소스·Job을 삭제하고 느린 결과를 fence하는 것은 확정이지만, 관련 멱등성 행을 조기 삭제할지·24시간 보존할지와 종료 후 같은 키 재요청에 기존 `202`·`201` 본문을 재생할지 별도 종료 응답을 줄지는 TBD이다. class 종료 요청 자체의 멱등성 원장과 FINAL Summary·`mode=REVIEW` Chat·관련 Job 재시도는 이 미정 범위에 포함하지 않는다.
+- 단, LIVE Summary 요청·`mode=LIVE` Chat 생성·메시지와 관련 `LIVE_SUMMARY`·LIVE-mode `CHAT_RESPONSE` Job 재시도의 멱등성 원장은 `purge_on_session_end=true`로 범위를 표시한다. `LIVE → PROCESSING` transaction은 개인 LIVE 리소스·Job을 삭제하고 느린 결과를 fence한 뒤, terminal 멱등성 행을 삭제하지 않고 encrypted 응답을 `410 LIVE_AI_RESULT_PURGED`로 재작성한다. 같은 키·같은 request hash만 남은 24시간 동안 이 `410`을 replay하며 새 키는 상태 검증에 따라 `409 SESSION_STATE_CONFLICT`다. class 종료 요청 자체의 멱등성 원장과 FINAL Summary·`mode=REVIEW` Chat·관련 Job 재시도는 이 범위에 포함하지 않는다.
 
 ### 2.7 요청 ID
 
@@ -606,7 +606,7 @@ Idempotency-Key: <key>
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
 - 정상 클라이언트도 종료 확인 즉시 이 API를 호출한다. `audio.stop` 전송과 로컬 녹음 마감은 best-effort로 함께 시작하되 `audio.stopped`나 drain 완료를 HTTP 호출의 선행조건으로 두지 않는다. 서버는 종료 transaction에서 새 audio frame을 차단하고 이미 받은 chunk만 별도로 drain한다.
 - 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
-- 같은 transaction에서 모든 개인 LIVE Summary, `mode=LIVE` Chat·Message·Evidence, `REQUESTER_ONLY LIVE_SUMMARY` Job과 LIVE Chat에 귀속된 `REQUESTER_ONLY CHAT_RESPONSE` Job을 삭제한다. 늦게 도착한 Worker 결과는 Job·target·Session state·attempt·run token fence를 통과하지 못해 저장되지 않는다. 종료 후 이전 개인 LIVE 리소스·Job ID를 polling·단건 조회했을 때의 HTTP status와 `purge_on_session_end=true` 멱등성 재요청에 대한 응답·행 조기 삭제 여부는 TBD이다. FINAL Summary, `mode=REVIEW` Chat과 관련 Job·멱등성 원장은 영향받지 않는다.
+- 같은 transaction에서 모든 개인 LIVE Summary, `mode=LIVE` Chat·Message·Evidence, `REQUESTER_ONLY LIVE_SUMMARY` Job과 LIVE Chat에 귀속된 `REQUESTER_ONLY CHAT_RESPONSE` Job을 삭제한다. 늦게 도착한 Worker 결과는 Job·target·Session state·attempt·run token fence를 통과하지 못해 저장되지 않는다. 종료 후 이전 개인 LIVE 리소스·Job ID의 polling·단건 조회는 존재를 숨기는 `404 RESOURCE_NOT_FOUND`다. `purge_on_session_end=true` terminal 멱등성 행은 삭제하지 않고 encrypted 응답을 `410 LIVE_AI_RESULT_PURGED`로 바꿔 terminal 시각부터 남은 24시간 동안 같은 키·같은 request hash에만 replay한다. 새 키 요청은 Session 상태 검증에 따라 `409 SESSION_STATE_CONFLICT`다. FINAL Summary, `mode=REVIEW` Chat과 관련 Job·멱등성 원장은 영향받지 않는다.
 - 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
 - 같은 transaction에서 SHARED·blocking `SESSION_POSTPROCESSING` coordinator를 `PENDING`으로 생성한다. FINAL 대상이 1건 이상이면 4.2절의 종료 시점 입력 상한을 고정한 SHARED·blocking `FINAL` `QUESTION_CLUSTERING` Job도 같은 transaction에서 함께 생성한다. Recording/HQ 또는 Recording이 없는 경우 LIVE Transcript source가 terminal이 되기 전에는 coordinator를 claim하지 않지만, FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다.
 - coordinator는 source terminal 후 Answer mapping·Knowledge 재연결을 수행하고 자신의 terminal 전이와 downstream blocking Job 생성·outbox를 같은 transaction에 commit한다. HQ Transcript version·canonical 전환과 Answer 재매핑은 9절과 11절을 따른다.
@@ -1050,7 +1050,7 @@ GET /api/v1/sessions/{session_id}/summaries?summary_type=LIVE&cursor=<cursor>&li
 - 목록은 `created_at DESC, id DESC`로 안정적으로 정렬한다.
 - 성공한 `LIVE` 요약은 요청자 전용으로 반드시 저장하고, `FINAL` 요약은 Course 멤버에게 공개한다.
 - Summary 저장이 완료돼 `result.resource_url`로 조회할 수 있을 때만 AIJob을 `SUCCEEDED`로 변경한다.
-- `LIVE → PROCESSING` 전이 transaction이 `LIVE` Summary·해당 Job을 즉시 삭제해 목록과 새 RAG 대상에서 사라지게 하고, 느린 Worker 결과는 fence한다. 삭제된 기존 Summary·Job ID의 단건 조회·polling HTTP status와 관련 멱등성 재요청 응답은 TBD이다.
+- `LIVE → PROCESSING` 전이 transaction이 `LIVE` Summary·해당 Job을 즉시 삭제해 목록과 새 RAG 대상에서 사라지게 하고, 느린 Worker 결과는 fence한다. 삭제된 기존 Summary·Job ID의 단건 조회·polling은 `404 RESOURCE_NOT_FOUND`이며, 같은 key·request hash의 purge-scoped terminal 멱등성 재요청은 원래 TTL 동안 `410 LIVE_AI_RESULT_PURGED`를 replay한다.
 - `FINAL`은 class 종료 후 생성된 강의 요약을 의미한다.
 - `FINAL_SUMMARY` Job은 최신 HQ TranscriptVersion이 `source=RECORDING`, `status=FINALIZED`, final Segment 1건 이상일 때만 자동 생성한다. canonical LIVE version이 `FINALIZED`여도 자동 생성 근거로 사용하지 않는다.
 - 유효한 RECORDING `FINALIZED` source와 final Segment가 있지만 필수 `FINAL_SUMMARY` Job이 없으면 watchdog도 실패 Job을 합성하지 않는다. `/record.summary.state.status=DATA_INTEGRITY_ERROR`, `reason=null`, `summary_url=null`로 원장 누락을 안전하게 표시한다.
@@ -1077,7 +1077,7 @@ GET /api/v1/sessions/{session_id}/summaries?summary_type=LIVE&cursor=<cursor>&li
 GET /api/v1/summaries/{summary_id}
 ```
 
-- 저장된 `LIVE` 요약은 요청자만, `FINAL` 요약은 Course 멤버가 조회한다. 미인증은 `401`, 개인 요약의 비요청자·비멤버에는 존재 여부를 숨기고 `404`를 반환한다. Session 종료로 삭제된 기존 LIVE Summary ID의 응답 status는 7.7절의 TBD 정책을 따른다.
+- 저장된 `LIVE` 요약은 요청자만, `FINAL` 요약은 Course 멤버가 조회한다. 미인증은 `401`, 개인 요약의 비요청자·비멤버와 Session 종료로 삭제된 기존 LIVE Summary ID에는 존재 여부를 숨기는 `404`를 반환한다.
 - AIJob의 `result.resource_url`이 이 경로를 가리킨다.
 
 ## 13. AI 채팅 API
@@ -1097,7 +1097,7 @@ POST /api/v1/sessions/{session_id}/chats
 - 권한: Course 멤버. `PROFESSOR`와 `STUDENT`에게 동일하게 허용한다.
 - `mode`: `LIVE`, `REVIEW`
 - `LIVE`는 Session이 `LIVE`일 때만, `REVIEW`는 Session이 `COMPLETED`일 때만 생성한다. mode와 Session 상태가 다르면 `409 SESSION_STATE_CONFLICT`를 반환한다. `PROCESSING`에서는 두 mode 모두 생성하지 않는다.
-- 대화는 생성한 사용자 개인에게만 노출한다. LIVE Chat의 멱등성 원장은 `purge_on_session_end=true`로 범위를 표시하되, Session 종료 후 행 조기 삭제·재사용 응답은 2.6·7.7절의 TBD 정책을 따른다.
+- 대화는 생성한 사용자 개인에게만 노출한다. LIVE Chat의 멱등성 원장은 `purge_on_session_end=true`로 범위를 표시한다. 종료 뒤 기존 terminal 키·동일 request hash는 `410 LIVE_AI_RESULT_PURGED`를 24시간 replay하고, 새 키 요청은 `409 SESSION_STATE_CONFLICT`다.
 - 인증되지 않은 요청은 `401`을 반환한다. 비멤버에게는 Session 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환한다.
 
 ### 13.2 대화 목록
@@ -1117,7 +1117,7 @@ GET /api/v1/chats/{chat_id}
 ```
 
 - 권한: 대화 소유자이면서 현재 Course 멤버인 사용자
-- 비소유자·비멤버에는 존재를 공개하지 않고 `404`를 반환한다. Session 종료로 삭제된 기존 LIVE Chat ID의 응답 status는 TBD이다.
+- 비소유자·비멤버와 Session 종료로 삭제된 기존 LIVE Chat ID에는 존재를 공개하지 않고 `404`를 반환한다.
 
 ### 13.4 메시지 전송
 
@@ -1134,12 +1134,12 @@ Idempotency-Key: <key>
 
 - 권한: 대화 소유자이자 Course 멤버
 - 서버는 3.1.1절에 따라 `content`의 앞뒤 공백 제거·Unicode NFC 정규화 후 1~2,000 code point를 검증한다. 초과·빈 결과는 잘라 저장하지 않고 `422 VALIDATION_ERROR`와 안정적인 details를 반환하며, USER Message `content`에는 정규화 결과를 저장한다.
-- Chat mode와 Session 상태는 메시지 수락 시점에도 다시 검증한다. `LIVE` Chat은 Session `LIVE`, `REVIEW` Chat은 Session `COMPLETED`에서만 허용하며 다르면 `409 SESSION_STATE_CONFLICT`를 반환한다. Session 종료 transaction이 먼저 LIVE Chat을 삭제한 경쟁에서 이 이전 ID 요청에 반환할 HTTP status는 TBD이다.
+- Chat mode와 Session 상태는 메시지 수락 시점에도 다시 검증한다. `LIVE` Chat은 Session `LIVE`, `REVIEW` Chat은 Session `COMPLETED`에서만 허용하며 다르면 `409 SESSION_STATE_CONFLICT`를 반환한다. Session 종료 transaction이 먼저 LIVE Chat을 삭제한 경쟁에서 이전 ID 요청은 존재를 숨기는 `404`를 반환한다. 이미 terminal인 동일 멱등 요청은 `410 LIVE_AI_RESULT_PURGED`를 replay한다.
 - 서버는 같은 Session에 연결되고 `READY`인 PDF, final Transcript와 Q&A만 검색한다. `UPLOADED`, `PROCESSING`, `FAILED` 또는 분리된 자료는 제외한다.
 - 근거가 부족하면 확인할 수 없음을 응답한다.
 - 성공: `202 Accepted`. 앞뒤 공백 제거·Unicode NFC 정규화·검증을 거친 사용자 Message, `REQUESTER_ONLY CHAT_RESPONSE` AIJob, outbox와 terminal 멱등성 응답을 한 transaction에서 commit하고 함께 반환한다. USER Message의 `response_job_id`는 Job ID와 같고 Job `target.resource_type=CHAT_MESSAGE`, `target.resource_id=USER Message ID`로 immutable 입력 turn을 가리킨다.
 - 요청자는 반환된 Job ID를 16.8절 규칙으로 polling하고 `SUCCEEDED` Job의 `result.resource_url`로 저장된 최종 Assistant Message를 조회한다. 생성 중 token·부분 Assistant Message는 저장·공유·streaming하지 않는다.
-- 인증되지 않은 요청은 `401`을 반환한다. 비소유자·비멤버에는 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환하며, Session 종료로 삭제된 기존 LIVE Chat ID의 응답 status는 TBD이다.
+- 인증되지 않은 요청은 `401`을 반환한다. 비소유자·비멤버와 Session 종료로 삭제된 기존 LIVE Chat ID에는 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환한다.
 
 ### 13.5 메시지 목록
 
@@ -1149,7 +1149,7 @@ GET /api/v1/chats/{chat_id}/messages?cursor=<cursor>&limit=20
 
 - 권한: 대화 소유자이면서 현재 Course 멤버인 사용자
 - 정렬: `sequence ASC`
-- 비소유자·비멤버에는 Chat·Message 존재를 숨기고 `404`를 반환하며, Session 종료로 삭제된 기존 LIVE Chat·Message ID의 응답 status는 TBD이다.
+- 비소유자·비멤버와 Session 종료로 삭제된 기존 LIVE Chat·Message ID에는 존재를 숨기고 `404`를 반환한다.
 - `USER` Message는 앞뒤 공백 제거·Unicode NFC 정규화된 1~2,000자 `content`, non-null `response_job_id`, `job_id=null`, `model_name=null`, `prompt_version=null`, `evidence=[]`다. `ASSISTANT` Message는 빈 문자열이 아닌 최종 `content`, 생성 원인 non-null `job_id`, `response_job_id=null`을 반환한다. Assistant content에는 USER용 2,000자 상한을 적용하지 않으며 Evidence는 0개 이상일 수 있고 모델·프롬프트 공개 정책에 따라 `model_name`, `prompt_version`은 null일 수 있다.
 - 새로고침 후에도 USER Message의 `response_job_id`로 같은 turn Job을 polling할 수 있다. Job의 `target` 단건 URL은 해당 USER Message를, `SUCCEEDED result` URL은 해당 ASSISTANT Message를 가리킨다.
 - Assistant Message의 Evidence는 `source_kind`, 안전한 `label` snapshot, 권한 검사를 거치는 nullable 상대 경로 `link`만 공개한다. DB 식별자인 `knowledge_chunk_id`, 내부 typed FK 구분, storage key·path와 pagination cursor는 포함하지 않는다.
@@ -1175,7 +1175,7 @@ GET /api/v1/chat-messages/{message_id}
 
 - 현재도 Course 멤버인 Chat 소유자만 조회한다.
 - `CHAT_RESPONSE` Job이 `SUCCEEDED`일 때 `result.resource_url`은 이 경로를 가리킨다. 요청자는 Job polling 후 이 GET으로 저장된 최종 Assistant Message를 복구한다.
-- 비소유자·비멤버에는 존재를 숨기고 `404`를 반환하며, Session 종료로 삭제된 기존 LIVE Message ID의 응답 status는 TBD이다.
+- 비소유자·비멤버와 Session 종료로 삭제된 기존 LIVE Message ID에는 존재를 숨기고 `404`를 반환한다.
 
 ## 14. AI 작업 API
 
@@ -1187,7 +1187,7 @@ GET /api/v1/jobs/{job_id}
 
 - 권한: 작업의 Session에 접근 가능하고 해당 Job의 공개 범위에 포함되는 사용자
 - 응답: 작업 유형, 상태, 진행률, 오류, 대상·결과 리소스 링크, 결과 비가용 사유, 시작·종료 시각
-- `REQUESTER_ONLY` Job은 요청자에게만 노출한다. 비요청자·비멤버에는 존재 여부를 숨기고 `404`를 반환하며, Session 종료로 삭제된 기존 개인 LIVE Job ID의 polling status는 TBD이다.
+- `REQUESTER_ONLY` Job은 요청자에게만 노출한다. 비요청자·비멤버와 Session 종료로 삭제된 기존 개인 LIVE Job ID에는 존재 여부를 숨기고 `404`를 반환한다. 삭제된 Job을 만든 mutation의 동일 terminal 멱등 요청만 24시간 `410 LIVE_AI_RESULT_PURGED`를 replay한다.
 - `CHAT_RESPONSE` Job의 `target` 리소스는 요청 transaction이 저장한 정확한 USER Message이며 모든 attempt에서 변경하지 않는다. `SUCCEEDED result`는 저장된 최종 ASSISTANT Message를 가리킨다.
 - 일반 이력을 보관하지 않는 성공 `QUESTION_CLUSTERING` generation이 새 결과로 교체되면 과거 Job은 `SUCCEEDED`를 유지하되 `result=null`, `result_unavailable_reason=SUPERSEDED`다. 이는 Job 실패나 데이터 오류가 아니다.
 - 오류 메시지는 민감한 입력과 외부 모델 응답 원문을 포함하지 않는다.
@@ -1658,7 +1658,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - `SUCCEEDED` Job은 `result.resource_type`, `result.resource_id`, `result.resource_url`로 저장 결과를 가리킨다. 요약 또는 Assistant Message는 원인 `job_id`를 보관하며 요청자는 이 URL을 다시 GET해 결과를 복구한다.
 - 생성 실패는 Job `FAILED`와 안전한 `error`로 표시하며 별도 개인 이벤트를 정의하지 않는다.
 - MVP는 같은 Chat에서 동시에 하나의 Assistant 생성 Job만 허용하며 진행 중 요청이 있으면 `409 CHAT_RESPONSE_IN_PROGRESS`를 반환한다.
-- `LIVE → PROCESSING` transition은 개인 LIVE 결과·Chat·Message·Evidence·Job을 함께 삭제하고 늦은 Worker 결과를 fence한다. 전이 후 기존 ID로 Summary·Chat·Message·Job을 조회·polling할 때의 HTTP status와 `purge_on_session_end=true` 멱등성 행의 조기 삭제·재요청 응답은 TBD이다. FINAL·REVIEW 데이터는 유지한다.
+- `LIVE → PROCESSING` transition은 개인 LIVE 결과·Chat·Message·Evidence·Job을 함께 삭제하고 늦은 Worker 결과를 fence한다. 전이 후 기존 ID로 Summary·Chat·Message·Job을 조회·polling하면 `404 RESOURCE_NOT_FOUND`다. `purge_on_session_end=true` terminal 멱등성 행은 남은 24시간 동안 상태를 `410 LIVE_AI_RESULT_PURGED`로 재작성해 같은 키·같은 request hash에만 replay하고, 새 키 요청은 `409 SESSION_STATE_CONFLICT`다. FINAL·REVIEW 데이터는 유지한다.
 - 개인 AI mutation은 잠금 전 조회에서 후보 ID만 찾고, canonical row를 잠근 뒤 Session 상태·소유권·Job attempt·run token을 다시 검증한다. purge 대상 LIVE 작업은 `purge_on_session_end=true` 멱등성 row prefix를 먼저 잠근다. 이후 LIVE `CHAT_RESPONSE`는 Session → Chat → target USER Message → AIJob, LIVE Summary는 Session → AIJob 순서로 잠근다. REVIEW `CHAT_RESPONSE`는 purge prefix 없이 Session → Chat → target USER Message → AIJob 순서를 사용한다. 종료 purge는 멱등성 row prefix → Session → LIVE Summary → LIVE Chat → Message → Evidence → 관련 requester-only AIJob aggregate 순서를 따른다.
 
 ### 16.9 실시간 오류와 종료 코드
@@ -1726,7 +1726,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - AI 모델 입력에 학생의 실제 식별 정보를 포함하지 않는다.
 - 모든 Material, Recording, RecordingUpload, Transcript, Question, Answer, Summary, Chat과 Job 접근은 현재 인증과 Course 접근 권한을 검증한다.
 - 개인 요약·Chat Job 상태는 Session 전체에 broadcast하지 않는다. 질문 초안은 동기 REST 응답에서만 반환한다.
-- 개인 Summary·Chat·Message·`REQUESTER_ONLY` Job 조회는 해당 소유자/요청자와 현재 Course 멤버십을 재검증한다. 비소유자·비요청자·비멤버에는 `404`로 응답해 존재 여부를 숨긴다. Session 종료로 삭제된 기존 LIVE 리소스·Job의 소유자 재조회 status는 별도 TBD이다.
+- 개인 Summary·Chat·Message·`REQUESTER_ONLY` Job 조회는 해당 소유자/요청자와 현재 Course 멤버십을 재검증한다. 비소유자·비요청자·비멤버에는 `404`로 응답해 존재 여부를 숨긴다. Session 종료로 삭제된 기존 LIVE 리소스·Job은 소유자에게도 `404 RESOURCE_NOT_FOUND`다.
 - PDF·녹음의 스토리지 키, 서버 파일 경로, fragment key·manifest와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
 - Chat Evidence는 현재 사용자의 Course 권한과 source 상태를 다시 검증한 `link`만 제공한다. `knowledge_chunk_id`, pagination cursor, 배열 위치와 학생 식별정보는 노출하지 않는다.
 
@@ -1751,7 +1751,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | HQ Transcript 실패 후 final source | `RECORDING_TRANSCRIPTION` 실패 version과 LIVE canonical은 모두 보존; LIVE를 완료 기록·Summary final source로 사용할지 TBD                                                                       | Transcript·Summary·복구 UI     |
 | HQ STT 개별 Job timeout            | 일반 후처리 기본 5분에서 `RECORDING_TRANSCRIPTION`은 제외; HQ 개별 상한은 TBD. heartbeat 15초·lease 60초·Session 전체 10분은 확정                                                               | Worker watchdog·운영 모니터링  |
 | Answer 재매핑 세부                 | canonical 전체 범위 mapping 상태는 공개; 일부 매핑·미매핑 이유 enum과 수동 복구 정책 TBD                                                                                                        | Answer 응답·완료 기록 UI       |
-| LIVE AI purge 후 재응답            | LIVE 결과·Chat·Message·Evidence·Job 삭제와 late-result fence는 확정; 기존 ID polling·단건 HTTP status, 멱등 재요청 응답과 행 조기 삭제 여부는 TBD                                               | 개인 AI 종료 경쟁·client cache |
 | 이벤트 재생                        | event log 보존 여부 TBD                                                                                                                                                                         | 재연결 프로토콜                |
 | 레이트 리미트                      | 임계치 TBD                                                                                                                                                                                      | `429` 헤더·재시도              |
 

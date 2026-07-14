@@ -432,7 +432,11 @@ async def end_session(
             if isinstance(acquired, ReplayIdempotencyRecord):
                 return JSONResponse(status_code=acquired.status_code, content=acquired.body)
             ended = await _service(settings).end(
-                session, session_id=session_id, user_id=user_id, now=now
+                session,
+                session_id=session_id,
+                user_id=user_id,
+                idempotency=idempotency,
+                now=now,
             )
             result = SessionEndAcceptedResponse(
                 session=_project(ended.lecture_session),
