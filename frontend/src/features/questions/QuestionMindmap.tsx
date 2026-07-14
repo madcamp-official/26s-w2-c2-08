@@ -5,9 +5,12 @@ import { StatePanel } from '../../components/feedback/StatePanel'
 import { Button } from '../../components/ui/Button'
 import { listQuestionClusterMembers, listQuestionClusters } from './api'
 import { questionKeys } from './queries'
+import type { AnswerTarget } from '../answers/api'
 
 interface QuestionMindmapProps {
   sessionId: string
+  onStartVoiceAnswer?: (target: AnswerTarget) => void
+  answerCapturePending?: boolean
 }
 
 function clusteringStatus(
@@ -21,7 +24,11 @@ function clusteringStatus(
   return '현재 질문 분류 결과'
 }
 
-export function QuestionMindmap({ sessionId }: QuestionMindmapProps) {
+export function QuestionMindmap({
+  sessionId,
+  onStartVoiceAnswer,
+  answerCapturePending = false,
+}: QuestionMindmapProps) {
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
     null,
   )
@@ -99,6 +106,21 @@ export function QuestionMindmap({ sessionId }: QuestionMindmapProps) {
                   <span>{cluster.representative_question.content}</span>
                   <small>{cluster.member_count}개 질문</small>
                 </Button>
+                {onStartVoiceAnswer && (
+                  <Button
+                    variant="ghost"
+                    disabled={answerCapturePending}
+                    onClick={() =>
+                      onStartVoiceAnswer({
+                        type: 'AI_REPRESENTATIVE_QUESTION',
+                        representative_question_id:
+                          cluster.representative_question.id,
+                      })
+                    }
+                  >
+                    대표질문 답변 시작
+                  </Button>
+                )}
               </li>
             ))}
           </ol>

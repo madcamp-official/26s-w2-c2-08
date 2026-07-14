@@ -1062,10 +1062,41 @@ export interface paths {
          *     추가하거나 교체한다. 학생 질문 target의 기존 완료 Answer와 Answer 때문에
          *     PRESERVED된 AI 대표질문 target의 기존 완료 Answer만 허용한다. target·snapshot·
          *     음성 Answer의 Transcript 범위는 유지한다.
-         *     텍스트 최대 길이, 빈 문자열로 삭제하는 정책과 KnowledgeChunk 재생성
-         *     세부 범위는 TBD이다.
+         *     text_content는 trim·Unicode NFC 정규화 후 1~2,000자여야 하며, 수정 시
+         *     현재 version을 함께 보내야 한다. version이 다르면 409
+         *     ANSWER_VERSION_CONFLICT와 현재 version·text_content를 반환하고 서버는
+         *     작성 중인 클라이언트 초안을 덮어쓰지 않는다.
          */
         patch: operations["updateCompletedAnswerText"];
+        trace?: never;
+    };
+    "/api/v1/answers/{answer_id}/text": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 Answer ID */
+                answer_id: components["parameters"]["AnswerId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 완료 Answer의 교수자 text 철회
+         * @description Course PROFESSOR가 COMPLETED Session의 COMPLETED Answer text를 철회한다.
+         *     text-only Answer는 행을 hard delete하고 학생 질문 target을 OPEN으로 복귀시킨다.
+         *     voice-backed Answer는 음성 범위·target·snapshot을 유지한 채 text_content만 null로
+         *     지운다. 두 경우 모두 취소 이력은 공개하지 않는다.
+         */
+        delete: operations["withdrawCompletedAnswerText"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/answers/{answer_id}/cancel": {
@@ -2529,16 +2560,15 @@ export interface components {
              *     AI 대표질문은 새 text-only Answer target이 아니다.
              */
             target: components["schemas"]["AnswerTargetStudentQuestion"];
-            /** @description 정확한 최대 길이는 TBD이며 서버는 빈 값을 새 Answer로 저장하지 않음 */
+            /** @description trim·Unicode NFC 정규화 후 1~2,000자여야 함 */
             text_content: string;
         };
         AnswerCreateRequest: components["schemas"]["VoiceAnswerCreateRequest"] | components["schemas"]["TextAnswerCreateRequest"];
         AnswerTextUpdateRequest: {
-            /**
-             * @description 텍스트 최대 길이와 빈 문자열·삭제 정책은 TBD이므로
-             *     이 PATCH schema는 길이 제약을 선결정하지 않는다.
-             */
+            /** @description trim·Unicode NFC 정규화 후 1~2,000자여야 함 */
             text_content: string;
+            /** @description 마지막으로 읽은 Answer version. 다르면 409 ANSWER_VERSION_CONFLICT */
+            expected_version: number;
         };
         AnswerCompleteRequest: {
             /** @description Answer가 캡처를 시작한 source TranscriptVersion과 같아야 함 */
@@ -5832,6 +5862,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createSessionAnswer: {
@@ -5977,6 +6008,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     updateCompletedAnswerText: {
@@ -6007,6 +6039,53 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Answer"];
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    withdrawCompletedAnswerText: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+                /**
+                 * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
+                 *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
+                 *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
+                 *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
+                 *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
+                 *     LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
+                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING transaction이 원
+                 *     리소스·Job을 삭제하고 늦은 결과를 fence하는 것은 확정이지만,
+                 *     멱등성 행을 조기 삭제할지 24시간 보존할지와 종료 후 같은 키에
+                 *     기존 202·201을 재응답할지 별도 응답을 줄지는 TBD이다. FINAL Summary와
+                 *     mode=REVIEW Chat·관련 Job retry는
+                 *     이 예외에 포함하지 않는다.
+                 */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description 불투명 Answer ID */
+                answer_id: components["parameters"]["AnswerId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description text가 철회되었거나 text-only Answer가 삭제됨 */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -6059,6 +6138,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listSessionSummaries: {
