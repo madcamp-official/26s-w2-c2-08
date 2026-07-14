@@ -2433,6 +2433,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/RecordingNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/recording/uploads:
     parameters:
@@ -2476,10 +2478,14 @@ paths:
           $ref: "#/components/responses/RecordingNotFound"
         "409":
           $ref: "#/components/responses/RecordingUploadConflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedRecordingFormat"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
   /api/v1/recording-uploads/{upload_id}:
     parameters:
@@ -2510,6 +2516,8 @@ paths:
           $ref: "#/components/responses/RecordingUploadNotFound"
         "410":
           $ref: "#/components/responses/RecordingUploadExpired"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     patch:
       tags: [Recordings]
       operationId: uploadRecordingChunk
@@ -2561,8 +2569,14 @@ paths:
           $ref: "#/components/responses/RecordingUploadChunkConflict"
         "410":
           $ref: "#/components/responses/RecordingUploadExpired"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedRecordingFormat"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
   /api/v1/recording-uploads/{upload_id}/complete:
     parameters:
@@ -2612,6 +2626,8 @@ paths:
           $ref: "#/components/responses/RecordingUploadExpired"
         "422":
           $ref: "#/components/responses/RecordingChecksumMismatch"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
   /api/v1/recordings/{recording_id}/playback:
     parameters:
@@ -2686,6 +2702,10 @@ paths:
           $ref: "#/components/responses/RecordingNotReady"
         "416":
           $ref: "#/components/responses/RangeNotSatisfiable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
 
 components:
   securitySchemes:

@@ -1488,9 +1488,10 @@ export interface paths {
         };
         /**
          * Session 녹음 메타데이터 조회
-         * @description 첫 성공 audio.start가 만든 논리 SessionRecording aggregate를 반환한다. 물리 저장물이
-         *     파일 하나인지 여러 fragment와 manifest인지는 공개하지 않는다. 현재 인증과 Course
-         *     접근 권한을 매번 다시 확인하며 동의와 역할별 세부 접근 범위는 아직 미정이다.
+         * @description 첫 성공 audio.start가 만든 논리 SessionRecording aggregate를 반환한다. 하나의
+         *     RecordingUpload가 private temporary object를 이어 쓰고 final object로 promote하지만
+         *     storage key·경로·fragment·manifest는 공개하지 않는다. 현재 인증과 Course 접근 권한을
+         *     매번 다시 확인하며 MVP에서 현재 Course 멤버는 metadata와 playback을 조회할 수 있다.
          *     storage key, 서버 경로, fragment key와 manifest는 반환하지 않는다.
          */
         get: operations["getSessionRecording"];
@@ -1520,8 +1521,8 @@ export interface paths {
         /**
          * 녹음 resumable upload 초기화
          * @description 첫 publisher와 같은 client_stream_id를 사용하는 Course PROFESSOR가 PROCESSING
-         *     Session의 UPLOAD_PENDING Recording에 active upload를 하나 만든다. codec·container,
-         *     허용 content_type, 브라우저 로컬 저장 방식, 최대 크기와 정확한 expiry 값은 TBD이다.
+         *     Session의 UPLOAD_PENDING Recording에 active upload를 하나 만든다. 허용 content type은
+         *     audio/webm과 audio/mp4이고 total_bytes는 100,000,000 이하이며 expiry는 생성부터 24시간이다.
          */
         post: operations["createRecordingUpload"];
         delete?: never;
@@ -1544,9 +1545,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 녹음 upload offset 조회 초안
-         * @description 현재 upload 상태와 offset_bytes를 조회하는 비규범적 placeholder다. 최종 protocol에서
-         *     GET과 HEAD 중 무엇을 사용할지, offset header와 응답 status는 TBD이다.
+         * 녹음 upload offset 조회
+         * @description 현재 upload 상태와 서버가 확인한 offset_bytes를 조회한다. 재시작 뒤 재개 위치는 이
+         *     값이며, upload·playback 권한과 같은 현재 Course 권한을 매 요청 다시 확인한다.
          */
         get: operations["getRecordingUploadOffset"];
         put?: never;
@@ -1555,10 +1556,10 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * 녹음 binary chunk 전송 초안
-         * @description 현재 서버 byte offset부터 녹음 chunk를 이어 쓰는 비규범적 placeholder다. PATCH 사용
-         *     여부, offset 전달 header, request Content-Type, chunk 크기와 성공 status·응답 offset
-         *     전달 방식은 TBD이다. 아래 application/octet-stream과 200 응답은 최종 wire 계약이 아니다.
+         * 녹음 binary chunk 전송
+         * @description Upload-Offset에서 시작하는 최대 8,388,608 bytes의 chunk를 이어 쓴다.
+         *     X-Chunk-SHA256은 body의 SHA-256 lowercase hex와 일치해야 한다. 같은 offset의
+         *     경쟁 요청은 하나만 성공하며, 응답의 offset_bytes가 다음 재개 위치다.
          */
         patch: operations["uploadRecordingChunk"];
         trace?: never;
@@ -1580,7 +1581,7 @@ export interface paths {
         put?: never;
         /**
          * 녹음 upload 완료와 HQ STT 시작 gate
-         * @description 전체 byte 수와 향후 확정할 checksum 규칙을 검증해 Recording을 UPLOADED로 확정한 뒤
+         * @description 전체 byte 수와 request sha256을 검증해 Recording을 UPLOADED로 확정한 뒤
          *     source=RECORDING, status=FINALIZING인 다음 TranscriptVersion과
          *     RECORDING_TRANSCRIPTION Job을 같은 transaction에서 생성한다. Job은 target RECORDING,
          *     visibility SHARED, blocks_session_completion=true이며 성공 result는 TRANSCRIPT_VERSION이다.
@@ -1609,9 +1610,9 @@ export interface paths {
         /**
          * 권한 재검증 녹음 playback
          * @description UPLOADED인 논리 Recording을 전체 또는 HTTP byte Range로 재생한다. 요청마다 현재 인증과
-         *     Course 접근을 다시 확인한다. proxy streaming과 권한 확인 뒤 opaque signed delivery
-         *     URL로 redirect하는 방식, codec·container와 실제 응답 MIME은 TBD이다. 어느 방식도
-         *     내부 storage key, 서버 경로, fragment key나 manifest를 공개하지 않는다.
+         *     Course 접근을 다시 확인한다. API는 final object를 proxy stream하며 audio/webm 또는
+         *     audio/mp4 MIME을 그대로 반환한다. 어느 방식도 내부 storage key, 서버 경로,
+         *     fragment key나 manifest를 공개하지 않는다.
          */
         get: operations["playSessionRecording"];
         put?: never;
@@ -2040,8 +2041,9 @@ export interface components {
             jobs: components["schemas"]["AIJob"][];
         };
         /**
-         * @description Session의 논리 녹음 aggregate를 나타내는 안전한 외부 표현이다. 물리 저장물이 단일
-         *     파일인지 fragment와 manifest인지, storage key와 서버 경로가 무엇인지는 노출하지 않는다.
+         * @description Session의 논리 녹음 aggregate를 나타내는 안전한 외부 표현이다. MVP는 하나의
+         *     RecordingUpload temporary object를 하나의 final object로 promote하지만 storage key와
+         *     서버 경로는 노출하지 않는다.
          */
         SessionRecording: {
             id: components["schemas"]["ResourceId"];
@@ -2049,15 +2051,18 @@ export interface components {
             status: components["schemas"]["SessionRecordingStatus"];
             /** @description recording.updated의 오래된 갱신을 거르기 위한 리소스 버전 */
             version: number;
-            /** @description upload format 확정 전 또는 아직 upload되지 않았으면 null */
-            content_type: string | null;
+            /**
+             * @description 아직 upload되지 않았으면 null
+             * @enum {string|null}
+             */
+            content_type: "audio/webm" | "audio/mp4" | null;
             /** @description upload 완결 전에는 null */
             byte_size: number | null;
             /** @description 브라우저가 보고하고 서버가 검증한 재생 길이. 검증 전에는 null */
             duration_ms: number | null;
             /**
-             * @description 현재 권한으로 UPLOADED 녹음을 조회할 상대 API 경로. 준비 전이거나 접근 정책상
-             *     재생할 수 없으면 null이며 내부 storage URL을 반환하지 않는다.
+             * @description UPLOADED 녹음을 조회할 상대 API 경로. 준비 전이면 null이며 내부 storage URL을
+             *     반환하지 않는다. 요청마다 권한을 다시 확인한다.
              */
             playback_url: string | null;
             /** Format: date-time */
@@ -2068,16 +2073,15 @@ export interface components {
         RecordingUploadCreateRequest: {
             /** @description 첫 audio.start에서 publisher를 claim한 동일한 client stream ID */
             client_stream_id: string;
-            /** @description 허용 codec·container와 MIME 목록은 TBD */
-            content_type: string;
-            /** @description 최대 녹음 크기는 TBD */
+            /** @enum {string} */
+            content_type: "audio/webm" | "audio/mp4";
             total_bytes: number;
             /** @description 브라우저 로컬 녹음이 보고한 전체 재생 길이 */
             duration_ms: number;
         };
         /**
-         * @description resumable upload의 안전한 공개 상태다. 임시 storage 경로, storage key, fragment와
-         *     manifest는 포함하지 않는다. offset 전달 header와 wire protocol은 아직 미정이다.
+         * @description resumable upload의 안전한 공개 상태다. 임시 storage 경로와 storage key는 포함하지
+         *     않는다. PATCH는 Upload-Offset·X-Chunk-SHA256 header와 binary body를 사용한다.
          */
         RecordingUpload: {
             id: components["schemas"]["ResourceId"];
@@ -2088,7 +2092,7 @@ export interface components {
             total_bytes: number;
             /**
              * Format: date-time
-             * @description 정확한 upload 유효 기간은 TBD
+             * @description 생성 시각부터 정확히 24시간 뒤
              */
             expires_at: string;
             /** Format: date-time */
@@ -2106,6 +2110,10 @@ export interface components {
              *     RECORDING_TRANSCRIPTION Job. 성공 result는 TRANSCRIPT_VERSION이다.
              */
             job: components["schemas"]["AIJob"];
+        };
+        RecordingUploadCompleteRequest: {
+            /** @description 전체 temporary object의 lowercase SHA-256 hex digest */
+            sha256: string;
         };
         /** @description 외부에서 연결된 강의자료. 스토리지 키와 detached_at은 공개하지 않는다. */
         LectureMaterial: {
@@ -3778,7 +3786,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description 녹음 upload가 만료됨. 정확한 expiry 값은 TBD */
+        /** @description 녹음 upload가 생성 시각부터 24시간 뒤 만료됨 */
         RecordingUploadExpired: {
             headers: {
                 "X-Request-ID": components["headers"]["RequestId"];
@@ -3798,7 +3806,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description 지원하지 않는 녹음 codec·container 또는 Content-Type. 지원 목록은 TBD */
+        /** @description 지원하지 않는 녹음 Content-Type. MVP 허용 목록은 audio/webm, audio/mp4 */
         UnsupportedRecordingFormat: {
             headers: {
                 "X-Request-ID": components["headers"]["RequestId"];
@@ -3810,6 +3818,26 @@ export interface components {
                  *       "error": {
                  *         "code": "UNSUPPORTED_RECORDING_FORMAT",
                  *         "message": "지원하지 않는 녹음 형식입니다.",
+                 *         "request_id": "req_01HXYZ",
+                 *         "details": null
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description chunk 또는 전체 녹음 SHA-256이 요청 checksum과 일치하지 않음 */
+        RecordingChecksumMismatch: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "RECORDING_CHECKSUM_MISMATCH",
+                 *         "message": "녹음 무결성 검증에 실패했습니다.",
                  *         "request_id": "req_01HXYZ",
                  *         "details": null
                  *       }
@@ -6628,6 +6656,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["RecordingNotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createRecordingUpload: {
@@ -6681,8 +6710,10 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["RecordingNotFound"];
             409: components["responses"]["RecordingUploadConflict"];
+            413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedRecordingFormat"];
             422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getRecordingUploadOffset: {
@@ -6714,14 +6745,19 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["RecordingUploadNotFound"];
             410: components["responses"]["RecordingUploadExpired"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     uploadRecordingChunk: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
                 "X-Request-ID"?: components["parameters"]["RequestId"];
+                /** @description 서버가 마지막으로 확인한 다음 write 위치 */
+                "Upload-Offset": number;
+                /** @description body bytes의 lowercase SHA-256 hex digest */
+                "X-Chunk-SHA256": string;
             };
             path: {
                 /** @description 불투명 RecordingUpload ID */
@@ -6750,7 +6786,10 @@ export interface operations {
             404: components["responses"]["RecordingUploadNotFound"];
             409: components["responses"]["RecordingUploadChunkConflict"];
             410: components["responses"]["RecordingUploadExpired"];
+            413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedRecordingFormat"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     completeRecordingUpload: {
@@ -6782,7 +6821,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordingUploadCompleteRequest"];
+            };
+        };
         responses: {
             /** @description upload가 완결되고 HQ TranscriptVersion과 blocking Job이 생성됨 */
             202: {
@@ -6799,6 +6842,8 @@ export interface operations {
             404: components["responses"]["RecordingUploadNotFound"];
             409: components["responses"]["RecordingUploadCompleteConflict"];
             410: components["responses"]["RecordingUploadExpired"];
+            422: components["responses"]["RecordingChecksumMismatch"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     playSessionRecording: {
@@ -6827,7 +6872,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": string;
+                    "audio/webm": string;
+                    "audio/mp4": string;
                 };
             };
             /** @description 요청한 byte Range의 녹음 binary */
@@ -6841,23 +6887,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": string;
+                    "audio/webm": string;
+                    "audio/mp4": string;
                 };
-            };
-            /** @description opaque signed delivery URL 방식을 선택할 때의 임시 redirect 초안 */
-            307: {
-                headers: {
-                    /** @description 내부 storage key나 서버 경로를 노출하지 않는 짧은 수명 URL */
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["RecordingNotFound"];
             409: components["responses"]["RecordingNotReady"];
             416: components["responses"]["RangeNotSatisfiable"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
 }

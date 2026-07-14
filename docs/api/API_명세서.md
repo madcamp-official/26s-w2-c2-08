@@ -241,7 +241,7 @@ POST /api/v1/auth/logout
 | `500` | 서버 오류                  | `INTERNAL_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `503` | 의존 서비스 장애           | `DEPENDENCY_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
-녹음 checksum 불일치의 공개 오류 코드는 `RECORDING_CHECKSUM_MISMATCH`로 고정한다. checksum algorithm, 검증 시점과 이 오류의 HTTP status는 resumable upload protocol과 함께 TBD이다.
+녹음 checksum 불일치의 공개 오류 코드는 `RECORDING_CHECKSUM_MISMATCH`로 고정한다. chunk와 전체 object는 모두 lowercase hexadecimal SHA-256으로 검증하며, 불일치는 `422`를 반환하고 기존 upload bytes·offset은 유지한다.
 
 #### 3.1.1 질문·초안·Chat USER 텍스트 검증
 
@@ -1305,9 +1305,10 @@ Content-Type: application/octet-stream
 
 - `GET`은 upload ID, 상태, `offset_bytes`, `total_bytes`, `expires_at`을 반환한다. 서버 또는 DB 재시작 뒤에도 이 offset이 재개 위치의 진실이다.
 - `PATCH`는 최대 8,388,608 bytes의 binary chunk를 받는다. `Upload-Offset`과 `X-Chunk-SHA256`은 필수이며 chunk checksum은 SHA-256 lowercase hex다.
+- chunk 자체가 8,388,608 bytes를 넘으면 `413 FILE_TOO_LARGE`로 거부한다. `offset + chunk byte`가 `total_bytes`를 넘으면 `409 UPLOAD_OFFSET_MISMATCH`를 반환한다.
 - chunk 요청은 서버가 확인한 현재 byte offset에서만 이어 쓴다. 다른 offset이면 `409 UPLOAD_OFFSET_MISMATCH`와 안전한 현재 offset을 반환한다.
 - upload가 없거나 존재를 공개하지 않으면 `404 RECORDING_UPLOAD_NOT_FOUND`, 만료됐으면 `410 RECORDING_UPLOAD_EXPIRED`를 반환한다.
-- checksum 형식·chunk checksum 불일치는 `422 RECORDING_CHECKSUM_MISMATCH`를 반환하며 bytes를 이어 쓰지 않는다. `offset + chunk byte`가 `total_bytes`를 넘으면 `409 UPLOAD_OFFSET_MISMATCH`를 반환한다.
+- checksum 형식·chunk checksum 불일치는 `422 RECORDING_CHECKSUM_MISMATCH`를 반환하며 bytes를 이어 쓰지 않는다.
 - 각 요청은 인증, Course 권한과 최초 publisher 연결을 다시 검증한다. 내부 임시 경로와 storage key는 반환하거나 로그에 남기지 않는다.
 
 RecordingUpload의 공개 상태는 `ACTIVE`, `COMPLETED`, `EXPIRED`, `FAILED`이다. 만료된 active upload는 temporary object 정리 후 `EXPIRED`로 terminal 처리되고 Recording을 `UPLOAD_PENDING`으로 되돌린다. 실패 terminal도 새 init을 허용하며 동시에 active upload는 하나뿐이다.

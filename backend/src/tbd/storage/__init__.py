@@ -17,6 +17,7 @@ from tbd.storage.contracts import (
     StorageRangeError,
     StorageUnavailableError,
     sha256_bytes,
+    validate_sha256,
 )
 from tbd.storage.filesystem import FilesystemStorage
 from tbd.storage.testing import FailureStorage, InMemoryStorage, StorageOperation
@@ -44,4 +45,5 @@ __all__ = [
     "StorageUnavailableError",
     "classify_deletion_error",
     "sha256_bytes",
+    "validate_sha256",
 ]
