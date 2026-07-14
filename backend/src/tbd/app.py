@@ -37,9 +37,7 @@ def create_app(
     app.state.settings = runtime_settings
     app.state.database = runtime_database
     cipher = runtime_settings.idempotency_response_cipher
-    app.state.idempotency_repository = (
-        IdempotencyRepository(cipher) if cipher is not None else None
-    )
+    app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None
     app.add_middleware(RequestIdMiddleware)
     install_exception_handlers(app)
     app.include_router(api_router)

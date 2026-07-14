@@ -120,13 +120,9 @@ class Settings(BaseSettings):
         try:
             decoded = base64.b64decode(encoded, validate=True)
         except (binascii.Error, ValueError) as exc:
-            raise ValueError(
-                "IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be base64-encoded"
-            ) from exc
+            raise ValueError("IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be base64-encoded") from exc
         if len(decoded) != 32:
-            raise ValueError(
-                "IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must decode to exactly 32 bytes"
-            )
+            raise ValueError("IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must decode to exactly 32 bytes")
         return SecretStr(encoded)
 
     @field_validator("storage_root", mode="after")

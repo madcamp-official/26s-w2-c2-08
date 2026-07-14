@@ -275,11 +275,14 @@ def test_heartbeat_extends_the_active_worker_lease(migrated_database_url: str) -
 
             async with database.session_factory() as session:
                 async with session.begin():
-                    assert await kernel.fail_expired_shared(
-                        session,
-                        now=now + timedelta(seconds=61),
-                        general_timeout=timedelta(minutes=5),
-                    ) == []
+                    assert (
+                        await kernel.fail_expired_shared(
+                            session,
+                            now=now + timedelta(seconds=61),
+                            general_timeout=timedelta(minutes=5),
+                        )
+                        == []
+                    )
 
             async with database.session_factory() as session:
                 async with session.begin():
@@ -360,11 +363,14 @@ def test_watchdog_failure_is_retryable_and_supersession_is_non_retryable(
                     assert superseded is not None
                     assert superseded.status == AIJobStatus.SUPERSEDED
                     assert not superseded.retryable
-                    assert await kernel.retry_failed(
-                        session,
-                        second_job_id,
-                        now=now + timedelta(seconds=65),
-                    ) is None
+                    assert (
+                        await kernel.retry_failed(
+                            session,
+                            second_job_id,
+                            now=now + timedelta(seconds=65),
+                        )
+                        is None
+                    )
         finally:
             await database.dispose()
 

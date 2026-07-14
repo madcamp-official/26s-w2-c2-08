@@ -53,8 +53,7 @@ class JobService:
             .where(
                 AIJob.id == job_id,
                 CourseMember.user_id == user_id,
-                (AIJob.visibility == AIJobVisibility.SHARED)
-                | (AIJob.requester_user_id == user_id),
+                (AIJob.visibility == AIJobVisibility.SHARED) | (AIJob.requester_user_id == user_id),
             )
         )
         if job is None:
@@ -94,7 +93,10 @@ class JobService:
                 message="FAILED 상태의 작업만 재시도할 수 있습니다.",
                 details={"current_status": str(job.status), "required_status": "FAILED"},
             )
-        if job.job_type == AIJobType.QUESTION_CLUSTERING and job.clustering_mode == "LIVE_INCREMENTAL":
+        if (
+            job.job_type == AIJobType.QUESTION_CLUSTERING
+            and job.clustering_mode == "LIVE_INCREMENTAL"
+        ):
             raise JobRetryConflictError(
                 code="AI_JOB_RETRY_SYSTEM_MANAGED",
                 message="이 작업의 재시도는 시스템이 자동으로 관리합니다.",
