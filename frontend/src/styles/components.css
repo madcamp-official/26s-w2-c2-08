@@ -1273,6 +1273,68 @@
   background: #fffaf0 !important;
 }
 
+.course-qna-archive,
+.course-qna-archive__item,
+.course-qna-archive__question,
+.course-qna-archive__answer {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.course-qna-archive {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-qna-archive__item {
+  justify-items: start;
+}
+
+.course-qna-archive__meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.course-qna-archive__question {
+  width: 100%;
+}
+
+.course-qna-archive__question h3,
+.course-qna-archive__question span,
+.course-qna-archive__answer p,
+.course-qna-archive__unanswered {
+  margin: 0;
+}
+
+.course-qna-archive__question h3 {
+  color: var(--color-ink);
+  font-size: 21px;
+  line-height: 1.45;
+}
+
+.course-qna-archive__question span,
+.course-qna-archive__unanswered {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.course-qna-archive__answer {
+  width: 100%;
+  padding: var(--space-4);
+  border-left: 3px solid var(--color-brand);
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-soft);
+}
+
+.course-qna-archive__answer p {
+  line-height: 1.65;
+}
+
 .current-session-card,
 .professor-controls,
 .student-course-note {
