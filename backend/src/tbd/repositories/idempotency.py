@@ -80,13 +80,17 @@ class IdempotencyRepository:
 
         timestamp = now or datetime.now(UTC)
         record = await self._lock_existing(session, request)
+        inserted = False
         if record is None:
-            record = await self._insert_or_lock_existing(
+            record, inserted = await self._insert_or_lock_existing(
                 session, request, timestamp, processing_lease
             )
 
         if record.request_hash != request.request_hash:
             raise IdempotencyKeyReusedError
+
+        if inserted:
+            return AcquiredIdempotencyRecord(record_id=record.id)
 
         if record.state in {"COMPLETED", "FAILED"}:
             if record.expires_at is not None and record.expires_at <= timestamp:
@@ -127,6 +131,8 @@ class IdempotencyRepository:
             raise LookupError("idempotency record does not exist")
         if record.state != "PROCESSING":
             raise ValueError("idempotency record is already terminal")
+        if record.created_at > timestamp:
+            timestamp = record.created_at
 
         plaintext = json.dumps(
             body,
@@ -168,7 +174,7 @@ class IdempotencyRepository:
         request: IdempotencyRequest,
         now: datetime,
         processing_lease: timedelta,
-    ) -> IdempotencyRecord:
+    ) -> tuple[IdempotencyRecord, bool]:
         statement = (
             insert(IdempotencyRecord)
             .values(
@@ -192,11 +198,11 @@ class IdempotencyRepository:
                 select(IdempotencyRecord).where(IdempotencyRecord.id == record_id).with_for_update()
             )
             assert record is not None
-            return record
+            return record, True
 
         record = await self._lock_existing(session, request)
         assert record is not None
-        return record
+        return record, False
 
     def _replay(self, record: IdempotencyRecord) -> ReplayIdempotencyRecord:
         if (
