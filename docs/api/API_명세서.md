@@ -479,8 +479,8 @@ POST /api/v1/courses/{course_id}/sessions
 
 - 권한: Course `PROFESSOR`
 - 성공: `201 Created`, 상태 `READY`
-- `title`은 선택적이다. 생략하거나 앞뒤 공백을 제거한 값이 빈 문자열이면 서버가 Course 제목·class 날짜·시각을 포함한 자동 제목을 생성한다.
-- 자동 제목의 정확한 문자열 형식, `READY`에서 사용할 시각 원장과 timezone은 미정이다.
+- `title`은 선택적이다. 생략하거나 앞뒤 공백을 제거한 값이 빈 문자열이면 서버가 `Course 제목 · YYYY.MM.DD HH:mm` 자동 제목을 생성한다. `YYYY.MM.DD`는 요청의 `lecture_date`, `HH:mm`은 생성 시 기록한 `created_at`을 기본 timezone `Asia/Seoul`로 표시한 값이다.
+- 자동 제목은 생성 시 확정해 저장하며, 이후 시작·종료·완료 상태 전이나 빈 제목 수정에서도 같은 `created_at` 기준 값을 사용한다.
 - 같은 날짜에 여러 class를 허용한다.
 - 같은 Course에 `READY`, `LIVE`, `PROCESSING` Session이 이미 있으면 `409 ACTIVE_SESSION_EXISTS`를 반환한다.
 
@@ -508,7 +508,7 @@ PATCH /api/v1/sessions/{session_id}
 
 - 권한: Course `PROFESSOR`
 - 모든 Session 상태에서 제목만 수정할 수 있다. `lecture_date`와 시작·종료·완료 시각은 수정할 수 없다.
-- 앞뒤 공백을 제거한 제목이 빈 문자열이면 class 생성과 같은 자동 제목으로 되돌린다.
+- 앞뒤 공백을 제거한 제목이 빈 문자열이면 class 생성 때의 `created_at` 기준으로 계산한 같은 자동 제목으로 되돌린다.
 - 성공: `200 OK`, `version`이 증가한 Session을 반환한다. 별도 `If-Match` 계약은 도입하지 않는다.
 
 ### 7.5 class 삭제
@@ -1643,7 +1643,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | 항목                               | 현재 상태                                                                                                                                                                                       | 결정 시 영향                   |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | ID 형식                            | 불투명 string                                                                                                                                                                                   | OpenAPI `format`, DB PK        |
-| class 자동 제목                    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD                                                                                                                                               | Session 생성·제목 수정 응답    |
 | active Course 삭제                 | active Session 보유 시 삭제·보관 방식 TBD                                                                                                                                                       | Course 삭제 응답·트랜잭션      |
 | Material 표시명                    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD                                                                                                       | 업로드·목록·다운로드 파일명    |
 | Material 분리 근거                 | 안전한 label snapshot과 `link=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD                                                                                                   | Chat 근거·DB 삭제 정책         |
