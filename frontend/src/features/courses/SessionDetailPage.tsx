@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { sessionMaterialsQueryOptions } from '../materials/queries'
+import { QuestionPanel } from '../questions/QuestionPanel'
 import {
   deleteSession,
   endSession,
@@ -264,6 +265,9 @@ export function SessionDetailPage() {
         professor={professor}
         sessionStatus={data.status}
       />
+      {data.status === 'LIVE' && (
+        <QuestionPanel sessionId={data.id} student={!professor} />
+      )}
       {professor && (
         <Dialog
           open={deleteOpen}

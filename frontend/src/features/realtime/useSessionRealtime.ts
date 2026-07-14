@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { courseKeys } from '../courses/queries'
+import { questionKeys } from '../questions/queries'
 
 import { createRealtimeTicket } from './api'
 import { RealtimeSessionClient } from './client'
@@ -32,6 +33,9 @@ export function useSessionRealtime({
       })
       void queryClient.invalidateQueries({
         queryKey: courseKeys.detail(courseId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: questionKeys.session(sessionId),
       })
     }
     const client = new RealtimeSessionClient({
