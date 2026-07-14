@@ -8,10 +8,11 @@ from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from tbd.auth.security import AuthCrypto
 from tbd.core.config import Settings
-from tbd.models.courses import CourseMember
+from tbd.models.courses import Course, CourseMember
 from tbd.models.materials import TranscriptGap, TranscriptSegment, TranscriptVersion
 from tbd.models.sessions import LectureSession
 from tbd.schemas.transcripts import (
@@ -136,34 +137,56 @@ class TranscriptService:
             "end": end_sequence,
         }
         after = self._decode_timeline_cursor(cursor, scope=scope)
+        segment_statement = select(TranscriptSegment).where(
+            TranscriptSegment.transcript_version_id == selected.id
+        )
+        gap_statement = select(TranscriptGap).where(
+            TranscriptGap.transcript_version_id == selected.id
+        )
+        if anchor is not None:
+            start_ms, end_ms = anchor
+            assert start_sequence is not None and end_sequence is not None
+            segment_statement = segment_statement.where(
+                TranscriptSegment.sequence.between(start_sequence, end_sequence)
+            )
+            gap_statement = gap_statement.where(
+                TranscriptGap.start_ms <= end_ms,
+                or_(TranscriptGap.end_ms.is_(None), TranscriptGap.end_ms >= start_ms),
+            )
+        if after is not None:
+            segment_statement = segment_statement.where(
+                self._timeline_after_clause(
+                    start_column=TranscriptSegment.start_ms,
+                    id_column=TranscriptSegment.id,
+                    kind_order=0,
+                    after=after,
+                )
+            )
+            gap_statement = gap_statement.where(
+                self._timeline_after_clause(
+                    start_column=TranscriptGap.start_ms,
+                    id_column=TranscriptGap.id,
+                    kind_order=1,
+                    after=after,
+                )
+            )
+        # Reading at most limit + 1 rows per kind is sufficient for the first
+        # global limit + 1 items after merging the two independently sorted
+        # streams. This keeps lazy timeline pages bounded even for long classes.
         segments = list(
             await session.scalars(
-                select(TranscriptSegment)
-                .where(TranscriptSegment.transcript_version_id == selected.id)
-                .order_by(TranscriptSegment.start_ms.asc(), TranscriptSegment.id.asc())
+                segment_statement.order_by(
+                    TranscriptSegment.start_ms.asc(), TranscriptSegment.id.asc()
+                ).limit(limit + 1)
             )
         )
         gaps = list(
             await session.scalars(
-                select(TranscriptGap)
-                .where(TranscriptGap.transcript_version_id == selected.id)
-                .order_by(TranscriptGap.start_ms.asc(), TranscriptGap.id.asc())
+                gap_statement.order_by(TranscriptGap.start_ms.asc(), TranscriptGap.id.asc()).limit(
+                    limit + 1
+                )
             )
         )
-        if anchor is not None:
-            start_ms, end_ms = anchor
-            segments = [
-                item
-                for item in segments
-                if start_sequence is not None
-                and end_sequence is not None
-                and start_sequence <= item.sequence <= end_sequence
-            ]
-            gaps = [
-                item
-                for item in gaps
-                if item.start_ms <= end_ms and (item.end_ms is None or item.end_ms >= start_ms)
-            ]
         items = [
             *(_TimelineItem("SEGMENT", item.start_ms, item.id, item) for item in segments),
             *(_TimelineItem("GAP", item.start_ms, item.id, item) for item in gaps),
@@ -250,26 +273,40 @@ class TranscriptService:
         segment_id: UUID,
         user_id: UUID,
     ) -> TranscriptSegmentResponse:
-        segment = await session.get(TranscriptSegment, segment_id)
-        if segment is None:
-            raise TranscriptNotFoundError
-        lecture_session = await session.get(LectureSession, segment.session_id)
-        if lecture_session is None:
-            raise TranscriptNotFoundError
-        role = await session.scalar(
-            select(CourseMember.role).where(
-                CourseMember.course_id == lecture_session.course_id,
+        segment = await session.scalar(
+            select(TranscriptSegment)
+            .join(
+                TranscriptVersion,
+                TranscriptVersion.id == TranscriptSegment.transcript_version_id,
+            )
+            .join(LectureSession, LectureSession.id == TranscriptSegment.session_id)
+            .join(Course, Course.id == LectureSession.course_id)
+            .join(CourseMember, CourseMember.course_id == Course.id)
+            .where(
+                TranscriptSegment.id == segment_id,
                 CourseMember.user_id == user_id,
+                Course.deleted_at.is_(None),
+                or_(
+                    TranscriptVersion.source != "RECORDING",
+                    TranscriptVersion.status != "FINALIZING",
+                ),
             )
         )
-        if role is None:
+        if segment is None:
             raise TranscriptNotFoundError
         return self._project_segment(segment)
 
     async def _require_member(
         self, session: AsyncSession, *, session_id: UUID, user_id: UUID
     ) -> LectureSession:
-        lecture_session = await session.get(LectureSession, session_id)
+        lecture_session = await session.scalar(
+            select(LectureSession)
+            .join(Course, Course.id == LectureSession.course_id)
+            .where(
+                LectureSession.id == session_id,
+                Course.deleted_at.is_(None),
+            )
+        )
         if lecture_session is None:
             raise TranscriptSessionNotFoundError
         role = await session.scalar(
@@ -390,6 +427,28 @@ class TranscriptService:
         ):
             raise InvalidTranscriptCursorError
         return position[0], position[1]
+
+    @staticmethod
+    def _timeline_after_clause(
+        *,
+        start_column: ColumnElement[int],
+        id_column: ColumnElement[UUID],
+        kind_order: int,
+        after: tuple[int, int, str],
+    ) -> ColumnElement[bool]:
+        try:
+            after_id = UUID(after[2])
+        except ValueError as exc:
+            raise InvalidTranscriptCursorError from exc
+        after_start, after_kind, _ = after
+        if kind_order < after_kind:
+            return start_column > after_start
+        if kind_order > after_kind:
+            return start_column >= after_start
+        return or_(
+            start_column > after_start,
+            and_(start_column == after_start, id_column > after_id),
+        )
 
     @staticmethod
     def _item_key(item: _TimelineItem) -> tuple[int, int, str]:
