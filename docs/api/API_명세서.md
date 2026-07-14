@@ -846,6 +846,7 @@ GET /api/v1/sessions/{session_id}/question-clusters?scope=CURRENT&cursor=<cursor
 - `CAPTURING` 대표질문은 Answer가 종료될 때까지 child로 보존하고, `COMPLETED` Answer가 있는 과거 대표질문은 일반 child 질문처럼 보존한다.
 - FINAL Job은 성공 commit 전에 eligible 학생 질문과 cutoff까지 Answer가 완료된 AI 대표질문의 예상 집합과 공개 membership이 일치하는지 검증한다. 각 input은 정확히 한 번 등장해야 하며 누락·중복이 있으면 Job을 `SUCCEEDED`로 바꾸지 않는다. 모델이 분류하지 못한 input은 누락 대신 하나의 명시적이고 안정적인 `기타` Cluster에 배치하며 이 중앙 표시문은 임의 생성 문구가 아닌 정확한 `기타`를 사용한다.
 - FINAL 대상 학생 질문과 답변된 AI 대표질문이 모두 0건일 때 Job 생략 여부, 빈 성공 결과 원장과 `generation` 표현은 TBD이다.
+- 잘못된 UUID·`scope`·cursor·`limit` 형식은 `422 VALIDATION_ERROR`로 거부하고, 서명은 맞지 않거나 다른 generation의 cursor는 `400 INVALID_CURSOR`로 처리한다.
 
 ### 10.7 클러스터 child 목록
 
@@ -857,6 +858,7 @@ GET /api/v1/sessions/{session_id}/question-clusters/{cluster_id}/members?cursor=
 - generation 안에서 유일한 `ordinal ASC`로 안정적으로 정렬한다. 공개 `ordinal`은 DB membership `position` projection이다. member 공개 discriminator는 `source_kind`이고 값은 `STUDENT_QUESTION` 또는 답변이 있어 보존된 `AI_REPRESENTATIVE`이다. 내부 typed FK 이름과 `AI_REPRESENTATIVE_QUESTION`을 이 membership enum으로 노출하지 않는다.
 - 경로의 `{cluster_id}`는 해당 `{session_id}` 안에서 공개하는 logical ID이며, 서버는 Session·logical ID로 요청 scope의 현재 물리 generation row를 해석한다. 다른 Session의 logical ID는 일치하지 않는 리소스로 처리한다. generation 교체 중 기존 cursor 만료·재시작 정책은 TBD이다.
 - 대표질문과 각 child의 Answer 상태는 독립적이다. 공통 `limit`은 기본 20·최대 100이다. generation 교체 중 기존 cursor의 만료·재시작 정책과 큰 마인드맵의 preload page 수·점진 loading·자동 축소 layout은 TBD이다.
+- 잘못된 Session·Cluster UUID 또는 `limit` 형식은 `422 VALIDATION_ERROR`다.
 
 ### 10.8 AI 대표질문 단건 조회
 
@@ -868,6 +870,7 @@ GET /api/v1/representative-questions/{representative_question_id}
 - 현재 Cluster 중앙 대표질문과 Answer target으로 보존된 과거 대표질문을 ID로 조회한다. generation 배열 위치나 pagination cursor에 의존하지 않는다.
 - 응답의 `created_in_generation`(정수, 1 이상)은 이 immutable 대표질문이 처음 생성된 Cluster generation을 나타내며 `PRESERVED`로 바뀌어도 유지한다.
 - 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 비가시·존재하지 않는 대표질문, 교체 후 폐기되었거나 `PRESERVED` Answer 취소로 공개에서 제거된 대표질문은 모두 `404 RESOURCE_NOT_FOUND`로 응답해 존재를 숨긴다. Evidence provenance용 내부 tombstone이 남아도 같다.
+- 잘못된 대표질문 UUID는 `422 VALIDATION_ERROR`다.
 
 ## 11. 교수자 답변 API
 
