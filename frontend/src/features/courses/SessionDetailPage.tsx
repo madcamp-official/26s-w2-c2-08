@@ -10,6 +10,7 @@ import { Dialog } from '../../components/ui/Dialog'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { sessionMaterialsQueryOptions } from '../materials/queries'
 import { QuestionPanel } from '../questions/QuestionPanel'
+import { QuestionMindmap } from '../questions/QuestionMindmap'
 import {
   deleteSession,
   endSession,
@@ -266,7 +267,10 @@ export function SessionDetailPage() {
         sessionStatus={data.status}
       />
       {data.status === 'LIVE' && (
-        <QuestionPanel sessionId={data.id} student={!professor} />
+        <>
+          <QuestionPanel sessionId={data.id} student={!professor} />
+          <QuestionMindmap sessionId={data.id} />
+        </>
       )}
       {professor && (
         <Dialog
