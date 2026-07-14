@@ -306,7 +306,7 @@ READY → LIVE → PROCESSING → COMPLETED
 - `SESSION_POSTPROCESSING`의 성공은 Answer mapping·Knowledge 재연결과 downstream Job 예약이 끝났다는 뜻이며 `FINAL_SUMMARY`·`QUESTION_CLUSTERING`의 성공까지 의미하지 않는다.
 - `ANSWER_ORGANIZATION`도 다른 blocking Job과 마찬가지로 `SUCCEEDED|FAILED` terminal이면 완료 판정을 막지 않는다. 실패 결과는 Answer별로 표시하고 같은 Job 행의 `attempt + 1`로 나중에 재시도하며 Session을 `PROCESSING`으로 되돌리지 않는다. 10분 watchdog은 적용 대상 Answer에 Job이 아직 없으면 `SESSION_PROCESSING_TIMEOUT` 실패 Job을 먼저 합성한다.
 - `COMPLETED` 후 실패한 `RECORDING_TRANSCRIPTION`을 재시도해도 같은 Job 행의 `attempt + 1`과 새 `RECORDING` Transcript version을 사용한다. 이 재시도가 성공하면 같은 `SESSION_POSTPROCESSING` coordinator 행을 `attempt + 1`로 자동 requeue하고 Session 상태와 `completed_at`은 유지한다. 복구 coordinator는 새 canonical HQ version에 대한 Answer mapping과 canonical Knowledge 연결을 멱등 재조정하고, 새로 자격을 얻었지만 아직 없는 `FINAL_SUMMARY` Job을 생성한다. 기존 `ANSWER_ORGANIZATION` Job·결과의 immutable source를 바꾸거나 자동 재생성하지 않는다.
-- Session 종료 transaction은 active 또는 `retry_job_id`에 예약된 LIVE `QUESTION_CLUSTERING` 실행·재시도를 Session·attempt·run token fence로 정지하고 느린 결과 commit을 거부한다. 이 LIVE Job의 공개 terminal 표현을 `CANCELLED|SUPERSEDED`로 확장할지, 재시도 불가 `FAILED`로 표시할지는 TBD이다. 같은 종료 transaction은 FINAL 대상이 1건 이상이면 종료 시점 `requested_through_sequence`와 `ended_at`을 각각 학생 질문·완료 Answer 대표질문의 최초 attempt input 상한으로 저장한 `FINAL` clustering Job을 `SHARED`, `blocks_session_completion=true`로 즉시 생성한다. FINAL Job은 Recording upload·HQ Transcript·coordinator를 기다리지 않고 독립 실행한다. 학생 질문 상한은 모든 attempt에서 유지하고, 실패한 FINAL을 교수가 명시적으로 재시도할 때만 `base_revision`과 Answer 시각 상한을 현재 값으로 다시 캡처한다. 대표질문은 현재 중앙인지 과거 child인지와 무관하게 해당 attempt 상한까지 `COMPLETED` Answer가 있으면 포함한다. FINAL 성공은 대상 input 각각이 정확히 한 Cluster에 한 번씩만 들어감을 의미하며, 분류할 수 없는 input도 누락하지 않고 하나의 안정적인 `기타` Cluster에 배치한다. 대상 0건의 Job·빈 generation 표현은 TBD이다.
+- Session 종료 transaction은 active 또는 `retry_job_id`에 예약된 LIVE `QUESTION_CLUSTERING` 실행·재시도를 Session·attempt·run token fence로 정지하고 느린 결과 commit을 거부한다. 이 LIVE Job은 같은 종료 transaction에서 만드는 FINAL clustering Job이 입력을 대체하므로 `SUPERSEDED`, `retryable=false`로 terminal 처리한다. 같은 종료 transaction은 FINAL 대상이 1건 이상이면 종료 시점 `requested_through_sequence`와 `ended_at`을 각각 학생 질문·완료 Answer 대표질문의 최초 attempt input 상한으로 저장한 `FINAL` clustering Job을 `SHARED`, `blocks_session_completion=true`로 즉시 생성한다. FINAL Job은 Recording upload·HQ Transcript·coordinator를 기다리지 않고 독립 실행한다. 학생 질문 상한은 모든 attempt에서 유지하고, 실패한 FINAL을 교수가 명시적으로 재시도할 때만 `base_revision`과 Answer 시각 상한을 현재 값으로 다시 캡처한다. 대표질문은 현재 중앙인지 과거 child인지와 무관하게 해당 attempt 상한까지 `COMPLETED` Answer가 있으면 포함한다. FINAL 성공은 대상 input 각각이 정확히 한 Cluster에 한 번씩만 들어감을 의미하며, 분류할 수 없는 input도 누락하지 않고 하나의 안정적인 `기타` Cluster에 배치한다. 대상 0건의 Job·빈 generation 표현은 TBD이다.
 - `FAILED` Job은 기록 화면에 오류와 재시도 상태를 표시한다. `COMPLETED` 후 재시도해도 Session을 `PROCESSING`으로 되돌리지 않는다.
 - Session이 `COMPLETED`로 전환된 시각을 `completed_at`으로 공개한다. 그 전에는 `null`이다.
 
@@ -325,10 +325,14 @@ OPEN → SELECTED → ANSWERED
 
 ```text
 PENDING → RUNNING → SUCCEEDED
-                  └→ FAILED
+                  ├→ FAILED
+                  ├→ CANCELLED
+                  └→ SUPERSEDED
 ```
 
-- 실패한 작업만 재시도할 수 있다.
+- `FAILED`만 작업 정책과 권한 검사를 통과하면 재시도할 수 있다. watchdog의 worker lease 만료와 일반 Job 실행 timeout도 `FAILED`이며 안전한 오류 code를 보관한다.
+- `CANCELLED`는 대체 작업 없이 명시적으로 중단한 terminal 상태다. `SUPERSEDED`는 새 logical Job 또는 generation이 기존 실행을 대체한 terminal 상태다. 두 상태는 `retryable=false`이며 같은 행을 재시도할 수 없다.
+- `LIVE → PROCESSING`에서 실행·재시도 예약된 LIVE `QUESTION_CLUSTERING`은 같은 종료 transaction에서 만드는 FINAL clustering Job이 대체하므로 `SUPERSEDED`로 끝낸다. 이전 run token과 retry 예약을 지워 늦은 결과를 막는다.
 - `visibility`는 `SHARED` 또는 `REQUESTER_ONLY`이며 `blocks_session_completion=true`인 Job은 반드시 `SHARED`이다.
 - `job_type`을 작업의 공개 purpose로 사용하고 `progress.stage`에는 `QUEUED`, `EXTRACTING`, `GENERATING`, `FINALIZING` 등 사용자에게 공개해도 안전한 phase만 반환한다.
 - provider 내부 단계, 프롬프트·응답 원문과 민감한 오류 정보는 공개하지 않는다.
@@ -1139,7 +1143,7 @@ GET /api/v1/sessions/{session_id}/jobs?job_type=<type>&status=<status>&cursor=<c
 - 자료 처리, 질문 클러스터링, `ANSWER_ORGANIZATION`, `RECORDING_TRANSCRIPTION`과 Session 후처리처럼 참여자가 상태를 알아야 하는 공용 Job만 반환한다.
 - 목록은 `created_at DESC, id DESC`로 안정적으로 정렬하며 `job_type`, `status`를 cursor에 고정한다.
 - 개인 LIVE 요약과 Chat Job은 포함하지 않는다. 질문 초안은 동기 `200` 응답이며 Job이 아니다.
-- `QUESTION_CLUSTERING`은 `clustering_mode`, input watermark, base revision을 공개한다. LIVE 실패 재시도는 시스템이 같은 Job 행의 `attempt + 1`로 수행한다. Session 종료가 중지한 LIVE 실행은 다시 실행하지 않으며 공개 terminal status·reason은 4.2절의 TBD를 따른다. 최종 clustering 실패는 `COMPLETED` 기록에서 교수자가 같은 Job 행을 재시도할 수 있고 Session을 `PROCESSING`으로 되돌리지 않는다.
+- `QUESTION_CLUSTERING`은 `clustering_mode`, input watermark, base revision을 공개한다. LIVE 실패 재시도는 시스템이 같은 Job 행의 `attempt + 1`로 수행한다. Session 종료가 대체한 LIVE 실행은 `SUPERSEDED`, `retryable=false`로 다시 실행하지 않는다. 최종 clustering 실패는 `COMPLETED` 기록에서 교수자가 같은 Job 행을 재시도할 수 있고 Session을 `PROCESSING`으로 되돌리지 않는다.
 - 현재 generation을 만든 성공 `QUESTION_CLUSTERING`의 result는 단일 Cluster가 아니라 `resource_type=QUESTION_CLUSTER_GENERATION`, 문자열 generation 번호인 `resource_id`, 해당 scope Cluster 목록 `resource_url`을 반환한다. 새 generation으로 교체되면 과거 Job은 `SUPERSEDED` 규칙을 따른다.
 - FINAL Job은 최초 실행의 `final_answered_through_at=Session.ended_at`을 공개한다. 실패 뒤 Course 교수자가 같은 Job을 명시적으로 재시도하면 학생 질문 watermark만 유지하고, `base_revision`은 현재 revision으로, Answer 상한은 재시도 수락 시각으로 다시 캡처해 실패 후 새로 답변된 AI 대표질문도 입력에 포함한다. 이미 성공한 FINAL을 수업 종료 뒤 text Answer 때문에 다시 만드는 정책은 TBD이다.
 - FINAL `SUCCEEDED`는 해당 attempt의 eligible input set과 Cluster membership이 일치해 모든 input이 정확히 한 번씩 등장함을 보장한다. 분류 불가 input은 하나의 명시적인 `기타` Cluster에 배치하며 누락·중복이나 `기타` 분산이 있으면 성공으로 commit하지 않는다.
@@ -1550,7 +1554,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 ### 16.8 개인 AI 결과 polling
 
 - LIVE Summary와 Chat turn은 REST 요청을 `202 Accepted + AIJob`으로 수락한다. Chat 생성 자체는 AI 실행이 아니므로 `201`을 반환한다.
-- 요청자는 `GET /api/v1/jobs/{job_id}`를 polling해 `PENDING|RUNNING|SUCCEEDED|FAILED`를 확인한다. 구체 polling 간격은 서버 `429`·`Retry-After` 정책과 클라이언트 backoff를 따르며 수치는 TBD이다.
+- 요청자는 `GET /api/v1/jobs/{job_id}`를 polling해 `PENDING|RUNNING|SUCCEEDED|FAILED|CANCELLED|SUPERSEDED`를 확인한다. 구체 polling 간격은 서버 `429`·`Retry-After` 정책과 클라이언트 backoff를 따르며 수치는 TBD이다.
 - 개인 AI는 성공한 최종 Summary 또는 Assistant Message만 DB에 저장한다. 부분 문장·token·중간 출력은 저장하거나 공용 WebSocket으로 보내지 않고 SSE·streaming HTTP·개인 WS도 제공하지 않는다.
 - `SUCCEEDED` Job은 `result.resource_type`, `result.resource_id`, `result.resource_url`로 저장 결과를 가리킨다. 요약 또는 Assistant Message는 원인 `job_id`를 보관하며 요청자는 이 URL을 다시 GET해 결과를 복구한다.
 - 생성 실패는 Job `FAILED`와 안전한 `error`로 표시하며 별도 개인 이벤트를 정의하지 않는다.
@@ -1649,7 +1653,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | HQ Transcript 실패 후 final source | `RECORDING_TRANSCRIPTION` 실패 version과 LIVE canonical은 모두 보존; LIVE를 완료 기록·Summary final source로 사용할지 TBD                                                                       | Transcript·Summary·복구 UI     |
 | HQ STT 개별 Job timeout            | 일반 후처리 기본 5분에서 `RECORDING_TRANSCRIPTION`은 제외; HQ 개별 상한은 TBD. heartbeat 15초·lease 60초·Session 전체 10분은 확정                                                               | Worker watchdog·운영 모니터링  |
 | Answer 재매핑 세부                 | canonical 전체 범위 mapping 상태는 공개; 일부 매핑·미매핑 이유 enum과 수동 복구 정책 TBD                                                                                                        | Answer 응답·완료 기록 UI       |
-| 종료 중 LIVE clustering Job 표현   | 실행·retry·late result fence는 확정; `CANCELLED\|SUPERSEDED` 확장 또는 재시도 불가 `FAILED` 표현은 TBD                                                                                          | AIJob status·error·종료 응답   |
 | LIVE AI purge 후 재응답            | LIVE 결과·Chat·Message·Evidence·Job 삭제와 late-result fence는 확정; 기존 ID polling·단건 HTTP status, 멱등 재요청 응답과 행 조기 삭제 여부는 TBD                                               | 개인 AI 종료 경쟁·client cache |
 | 이벤트 재생                        | event log 보존 여부 TBD                                                                                                                                                                         | 재연결 프로토콜                |
 | 레이트 리미트                      | 임계치 TBD                                                                                                                                                                                      | `429` 헤더·재시도              |
