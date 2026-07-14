@@ -19,6 +19,7 @@ from tbd.models.enums import (
 from tbd.models.materials import SessionRecording, TranscriptVersion
 from tbd.models.questions import AIJob, QuestionClusteringState
 from tbd.models.sessions import LectureSession
+from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.repositories.outbox import OutboxRepository
 from tbd.repositories.sessions import SessionRepository
 from tbd.schemas.sessions import LectureSessionResponse
@@ -27,6 +28,7 @@ from tbd.services.courses import (
     CourseNotFoundError,
     CourseRoleRequiredError,
 )
+from tbd.services.personal_ai import PersonalAIService
 
 
 class ActiveSessionExistsError(Exception):
@@ -211,8 +213,12 @@ class SessionService:
         *,
         session_id: object,
         user_id: object,
+        idempotency: IdempotencyRepository | None = None,
         now: datetime | None = None,
     ) -> SessionEndResult:
+        timestamp = now or datetime.now(UTC)
+        personal_ai = PersonalAIService()
+        purge_records = await personal_ai.lock_purge_records(session, session_id=session_id)
         lecture_session = await self._lock_existing(session, session_id)
         course = await self.repository.lock_course(session, lecture_session.course_id)
         assert course is not None
@@ -220,7 +226,13 @@ class SessionService:
         if lecture_session.status != "LIVE":
             raise SessionStateConflictError
 
-        timestamp = now or datetime.now(UTC)
+        await personal_ai.purge_live(
+            session,
+            lecture_session=lecture_session,
+            records=purge_records,
+            idempotency=idempotency,
+            now=timestamp,
+        )
         lecture_session.status = "PROCESSING"
         lecture_session.ended_at = timestamp
         lecture_session.version += 1

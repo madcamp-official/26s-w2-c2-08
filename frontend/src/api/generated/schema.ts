@@ -504,8 +504,9 @@ export interface paths {
          *     mode=LIVE Chat·Message·Evidence, REQUESTER_ONLY LIVE_SUMMARY Job, LIVE Chat에
          *     귀속된 REQUESTER_ONLY CHAT_RESPONSE Job을 삭제한다. 늦은 Worker 결과는
          *     Job·target·Session state·attempt·run-token fence를 통과하지 못해 저장되지
-         *     않는다. 종료 후 기존 개인 LIVE 리소스·Job ID의 polling·단건 HTTP
-         *     status와 purge_on_session_end 멱등성 행의 조기 삭제·재요청 응답은 TBD이다.
+         *     않는다. 종료 후 기존 개인 LIVE 리소스·Job ID의 polling·단건은 404이고,
+         *     purge_on_session_end terminal 멱등성 행은 삭제하지 않고 같은 key·request hash에
+         *     24시간 이내 410 LIVE_AI_RESULT_PURGED를 replay한다.
          *     FINAL Summary, REVIEW Chat·Job·멱등성 원장과 class 종료 요청 자체의
          *     멱등성 원장은 영향받지 않는다.
          */
@@ -1156,7 +1157,7 @@ export interface paths {
          *     LIVE 요약도 반드시 저장한 뒤 Job을 SUCCEEDED로 변경하므로 연결이
          *     끊겨도 Job result URL로 복구할 수 있다. LIVE→PROCESSING에서 LIVE
          *     Summary·Job을 삭제하며 이후 목록에 나타나지 않는다. 기존 ID의 단건·
-         *     polling HTTP status와 purge-scoped 멱등 재요청 응답은 TBD이다. 비멤버에게는 Session
+         *     polling은 404이고 purge-scoped terminal 멱등 재요청은 410 LIVE_AI_RESULT_PURGED다. 비멤버에게는 Session
          *     존재를 숨기고 404를 반환한다. 자동 FINAL
          *     요약은 최신 HQ TranscriptVersion이 RECORDING/FINALIZED이고 final Segment가
          *     1건 이상일 때만 생성하며 preserved LIVE canonical은 현재 source로 사용하지 않는다.
@@ -1175,7 +1176,7 @@ export interface paths {
          *     동일하게 허용한다. 요청자는 Job을 polling한 뒤 result URL에서 저장된
          *     최종 Summary만 GET한다. 부분 문장·token은 저장·broadcast·streaming하지
          *     않는다. LIVE→PROCESSING에서 Summary·Job을 삭제하고 늦은 Worker 결과를
-         *     fence하되 purge-on-session-end 멱등성 행 조기 삭제·구 202 재응답은 TBD이다.
+         *     fence한다. purge-on-session-end terminal 행은 남은 TTL 동안 구 202 대신 410 LIVE_AI_RESULT_PURGED를 replay한다.
          *     인증되지 않은 요청은 401,
          *     비멤버는 Session 존재를 숨기는 404를 반환한다.
          */
@@ -1203,7 +1204,7 @@ export interface paths {
          * 저장된 요약 단건 조회
          * @description FINAL 요약은 Course 멤버가 조회할 수 있다. 저장된 LIVE 요약은 요청자만 조회한다.
          *     비요청자·비멤버에는 리소스 존재를 공개하지 않고 404를 반환한다.
-         *     Session 종료로 삭제된 기존 LIVE Summary ID의 HTTP status는 TBD이다.
+         *     Session 종료로 삭제된 기존 LIVE Summary ID는 404다.
          */
         get: operations["getSummary"];
         put?: never;
@@ -1242,8 +1243,8 @@ export interface paths {
          *     LIVE mode는 Session LIVE, REVIEW mode는 Session COMPLETED에서만 생성한다.
          *     PROCESSING을 포함해 mode와 상태가 다르면 409 SESSION_STATE_CONFLICT를
          *     반환한다. 대화는 생성자에게만 노출한다. LIVE Chat 멱등성 원장은
-         *     purge_on_session_end로 범위를 표시하되 class 종료 후 행 조기 삭제·
-         *     재요청 응답은 TBD이다. 인증되지 않은
+         *     purge_on_session_end로 범위를 표시하며 class 종료 뒤 같은 terminal key·
+         *     request hash는 남은 TTL 동안 410 LIVE_AI_RESULT_PURGED를 replay한다. 인증되지 않은
          *     요청은 401, 비멤버는 Session 존재를 숨기는 404를 반환한다.
          */
         post: operations["createSessionChat"];
@@ -1270,7 +1271,7 @@ export interface paths {
          * 내 AI 대화 단건 조회
          * @description Chat 소유자이면서 현재도 Session의 Course 멤버인 사용자만 조회한다.
          *     비소유자·비멤버에는 존재를 공개하지 않고 404를 반환한다. Session
-         *     종료로 삭제된 기존 LIVE Chat ID의 HTTP status는 TBD이다.
+         *     종료로 삭제된 기존 LIVE Chat ID는 404다.
          */
         get: operations["getChat"];
         put?: never;
@@ -1298,7 +1299,7 @@ export interface paths {
          * AI 대화 메시지 목록 조회
          * @description 현재도 Course 멤버인 대화 소유자만 sequence 오름차순으로 조회한다.
          *     비소유자·비멤버에는 Chat·Message 존재를 숨기고 404를 반환한다.
-         *     Session 종료로 삭제된 기존 LIVE Chat·Message ID의 HTTP status는 TBD이다.
+         *     Session 종료로 삭제된 기존 LIVE Chat·Message ID는 404다.
          */
         get: operations["listChatMessages"];
         put?: never;
@@ -1314,14 +1315,14 @@ export interface paths {
          *     LIVE Chat은 Session LIVE, REVIEW Chat은 Session COMPLETED에서만 메시지를
          *     수락하며 다르면 409 SESSION_STATE_CONFLICT를 반환한다. 사용자 메시지를
          *     같은 요청 transaction에서 정규화한 USER Message, 그 Message를 immutable
-         *     target으로 가리킨 REQUESTER_ONLY CHAT_RESPONSE Job, outbox와 terminal 202
-         *     멱등성 응답을 함께 commit한다. 요청자는 Job을 polling한
+         *     target으로 가리킨 REQUESTER_ONLY CHAT_RESPONSE Job과 terminal 202
+         *     멱등성 응답을 함께 commit한다. requester-only Job은 공용 outbox event를 만들지 않는다. 요청자는 Job을 polling한
          *     뒤 result URL에서 성공해 저장된 최종 Assistant Message만 GET한다. 부분
          *     Assistant·token은 저장·broadcast·streaming하지 않는다.
          *     같은 Chat에 RUNNING/PENDING 답변 Job이 있으면 409 CHAT_RESPONSE_IN_PROGRESS를
          *     반환한다. 인증되지 않은 요청은 401, 비소유자·비멤버 Chat은 존재를
          *     숨기는 404를 반환한다. Session 종료가 LIVE Chat을 먼저 삭제한 경쟁에서
-         *     기존 ID 요청의 HTTP status는 TBD이다.
+         *     기존 ID 요청은 404다. 이미 terminal인 같은 멱등 요청은 410 LIVE_AI_RESULT_PURGED를 replay한다.
          */
         post: operations["createChatMessage"];
         delete?: never;
@@ -1348,7 +1349,7 @@ export interface paths {
          * @description 현재도 Course 멤버인 Chat 소유자만 조회한다. CHAT_RESPONSE Job이
          *     SUCCEEDED일 때 result.resource_url은 이 경로를 가리킨다. 비소유자·비멤버에는
          *     존재를 공개하지 않고 404를 반환한다. Session 종료로 삭제된 기존
-         *     LIVE Message ID의 HTTP status는 TBD이다.
+         *     LIVE Message ID는 404다.
          */
         get: operations["getChatMessage"];
         put?: never;
@@ -1379,7 +1380,7 @@ export interface paths {
          *     요청은 이 endpoint와 result URL을 요청자가 polling하며 별도 개인 스트림을 제공하지 않는다.
          *     REQUESTER_ONLY Job의 비요청자·비멤버에는 존재를 공개하지 않고
          *     404를 반환한다. Session 종료로 삭제된 기존 개인 LIVE Job ID의 polling
-         *     HTTP status는 TBD이다.
+         *     HTTP status는 404다.
          */
         get: operations["getAIJob"];
         put?: never;
@@ -3836,6 +3837,26 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description LIVE 종료 purge가 이전 개인 AI 결과를 삭제해 같은 terminal 멱등 요청을 더 이상 원 응답으로 replay할 수 없음 */
+        LiveAIResultPurged: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "LIVE_AI_RESULT_PURGED",
+                 *         "message": "수업 종료로 개인 AI 결과가 삭제되었습니다.",
+                 *         "request_id": "req_01HXYZ",
+                 *         "details": null
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description 지원하지 않는 녹음 Content-Type. MVP 허용 목록은 audio/webm, audio/mp4 */
         UnsupportedRecordingFormat: {
             headers: {
@@ -6208,6 +6229,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     requestSessionSummary: {
@@ -6268,6 +6290,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SummaryRequestConflict"];
+            410: components["responses"]["LiveAIResultPurged"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["ServiceUnavailable"];
@@ -6300,6 +6323,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listMySessionChats: {
@@ -6339,6 +6363,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createSessionChat: {
@@ -6397,6 +6422,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["ChatRequestConflict"];
+            410: components["responses"]["LiveAIResultPurged"];
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -6427,6 +6453,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listChatMessages: {
@@ -6465,6 +6492,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createChatMessage: {
@@ -6521,6 +6549,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["ChatRequestConflict"];
+            410: components["responses"]["LiveAIResultPurged"];
             422: components["responses"]["TextInputValidationFailed"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["ServiceUnavailable"];
@@ -6553,6 +6582,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getAIJob: {

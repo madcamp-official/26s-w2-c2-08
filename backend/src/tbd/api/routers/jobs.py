@@ -33,6 +33,7 @@ from tbd.services.jobs import (
     JobRetryConflictError,
     JobService,
 )
+from tbd.services.personal_ai import PersonalAIService
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -69,7 +70,7 @@ async def get_job(
             code="RESOURCE_NOT_FOUND",
             message="요청한 리소스를 찾을 수 없습니다.",
         ) from exc
-    return project_ai_job(job)
+    return project_ai_job(job, result=await PersonalAIService().result_link(session, job))
 
 
 @router.post(

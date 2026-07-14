@@ -96,7 +96,7 @@ class AIJobAcceptedResponse(BaseModel):
     job: AIJobResponse
 
 
-def project_ai_job(job: AIJob) -> AIJobResponse:
+def project_ai_job(job: AIJob, *, result: AIJobResourceLink | None = None) -> AIJobResponse:
     """Project one Job without exposing run tokens, leases, or internal inputs."""
 
     progress = (
@@ -139,7 +139,7 @@ def project_ai_job(job: AIJob) -> AIJobResponse:
         clustering=clustering,
         error=error,
         target=_target_link(job),
-        result=None,
+        result=result,
         result_unavailable_reason=None,
         created_at=job.created_at,
         updated_at=job.updated_at,
