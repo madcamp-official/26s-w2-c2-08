@@ -189,7 +189,7 @@ export function AccountPage() {
     professorCourses.isPending || professorCourses.isError
 
   return (
-    <section className="account-page" aria-labelledby="account-title">
+    <section className="account-page">
       <PageHeader
         eyebrow="Account"
         title="내 정보"

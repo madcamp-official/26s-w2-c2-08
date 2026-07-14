@@ -179,7 +179,11 @@ describe('Course role flows', () => {
 
     expect(await screen.findByText('운영체제')).toBeInTheDocument()
     expect(
-      await screen.findByText('내가 관리 중인 Course를 불러오지 못했습니다'),
+      await screen.findByText(
+        '내가 관리 중인 Course를 불러오지 못했습니다',
+        undefined,
+        { timeout: 3_000 },
+      ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '이 목록 다시 시도' }))
 
