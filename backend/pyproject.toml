@@ -1,7 +1,7 @@
 [project]
-name = "tbd-backend"
+name = "goal-backend"
 version = "0.1.0"
-description = "Backend API for ToBeDetermined"
+description = "Backend API for GOAL"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.14,<2.0",

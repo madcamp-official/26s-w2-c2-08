@@ -1,3 +1,3 @@
-"""ToBeDetermined backend package."""
+"""GOAL backend package."""
 
 __version__ = "0.1.0"
