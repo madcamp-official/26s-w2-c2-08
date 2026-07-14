@@ -554,6 +554,12 @@ erDiagram
     sessionRecordings["session_recordings"] {
         uuid id PK
         uuid session_id FK,UK
+        uuid publisher_user_id FK
+        bytea publisher_client_stream_id_hash
+        bigint last_received_sequence
+        bigint last_processed_sequence
+        bigint last_captured_offset_ms
+        timestamptz live_audio_lease_expires_at
         text status
     }
 

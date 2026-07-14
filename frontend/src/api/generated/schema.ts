@@ -3504,6 +3504,7 @@ export interface components {
             accepted_format: components["schemas"]["AudioFormat"];
             /** @description 14-byte header를 포함한 binary frame 전체 최대 크기 */
             max_chunk_bytes: number;
+            /** @description 현재 runtime은 application PCM 대기열 없이 한 frame씩 handoff한다. */
             max_in_flight: number;
             last_received_sequence: number | null;
             last_processed_sequence: number | null;
@@ -3513,6 +3514,7 @@ export interface components {
             type: "audio.ack";
             received_through: number;
             processed_through: number | null;
+            /** @description 현재 runtime은 application PCM 대기열을 두지 않는다. */
             queue_depth_ms: number;
         };
         AudioFlowControl: {
@@ -5360,6 +5362,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getTranscriptSegment: {
@@ -5389,6 +5392,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listSessionTranscriptVersions: {
@@ -5429,6 +5433,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listSessionQuestions: {

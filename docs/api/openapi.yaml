@@ -7390,6 +7390,8 @@ components:
         max_in_flight:
           type: integer
           minimum: 1
+          maximum: 1
+          description: 현재 runtime은 application PCM 대기열 없이 한 frame씩 handoff한다.
         last_received_sequence:
           type: [integer, "null"]
           minimum: 0
@@ -7414,6 +7416,8 @@ components:
         queue_depth_ms:
           type: integer
           minimum: 0
+          maximum: 0
+          description: 현재 runtime은 application PCM 대기열을 두지 않는다.
 
     AudioFlowControl:
       type: object
@@ -7838,9 +7842,11 @@ x-websocket-channels:
     /api/v1/ws/sessions/{session_id}:
       summary: Course 멤버용 Session 변경 알림
       implementation: |
-        현재 `connection.ready`, `resync.required`, `session.updated`, SHARED `job.updated`만
-        전달한다. commit된 PostgreSQL Outbox를 FastAPI process-local publisher가 fan-out하며,
-        cursor replay는 최대 500건이다. 다른 event와 multi-process transport는 후속 범위다.
+        `connection.ready`, `resync.required`, `session.updated`, SHARED `job.updated`, durable
+        `transcript.final`을 전달한다. `transcript.partial`은 DB·Outbox에 저장하지 않는 현재
+        연결용 임시 event라 replay하지 않는다. commit된 PostgreSQL Outbox를 FastAPI
+        process-local publisher가 fan-out하며, cursor replay는 최대 500건이다. multi-process
+        transport는 후속 범위다.
       authorization: Course membership required
       authentication: POST /api/v1/realtime-tickets의 60초 만료·1회용 SESSION_EVENTS_READ ticket
       handshakeQuery: ticket
@@ -7890,6 +7896,11 @@ x-websocket-channels:
         partial_replay: false
     /api/v1/ws/sessions/{session_id}/audio:
       summary: 교수자 한 명의 저지연 음성 업로드
+      implementation: |
+        고정 PCM v1 검증, 단일 publisher claim, 영속 received/processed ACK, resume fence,
+        final Segment·Gap과 transcript.final Outbox를 구현한다. application PCM 대기열은 없고
+        max_in_flight=1이며 STT handoff는 5초 timeout 뒤 STT_UNAVAILABLE로 안전하게 끝난다.
+        deterministic fake 외 실제 external provider와 별도 streaming process는 미정이다.
       authorization: Course PROFESSOR and LIVE Session required
       authentication: POST /api/v1/realtime-tickets의 60초 만료·1회용 SESSION_AUDIO_WRITE ticket
       handshakeQuery: ticket
@@ -7906,7 +7917,6 @@ x-websocket-channels:
       serverTextMessages:
         - $ref: "#/components/schemas/AudioReadyControl"
         - $ref: "#/components/schemas/AudioAckControl"
-        - $ref: "#/components/schemas/AudioFlowControl"
         - $ref: "#/components/schemas/AudioStoppedControl"
         - $ref: "#/components/schemas/AudioResumeRejectedControl"
         - $ref: "#/components/schemas/RealtimeError"
@@ -7917,8 +7927,8 @@ x-websocket-channels:
           version(1), byte 1은 flags(MVP v1은 0), byte 2..5는 uint32 chunk_sequence, byte 6..13은 uint64
           captured_offset_ms, 나머지는 PCM_S16LE 16000 Hz mono payload다. sequence는
           client_stream_id별 0부터 1씩 증가하고 offset은 stream 시작 기준이다. 기본 chunk는
-          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. MVP v1은 최대 10개
-          frame(5초)만 처리 대기하며 각 수락 frame 뒤 ACK한다. 이 frame은 live STT
+          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. 현재 runtime은
+          application PCM 대기열을 두지 않고 max_in_flight=1로 각 수락 frame 뒤 ACK한다. 이 frame은 live STT
           전송용이다. 클라이언트는 같은 microphone source를 이 PCM 경로와 브라우저 로컬
           binary 녹음 경로로 동시에 분기하고, 로컬 녹음은 Session 종료 뒤 HTTP resumable
           upload로 영구 저장한다. codec·container와 로컬 저장 방식은 TBD이다.

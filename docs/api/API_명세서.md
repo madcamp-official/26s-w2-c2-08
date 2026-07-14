@@ -697,7 +697,7 @@ Idempotency-Key: <key>
 - TranscriptVersion metadata는 소스·상태·version과 해당 version 안의 마지막 final Segment 순번인 `last_sequence`를 공개한다. Segment가 없으면 `0`이다.
 - Session은 nullable `canonical_transcript_version_id`로 기본 열람에 사용할 canonical version을 가리킨다. `READY`에서는 `null`일 수 있지만 class 시작 transaction이 LIVE version을 만들고 즉시 이 포인터를 설정한다. 응답의 `is_canonical`은 이 포인터에서 계산한다.
 - Transcript aggregate는 최신 처리 version인 `current_version`의 상태를 별도로 공개한다. 따라서 최신 HQ version이 `FAILED`이면 aggregate `status=FAILED`이면서 canonical 포인터는 기존 LIVE version을 계속 가리킨다. aggregate status와 canonical 포인터를 같은 값으로 추정하지 않는다.
-- Session 시작 transaction이 canonical로 설정한 LIVE version은 `FINALIZING`이며 drain을 마치면 Segment가 있으면 `FINALIZED`, 없으면 `EMPTY`가 된다.
+- Session 시작 transaction이 canonical로 설정한 LIVE version은 `FINALIZING`이다. 현재 audio runtime은 final Segment·Gap을 이 version에 기록하고 Session 종료 시 새 frame을 fence하며, `FINALIZED`·`EMPTY` terminal 전이는 후처리 coordinator가 담당한다.
 - Recording upload complete는 다음 version의 `RECORDING`/`FINALIZING` row와 `RECORDING_TRANSCRIPTION` Job을 같은 transaction에서 생성한다.
 - 실패한 `RECORDING_TRANSCRIPTION`을 재시도하면 같은 Job ID의 `attempt + 1`과 새 `RECORDING`/`FINALIZING` Transcript version을 사용한다. 이전 실패 version은 provenance로 보존하고 성공 `result`는 현재 attempt의 version을 가리킨다. `COMPLETED` 후 재시도 성공은 같은 `SESSION_POSTPROCESSING` coordinator 행을 `attempt + 1`로 자동 requeue하며 Session 상태를 되돌리지 않는다.
 - `RECORDING_TRANSCRIPTION` 성공 commit은 Segment·Gap, Segment의 녹음 시간 mapping, version 상태, aggregate current version과 canonical 포인터를 먼저 하나의 결과로 공개한다. 성공 version은 `FINALIZED` 또는 `EMPTY`이다.
@@ -1342,15 +1342,17 @@ Range: bytes=<start>-<end>
 
 > WebSocket은 Session 공용 실시간 알림·음성 전송 수단이고, DB와 REST 조회 결과가 최종 진실이다. 개인 AI 결과는 REST polling으로만 확인한다.
 
-#### 현재 구현 범위 (PR-12)
+#### 현재 구현 범위 (PR-12, PR-14)
 
-`POST /api/v1/realtime-tickets`와 `WS /api/v1/ws/sessions/{session_id}`의
-`SESSION_EVENTS_READ`만 구현됐다. FastAPI 프로세스의 publisher가 commit된
-`outbox_events`를 전달한다. 현재 실제 broadcast event는 `session.updated`, 공용
-`job.updated`, 익명 `question.created`, `reaction.updated`, `clustering.updated`와 연결
-control인 `connection.ready`·`resync.required`다. `question.updated`와 이외의 event,
-audio WebSocket·STT는 후속 구현 범위다. publisher memory는 원장이 아니며, cursor
-replay가 500개를 넘거나 cursor를 찾을 수 없으면 `resync.required`로 REST 복구를 요구한다.
+`POST /api/v1/realtime-tickets`의 `SESSION_EVENTS_READ`·`SESSION_AUDIO_WRITE`와 두
+WebSocket 경로가 구현됐다. FastAPI 프로세스의 publisher는 commit된 `outbox_events`에서
+`session.updated`, 공용 `job.updated`, 익명 `question.created`·`question.updated`,
+`reaction.updated`, `clustering.updated`, `transcript.final`을 전달한다. `transcript.partial`은
+DB·Outbox에 저장하지 않는 연결 중 임시 event이며 replay 대상이 아니다. audio 경로는 단일
+교수자 publisher claim, 고정 PCM frame 검증, 영속 ACK, reconnect fence, final Segment·Gap
+저장과 deterministic fake STT를 제공한다. 실제 외부 STT provider 선택·별도 process 배포는
+아직 미정이다. publisher memory는 원장이 아니며, cursor replay가 500개를 넘거나 cursor를
+찾을 수 없으면 `resync.required`로 REST 복구를 요구한다.
 
 ### 16.1 전송 경계
 
@@ -1586,7 +1588,7 @@ MVP v1 오디오 전송 형식은 `PCM_S16LE`, 16 kHz, mono, 500 ms chunk로 고
     "channels": 1
   },
   "max_chunk_bytes": 32768,
-  "max_in_flight": 10,
+  "max_in_flight": 1,
   "last_received_sequence": null,
   "last_processed_sequence": null
 }
@@ -1598,8 +1600,8 @@ MVP v1 오디오 전송 형식은 `PCM_S16LE`, 16 kHz, mono, 500 ms chunk로 고
 {
   "type": "audio.ack",
   "received_through": 132,
-  "processed_through": 128,
-  "queue_depth_ms": 1700
+  "processed_through": 132,
+  "queue_depth_ms": 0
 }
 ```
 
@@ -1619,12 +1621,12 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - 재연결 시 같은 `client_stream_id`를 사용하고 `resume_from_sequence`에는 마지막 `audio.ack.received_through`를 넣은 뒤 그 다음 sequence부터 재전송한다.
 - 서버는 `(session_id, client_stream_id, chunk_sequence)`로 중복 chunk를 제거한다.
 - reconnect의 `resume_from_sequence`은 서버가 영속적으로 ACK한 마지막 sequence와 같아야 한다. 다르면 `audio.resume_rejected`의 `SEQUENCE_EXPIRED`를 보내고 누락 구간을 LIVE TranscriptVersion의 `SEQUENCE_GAP`으로 남긴다. 이후 HQ version의 Segment·Gap은 LIVE version을 덮어쓰지 않고 별도 version에 귀속된다.
-- 서버가 process 재시작 등으로 아직 처리하지 못한 live STT relay 상태를 잃으면 `audio.resume_rejected`의 `SERVER_STATE_LOST`와 Gap을 남긴다. 이미 DB에 저장한 final Segment는 REST로 다시 조회한다.
-- 서버는 최대 10개(5초)의 PCM frame만 STT 처리 대기열에 둔다. 이 한도를 넘으면 `audio.flow_control`과 재시도 가능한 `AUDIO_BACKPRESSURE` 오류를 보내며, 오래된 음성을 무한 적재하지 않는다.
-- `max_in_flight`는 10, `max_chunk_bytes`는 header를 포함해 32,768 bytes이며 ACK는 각 수락 frame 뒤 전송한다. 이 값은 `audio.ready`에도 통지한다.
+- reconnect 시 영속 `last_processed_sequence`가 `last_received_sequence`보다 작으면, 재시작·연결 손실 뒤 STT relay 상태를 복원할 수 없다고 판단한다. 서버는 `audio.resume_rejected`의 `SERVER_STATE_LOST`와 final `Gap`을 남긴다. 이미 DB에 저장한 final Segment는 REST로 다시 조회한다.
+- 현재 runtime은 application PCM 대기열을 두지 않고 한 frame의 STT handoff가 끝난 뒤 다음 frame을 읽는다. 따라서 `max_in_flight`는 `1`, `queue_depth_ms`는 항상 `0`이고 클라이언트는 ACK 뒤 다음 frame을 보낸다. STT handoff는 5초를 넘기면 재시도 가능한 `STT_UNAVAILABLE`로 끝나며 received watermark만 남긴다. 다중 frame queue와 `audio.flow_control`은 후속 확장 범위다.
+- `max_chunk_bytes`는 header를 포함해 32,768 bytes이며 ACK는 각 수락 frame 뒤 전송한다. 이 값과 `max_in_flight`는 `audio.ready`에도 통지한다.
 - audio WS의 PCM frame은 live STT 전송용이며 영구 녹음의 원본으로 취급하지 않는다. 영구 녹음은 같은 microphone source의 브라우저 로컬 branch를 15.3~15.5절로 upload해 저장한다.
 
-교수자가 class 종료를 확인하면 클라이언트는 HTTP 종료 API를 즉시 호출하면서 `audio.stop`과 로컬 녹음 확정을 best-effort 병행한다. `audio.stopped`와 drain 완료는 HTTP 종료의 선행조건이 아니다. 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단하며, 이미 수락한 chunk는 최대 5초 동안 drain한다. drain deadline 뒤 남은 chunk는 `BACKPRESSURE_DROP` Gap으로 남기고 live STT 상태를 `STOPPED`로 끝낸다. Recording은 `UPLOAD_PENDING`이 되고 upload complete 전에는 HQ STT를 시작하지 않는다. 연결 손실로 받지 못한 live chunk는 gap으로 기록하되 후처리 HQ version과 구분한다.
+교수자가 class 종료를 확인하면 클라이언트는 HTTP 종료 API를 즉시 호출하면서 `audio.stop`과 로컬 녹음 확정을 best-effort 병행한다. `audio.stopped`는 현재 영속 watermark를 반환하지만 HTTP 종료의 선행조건이 아니다. 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단한다. 종료와 경합한 provider 결과는 저장하지 않고 `BACKPRESSURE_DROP` final Gap으로 남긴다. Recording은 `UPLOAD_PENDING`이 되고 upload complete 전에는 HQ STT를 시작하지 않는다. LIVE version의 terminal 전이와 HQ canonical 전환은 후처리 coordinator 범위이며, 연결 손실로 받지 못한 live chunk는 Gap으로 기록하되 후처리 HQ version과 구분한다.
 
 녹음 또는 upload 중 tab 종료 warning과 로컬 데이터 유실 안내는 화면 책임이다. 브라우저 로컬 저장 방식과 warning 해제 조건은 TBD이며 WebSocket control message로 만들지 않는다.
 
