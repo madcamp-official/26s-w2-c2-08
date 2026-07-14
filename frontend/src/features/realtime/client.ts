@@ -24,6 +24,8 @@ interface WebSocketLike {
 }
 
 export type WebSocketFactory = (url: string) => WebSocketLike
+export type RealtimeConnectionState =
+  'connecting' | 'connected' | 'reconnecting' | 'stopped'
 
 export function realtimeWebSocketUrl(
   sessionId: string,
@@ -56,6 +58,7 @@ export interface RealtimeSessionClientOptions {
   createTicket: (resumeCursor: string | null) => Promise<RealtimeTicket>
   onEvent: (event: RealtimeEvent) => void
   onResyncRequired: () => void
+  onConnectionState?: (state: RealtimeConnectionState) => void
   webSocketFactory?: WebSocketFactory
 }
 
@@ -75,11 +78,13 @@ export class RealtimeSessionClient {
 
   start() {
     this.stopped = false
+    this.options.onConnectionState?.('connecting')
     this.scheduleReconnect()
   }
 
   stop() {
     this.stopped = true
+    this.options.onConnectionState?.('stopped')
     if (this.reconnectTimer !== null) window.clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
     this.socket?.close()
@@ -99,6 +104,9 @@ export class RealtimeSessionClient {
   private async connect() {
     if (this.stopped) return
     try {
+      this.options.onConnectionState?.(
+        this.attempt === 0 ? 'connecting' : 'reconnecting',
+      )
       const ticket = await this.options.createTicket(this.cursor)
       if (this.stopped) return
       const socket = this.webSocketFactory(
@@ -107,6 +115,7 @@ export class RealtimeSessionClient {
       this.socket = socket
       socket.onopen = () => {
         this.attempt = 0
+        this.options.onConnectionState?.('connected')
       }
       socket.onmessage = (message) => this.receive(message.data)
       socket.onerror = () => socket.close()
@@ -114,6 +123,7 @@ export class RealtimeSessionClient {
         if (this.socket === socket) this.socket = null
         if (!this.stopped) {
           this.attempt += 1
+          this.options.onConnectionState?.('reconnecting')
           this.scheduleReconnect()
         }
       }
