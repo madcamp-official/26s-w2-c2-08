@@ -33,6 +33,21 @@ const studentCourse = {
   created_at: '2026-07-13T00:00:00Z',
 }
 
+const readySession = {
+  id: '30000000-0000-0000-0000-000000000001',
+  course_id: professorCourse.id,
+  title: '알고리즘 · 2026.07.14 15:00',
+  lecture_date: '2026-07-14',
+  status: 'READY' as const,
+  version: 1,
+  canonical_transcript_version_id: null,
+  started_at: null,
+  ended_at: null,
+  completed_at: null,
+  created_at: '2026-07-14T06:00:00Z',
+  updated_at: '2026-07-14T06:00:00Z',
+}
+
 function renderAt(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
   render(
@@ -146,5 +161,69 @@ describe('Course role flows', () => {
         screen.getByText('학생 역할로 참여합니다.', { exact: false }),
       ).toBeInTheDocument(),
     )
+  })
+
+  it('creates a READY class from the professor Course flow', async () => {
+    authenticate()
+    server.use(
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(professorCourse),
+      ),
+      http.post('*/api/v1/courses/:courseId/sessions', () =>
+        HttpResponse.json(readySession, { status: 201 }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId', () =>
+        HttpResponse.json(readySession),
+      ),
+    )
+    renderAt(`/courses/${professorCourse.id}/sessions/new`)
+
+    expect(
+      await screen.findByRole('heading', { name: '오늘의 class 준비' }),
+    ).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('class 제목 (선택)'), {
+      target: { value: '그래프 탐색' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'class 만들기' }))
+
+    expect(
+      await screen.findByRole('heading', { name: readySession.title }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '수업 시작' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not render professor session controls for a student', async () => {
+    authenticate()
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId', () =>
+        HttpResponse.json({ ...readySession, course_id: studentCourse.id }),
+      ),
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(studentCourse),
+      ),
+    )
+    renderAt(`/sessions/${readySession.id}`)
+
+    expect(
+      await screen.findByRole('heading', { name: readySession.title }),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          '학생은 class 상태와 수업 기록을 읽기 전용으로 확인합니다.',
+        ),
+      ).toBeInTheDocument(),
+    )
+    expect(
+      screen.queryByRole('button', { name: '수업 시작' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '제목 저장' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'class 삭제' }),
+    ).not.toBeInTheDocument()
   })
 })

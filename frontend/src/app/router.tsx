@@ -7,6 +7,8 @@ import { AuthenticatedCourseArea } from '../features/courses/auth-guard'
 import { CourseCreatePage } from '../features/courses/CourseCreatePage'
 import { CourseDetailPage } from '../features/courses/CourseDetailPage'
 import { CourseJoinPage } from '../features/courses/CourseJoinPage'
+import { SessionCreatePage } from '../features/courses/SessionCreatePage'
+import { SessionDetailPage } from '../features/courses/SessionDetailPage'
 import { FoundationPage } from './routes/FoundationPage'
 import { NotFoundPage } from './routes/NotFoundPage'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
@@ -50,6 +52,22 @@ export const appRoutes: RouteObject[] = [
         element: (
           <AuthenticatedCourseArea>
             <CourseDetailPage />
+          </AuthenticatedCourseArea>
+        ),
+      },
+      {
+        path: 'courses/:courseId/sessions/new',
+        element: (
+          <AuthenticatedCourseArea>
+            <SessionCreatePage />
+          </AuthenticatedCourseArea>
+        ),
+      },
+      {
+        path: 'sessions/:sessionId',
+        element: (
+          <AuthenticatedCourseArea>
+            <SessionDetailPage />
           </AuthenticatedCourseArea>
         ),
       },

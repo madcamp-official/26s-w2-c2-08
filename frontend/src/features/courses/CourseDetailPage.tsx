@@ -8,7 +8,11 @@ import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { rotateCourseJoinCode } from './api'
-import { courseDetailQueryOptions, courseKeys } from './queries'
+import {
+  courseDetailQueryOptions,
+  courseKeys,
+  courseSessionsQueryOptions,
+} from './queries'
 
 function sessionCopy(status?: string) {
   switch (status) {
@@ -26,6 +30,7 @@ function sessionCopy(status?: string) {
 export function CourseDetailPage() {
   const { courseId = '' } = useParams()
   const course = useQuery(courseDetailQueryOptions(courseId))
+  const sessions = useQuery(courseSessionsQueryOptions(courseId))
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const [rotateOpen, setRotateOpen] = useState(false)
@@ -119,6 +124,21 @@ export function CourseDetailPage() {
               </div>
             </dl>
           )}
+          {courseData.current_session ? (
+            <Link
+              className="button button--secondary"
+              to={`/sessions/${courseData.current_session.id}`}
+            >
+              현재 class 보기
+            </Link>
+          ) : professor ? (
+            <Link
+              className="button button--primary"
+              to={`/courses/${courseId}/sessions/new`}
+            >
+              새 class 만들기
+            </Link>
+          ) : null}
         </section>
 
         {professor ? (
@@ -160,6 +180,40 @@ export function CourseDetailPage() {
           </aside>
         )}
       </div>
+
+      <section
+        className="panel session-history"
+        aria-labelledby="session-history-title"
+      >
+        <div>
+          <p className="eyebrow">Class history</p>
+          <h2 id="session-history-title">지난 class</h2>
+        </div>
+        {sessions.isPending ? (
+          <p>class 목록을 불러오는 중입니다.</p>
+        ) : sessions.isError ? (
+          <p>
+            class 목록을 불러오지 못했습니다. Course 상태는 계속 확인할 수
+            있습니다.
+          </p>
+        ) : sessions.data.items.filter((item) => item.status === 'COMPLETED')
+            .length === 0 ? (
+          <p>아직 완료된 class가 없습니다.</p>
+        ) : (
+          <ul className="session-history__list">
+            {sessions.data.items
+              .filter((item) => item.status === 'COMPLETED')
+              .map((item) => (
+                <li key={item.id}>
+                  <Link to={`/sessions/${item.id}`}>
+                    <strong>{item.title}</strong>
+                    <span>{item.lecture_date} · 완료</span>
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        )}
+      </section>
 
       {professor && (
         <Dialog

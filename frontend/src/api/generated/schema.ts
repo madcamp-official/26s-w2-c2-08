@@ -314,9 +314,9 @@ export interface paths {
         /**
          * class 생성
          * @description 해당 Course의 PROFESSOR만 생성할 수 있으며 초기 상태는 READY이다. 같은 날짜의
-         *     여러 class를 허용한다. title을 생략하거나 trim한 값이 비어 있으면 서버가 Course
-         *     제목·class 날짜·시각을 포함한 자동 제목을 생성한다. 정확한 문자열 형식, READY에서
-         *     사용할 시각 원장과 timezone은 아직 미정이다. 같은 Course에
+         *     여러 class를 허용한다. title을 생략하거나 trim한 값이 비어 있으면 서버가 `Course 제목 ·
+         *     YYYY.MM.DD HH:mm` 자동 제목을 생성한다. 날짜는 lecture_date, 시각은 Session 생성 시각
+         *     created_at을 기본 timezone Asia/Seoul로 표시한 값이며 이후 상태 전이에도 고정한다. 같은 Course에
          *     READY, LIVE, PROCESSING Session이 이미 있으면 409 ACTIVE_SESSION_EXISTS를 반환한다.
          */
         post: operations["createCourseSession"];
@@ -359,8 +359,8 @@ export interface paths {
          * class 제목 수정
          * @description 해당 Course의 PROFESSOR가 모든 Session 상태에서 title만 수정할 수 있다.
          *     lecture_date와 시작·종료·완료 시각은 불변이다. trim한 title이 빈 문자열이면
-         *     Course 제목·class 날짜·시각을 포함한 생성과 같은 규칙의 자동 제목으로 되돌린다.
-         *     정확한 문자열 형식, READY에서 사용할 시각 원장과 timezone은 아직 미정이다.
+         *     `Course 제목 · YYYY.MM.DD HH:mm` 생성과 같은 규칙의 자동 제목으로 되돌린다. 날짜는
+         *     lecture_date, 시각은 최초 created_at의 Asia/Seoul 표시값으로 고정한다.
          *     성공할 때 version을 증가시키며 별도 If-Match 계약은 도입하지 않는다.
          */
         patch: operations["updateSessionTitle"];
@@ -415,6 +415,10 @@ export interface paths {
         /**
          * class 종료와 후처리 시작
          * @description 해당 Course의 PROFESSOR만 실행할 수 있다. LIVE에서 PROCESSING으로 전이하고
+         *     현재 PR-09 구현은 SHARED·blocking PENDING SESSION_POSTPROCESSING coordinator 한 건을
+         *     같은 transaction에 저장한다. Recording 전이, LIVE 개인 AI 정리, FINAL clustering과
+         *     coordinator worker 실행은 후속 PR의 구현 범위이며, COMPLETED는 브라우저의 Job 개수 계산이
+         *     아니라 coordinator worker의 명시적 상태 전이로만 바뀐다.
          *     새 audio 입력과 resume을 즉시 차단한다. 첫 audio.start에서 생성된 Recording은
          *     UPLOAD_PENDING으로 전이한다. 같은 요청의 반복 호출은 새 작업을 중복 생성하지 않고
          *     기존 Session, Recording과 작업을 반환해야 한다. 정상 흐름도 종료 확인 즉시 이 API를
@@ -1891,9 +1895,9 @@ export interface components {
         };
         LectureSessionCreateRequest: {
             /**
-             * @description 선택적 제목. 앞뒤 공백을 제거한 값이 비어 있으면 서버가 Course 제목·class
-             *     날짜·시각을 포함한 자동 제목을 생성한다. 정확한 문자열 형식, READY에서
-             *     사용할 시각 원장과 timezone은 아직 미정이다.
+             * @description 선택적 제목. 앞뒤 공백을 제거한 값이 비어 있으면 서버가 `Course 제목 · YYYY.MM.DD HH:mm`
+             *     자동 제목을 생성한다. 날짜는 lecture_date, 시각은 생성 시각 created_at의
+             *     기본 timezone Asia/Seoul 표시값이며 이후 상태 전이에도 고정한다.
              */
             title?: string;
             /** Format: date */
@@ -1901,8 +1905,9 @@ export interface components {
         };
         LectureSessionUpdateRequest: {
             /**
-             * @description 앞뒤 공백을 제거한 값으로 수정한다. 빈 문자열이면 Course 제목·class 날짜·시각을
-             *     포함한 서버 자동 제목으로 되돌린다. 정확한 형식·시각 원장·timezone은 미정이며,
+             * @description 앞뒤 공백을 제거한 값으로 수정한다. 빈 문자열이면 `Course 제목 · YYYY.MM.DD HH:mm`
+             *     서버 자동 제목으로 되돌린다. 날짜는 lecture_date, 시각은 최초 created_at의
+             *     Asia/Seoul 표시값을 사용하며,
              *     lecture_date와 시작·종료·완료 시각은 이 요청으로 변경할 수 없다.
              */
             title: string;
@@ -1952,7 +1957,8 @@ export interface components {
              *     입력 상한을 고정한 SHARED·blocking FINAL QUESTION_CLUSTERING Job도 포함한다.
              *     RECORDING_TRANSCRIPTION은 Recording upload complete 전에는 생성하지 않으며
              *     그 응답에 별도로 포함한다. coordinator는 source terminal 전에 claim하지 않지만
-             *     FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다.
+             *     FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다. 현재 PR-09 구현은
+             *     coordinator 한 건만 반환하며 나머지 생성·실행은 후속 worker PR에서 추가한다.
              */
             jobs: components["schemas"]["AIJob"][];
         };
@@ -4665,6 +4671,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createCourseSession: {
@@ -4756,6 +4763,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     deleteSession: {
@@ -4801,6 +4809,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SessionDeleteConflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     updateSessionTitle: {
@@ -4872,31 +4881,31 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SessionStartConflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     endSession: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
                 "X-Request-ID"?: components["parameters"]["RequestId"];
                 /**
-                 * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
-                 *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
-                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
-                 *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
-                 *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
+                 * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
+                 *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
+                 *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
                  *     LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
-                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING transaction이 원
-                 *     리소스·Job을 삭제하고 늦은 결과를 fence하는 것은 확정이지만,
-                 *     멱등성 행을 조기 삭제할지 24시간 보존할지와 종료 후 같은 키에
-                 *     기존 202·201을 재응답할지 별도 응답을 줄지는 TBD이다. FINAL Summary와
-                 *     mode=REVIEW Chat·관련 Job retry는
-                 *     이 예외에 포함하지 않는다.
+                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING이 원 리소스·
+                 *     Job을 삭제하고 늦은 결과를 fence하되, 멱등성 행 조기 삭제·24시간
+                 *     보존·종료 후 재응답은 TBD이다. FINAL Summary와 mode=REVIEW Chat·관련
+                 *     Job retry는 이 예외에
+                 *     포함하지 않는다.
                  */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
             };
             path: {
                 /** @description 불투명 LectureSession ID */
@@ -4920,6 +4929,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listSessionMaterials: {

@@ -479,8 +479,8 @@ POST /api/v1/courses/{course_id}/sessions
 
 - 권한: Course `PROFESSOR`
 - 성공: `201 Created`, 상태 `READY`
-- `title`은 선택적이다. 생략하거나 앞뒤 공백을 제거한 값이 빈 문자열이면 서버가 Course 제목·class 날짜·시각을 포함한 자동 제목을 생성한다.
-- 자동 제목의 정확한 문자열 형식, `READY`에서 사용할 시각 원장과 timezone은 미정이다.
+- `title`은 선택적이다. 생략하거나 앞뒤 공백을 제거한 값이 빈 문자열이면 서버가 `Course 제목 · YYYY.MM.DD HH:mm` 자동 제목을 생성한다. `YYYY.MM.DD`는 요청의 `lecture_date`, `HH:mm`은 생성 시 기록한 `created_at`을 기본 timezone `Asia/Seoul`로 표시한 값이다.
+- 자동 제목은 생성 시 확정해 저장하며, 이후 시작·종료·완료 상태 전이나 빈 제목 수정에서도 같은 `created_at` 기준 값을 사용한다.
 - 같은 날짜에 여러 class를 허용한다.
 - 같은 Course에 `READY`, `LIVE`, `PROCESSING` Session이 이미 있으면 `409 ACTIVE_SESSION_EXISTS`를 반환한다.
 
@@ -508,7 +508,7 @@ PATCH /api/v1/sessions/{session_id}
 
 - 권한: Course `PROFESSOR`
 - 모든 Session 상태에서 제목만 수정할 수 있다. `lecture_date`와 시작·종료·완료 시각은 수정할 수 없다.
-- 앞뒤 공백을 제거한 제목이 빈 문자열이면 class 생성과 같은 자동 제목으로 되돌린다.
+- 앞뒤 공백을 제거한 제목이 빈 문자열이면 class 생성 때의 `created_at` 기준으로 계산한 같은 자동 제목으로 되돌린다.
 - 성공: `200 OK`, `version`이 증가한 Session을 반환한다. 별도 `If-Match` 계약은 도입하지 않는다.
 
 ### 7.5 class 삭제
@@ -549,6 +549,7 @@ Idempotency-Key: <key>
 
 - 권한: Course `PROFESSOR`
 - `LIVE → PROCESSING`을 한 번만 적용한다.
+- **현재 PR-09 구현 범위:** 종료 transaction은 `PROCESSING` 상태와 SHARED·blocking `SESSION_POSTPROCESSING` coordinator 한 건을 함께 저장한다. Recording 전이, LIVE 개인 AI 정리, FINAL clustering 및 coordinator 실행은 후속 실시간·worker PR에서 같은 API 계약에 추가한다. `COMPLETED` 전이는 브라우저의 Job 개수 계산이 아니라 coordinator worker의 명시적 상태 전이로만 수행한다.
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
 - 정상 클라이언트도 종료 확인 즉시 이 API를 호출한다. `audio.stop` 전송과 로컬 녹음 마감은 best-effort로 함께 시작하되 `audio.stopped`나 drain 완료를 HTTP 호출의 선행조건으로 두지 않는다. 서버는 종료 transaction에서 새 audio frame을 차단하고 이미 받은 chunk만 별도로 drain한다.
 - 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
@@ -556,7 +557,7 @@ Idempotency-Key: <key>
 - 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
 - 같은 transaction에서 SHARED·blocking `SESSION_POSTPROCESSING` coordinator를 `PENDING`으로 생성한다. FINAL 대상이 1건 이상이면 4.2절의 종료 시점 입력 상한을 고정한 SHARED·blocking `FINAL` `QUESTION_CLUSTERING` Job도 같은 transaction에서 함께 생성한다. Recording/HQ 또는 Recording이 없는 경우 LIVE Transcript source가 terminal이 되기 전에는 coordinator를 claim하지 않지만, FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다.
 - coordinator는 source terminal 후 Answer mapping·Knowledge 재연결을 수행하고 자신의 terminal 전이와 downstream blocking Job 생성·outbox를 같은 transaction에 commit한다. HQ Transcript version·canonical 전환과 Answer 재매핑은 9절과 11절을 따른다.
-- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 종료 transaction에서 생성된 coordinator 및 조건부 FINAL clustering Job을 `jobs[]`로 반환한다.
+- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 종료 transaction에서 생성된 coordinator 및 조건부 FINAL clustering Job을 `jobs[]`로 반환한다. 현재 구현의 `jobs[]`에는 coordinator 한 건만 포함된다.
 - class 종료 요청 자체의 멱등 재요청은 기존 Session, Recording과 Job 결과를 반환한다.
 
 ## 8. 강의자료 API
@@ -1643,7 +1644,6 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | 항목                               | 현재 상태                                                                                                                                                                                       | 결정 시 영향                   |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | ID 형식                            | 불투명 string                                                                                                                                                                                   | OpenAPI `format`, DB PK        |
-| class 자동 제목                    | 정확한 문자열 형식·`READY` 시각 원장·timezone TBD                                                                                                                                               | Session 생성·제목 수정 응답    |
 | active Course 삭제                 | active Session 보유 시 삭제·보관 방식 TBD                                                                                                                                                       | Course 삭제 응답·트랜잭션      |
 | Material 표시명                    | suffix와 업로드 시 영구 확정은 결정; 허용 문자·Unicode 정규화·대소문자 충돌 비교 규칙 TBD                                                                                                       | 업로드·목록·다운로드 파일명    |
 | Material 분리 근거                 | 안전한 label snapshot과 `link=null` 방향만 확정; 정확한 근거 보관 기간·FK·`410 Gone` 정책 TBD                                                                                                   | Chat 근거·DB 삭제 정책         |

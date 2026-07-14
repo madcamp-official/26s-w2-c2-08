@@ -78,10 +78,10 @@ ROOT(0)
 
 | 화면명 | 노드 ID | 레벨 | 유형 | 상위 노드 | 역할 | 범위 | 핵심 내용 | 진입 조건 |
 |---|---|---:|---|---|---|---|---|---|
-| class 생성 및 준비 페이지 | `CLASS_CREATE_PAGE` | 4 | 페이지 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | active class가 없을 때 선택 제목·필수 날짜로 `READY` class를 생성하고 선택적으로 PDF를 추가; PDF가 없어도 시작 가능하고 빈 제목은 서버 자동 제목 사용 | owner가 Course 페이지에서 class 생성 선택 |
+| class 생성 및 준비 페이지 | `CLASS_CREATE_PAGE` | 4 | 페이지 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | active class가 없을 때 선택 제목·필수 날짜로 `READY` class를 생성하고 선택적으로 PDF를 추가; PDF가 없어도 시작 가능하고 빈 제목은 `Course 제목 · YYYY.MM.DD HH:mm` 서버 자동 제목 사용 | owner가 Course 페이지에서 class 생성 선택 |
 | Course 참여 코드 영역 | `COURSE_CODE_AREA` | 4 | 영역 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | owner에게만 무기한 `[A-Z]{6}` 참여 코드의 표시·복사·회전을 제공하고 회전 즉시 이전 코드를 무효화하며 감사·이력은 남기지 않음 | owner가 자신이 관리하는 Course 페이지에 진입 |
 | Course 삭제 | `COURSE_DELETE` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | 종료·보관 상태나 owner 이전 없이 유일한 owner가 Course 삭제를 요청; active class가 있을 때의 삭제와 삭제 후 복구 정책은 미정 | owner가 Course 삭제를 선택하고 확인 |
-| class 제목 수정 | `CLASS_TITLE_EDIT` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`LIVE`·`PROCESSING`·`COMPLETED`에서 제목을 수정하며 빈 제목은 Course 제목·날짜·시각을 포함한 서버 자동 제목 사용; 날짜와 상태 시각은 수정 불가 | owner가 해당 class의 제목 수정 선택 |
+| class 제목 수정 | `CLASS_TITLE_EDIT` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`LIVE`·`PROCESSING`·`COMPLETED`에서 제목을 수정하며 빈 제목은 `Course 제목 · YYYY.MM.DD HH:mm` 서버 자동 제목 사용; 시각은 `created_at`의 `Asia/Seoul` 표시값으로 고정되고 날짜와 상태 시각은 수정 불가 | owner가 해당 class의 제목 수정 선택 |
 | class 삭제 | `CLASS_DELETE` | 4 | 기능 | `COURSE_PAGE_PROF` | Course 교수자 | MVP 필수 | `READY`·`COMPLETED`에서 삭제; `LIVE`는 종료 후 `PROCESSING` 완료를 기다리고 `PROCESSING`은 완료까지 삭제 불가 | owner가 삭제 가능한 상태의 class에서 삭제 선택 |
 | 끝난 class 메인 페이지-교수자 | `ENDED_CLASS_PAGE_PROF` | 4 | 페이지 | `COURSE_PAGE_PROF` | 교수자 | MVP 필수 | 학생과 같은 기록·개인 `REVIEW` Chat UI에서 compact manifest 후 강의자료·Transcript·질문·Answer·Cluster·Job을 영역별 점진 로딩하고, 녹음 playback·문장 seek·FINAL Summary·마인드맵·Answer를 제공하며 교수자 관리·실패한 공유 Job 재시도 control만 추가 | 완료 class 목록에서 특정 `COMPLETED` class 선택 |
 | 끝난 class 메인 페이지-학생 | `ENDED_CLASS_PAGE_STUD` | 4 | 페이지 | `COURSE_PAGE_STUD` | 학생 | MVP 필수 | compact 기록 manifest 후 강의자료·Transcript·질문·Answer·Cluster·Job을 영역별 점진 로딩하고, canonical Transcript의 final·empty·failed·mixed gap, 녹음 playback·문장 seek, AI 요약, 질문·교수자 text 우선 Answer·별도 AI 정리·안전한 Evidence 이동과 복습 AI 제공 | 완료 class 목록에서 특정 class 선택 |
