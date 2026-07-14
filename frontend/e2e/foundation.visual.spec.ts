@@ -9,6 +9,10 @@ import {
 
 interface FoundationScenario {
   auth: VisualAuth
+  checkpoint?: {
+    level: number
+    name: string
+  }
   heading: string
   path: string
   requiredRequests: string[]
@@ -21,6 +25,7 @@ const scenarios: FoundationScenario[] = [
     path: '/',
     auth: 'signed-out',
     heading: '강의의 흐름을 놓치지 않도록',
+    checkpoint: { level: 3, name: '실시간 Transcript' },
     requiredRequests: ['GET /api/v1/me'],
   },
   {
@@ -28,6 +33,7 @@ const scenarios: FoundationScenario[] = [
     path: '/login',
     auth: 'signed-out',
     heading: '강의의 흐름으로 다시 들어오세요.',
+    checkpoint: { level: 2, name: '로그인' },
     requiredRequests: ['GET /api/v1/me'],
   },
   {
@@ -85,6 +91,9 @@ for (const scenario of scenarios) {
     await expect(
       page.getByRole('heading', { level: 1, name: scenario.heading }),
     ).toBeVisible()
+    if (scenario.checkpoint) {
+      await expect(page.getByRole('heading', scenario.checkpoint)).toBeVisible()
+    }
     await settleVisualPage(page)
     await verifyVisualPage(page, testInfo, runtimeErrors, {
       requiredRequests: scenario.requiredRequests,

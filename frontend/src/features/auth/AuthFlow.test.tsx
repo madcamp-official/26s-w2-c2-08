@@ -80,6 +80,49 @@ describe('authentication flow', () => {
     ).toBeInTheDocument()
   })
 
+  it('connects an invalid credential error to both login fields', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/login', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'INVALID_CREDENTIALS',
+              message: '인증 정보를 확인해 주세요.',
+              request_id: 'req_login',
+              details: null,
+            },
+          },
+          { status: 401 },
+        ),
+      ),
+    )
+    renderAt('/login')
+
+    const emailInput = await screen.findByLabelText('이메일')
+    const passwordInput = screen.getByLabelText('비밀번호')
+    fireEvent.change(emailInput, { target: { value: 'wrong@example.test' } })
+    fireEvent.change(passwordInput, { target: { value: 'wrong-password' } })
+    fireEvent.click(screen.getByRole('button', { name: '이메일로 로그인' }))
+
+    const error = await screen.findByText(
+      '이메일 또는 비밀번호가 올바르지 않습니다.',
+    )
+    expect(emailInput).toHaveAttribute('aria-invalid', 'true')
+    expect(passwordInput).toHaveAttribute('aria-invalid', 'true')
+    expect(emailInput).toHaveAttribute('aria-describedby', error.id)
+    expect(passwordInput).toHaveAttribute('aria-describedby', error.id)
+  })
+
+  it('shows a safe notice when Google login was cancelled', async () => {
+    renderAt('/login?auth_error=cancelled')
+
+    expect(
+      await screen.findByText(
+        'Google 로그인이 취소되었습니다. 준비되면 다시 시도해 주세요.',
+      ),
+    ).toHaveAttribute('role', 'alert')
+  })
+
   it('offers an email account creation screen', async () => {
     renderAt('/login?return_to=/courses/join')
 

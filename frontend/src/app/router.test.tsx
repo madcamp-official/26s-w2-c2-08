@@ -40,10 +40,9 @@ describe('application router', () => {
       'href',
       '/login',
     )
-    expect(screen.getByRole('link', { name: '이메일로 시작' })).toHaveAttribute(
-      'href',
-      '/signup',
-    )
+    expect(
+      await screen.findByRole('link', { name: '이메일로 시작' }),
+    ).toHaveAttribute('href', '/signup')
     expect(
       screen.getByRole('link', { name: '로그인하고 시작하기' }),
     ).toHaveAttribute('href', '/login?return_to=/')
@@ -53,6 +52,18 @@ describe('application router', () => {
     expect(
       screen.getByRole('heading', { name: '실시간 Transcript' }),
     ).toBeInTheDocument()
+  })
+
+  it('does not repeat the current authentication route in the header', async () => {
+    renderAt('/login')
+
+    expect(
+      await screen.findByRole('heading', { name: '로그인', level: 2 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '로그인' })).toBeNull()
+    expect(
+      await screen.findByRole('link', { name: '이메일로 시작' }),
+    ).toHaveAttribute('href', '/signup')
   })
 
   it('offers Course and account navigation from the shared shell when signed in', async () => {
