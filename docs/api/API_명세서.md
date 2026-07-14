@@ -516,6 +516,56 @@ Idempotency-Key: <key>
 - 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 `204`를 반환한다.
 - 삭제가 허용되는 Course의 성공 응답은 `204 No Content`이다.
 
+### 6.7 Course 전체 강의자료 archive
+
+```http
+GET /api/v1/courses/{course_id}/materials?cursor=<cursor>&limit=20
+```
+
+- 권한: Course 멤버. 인증되지 않은 요청은 `401`, 존재하는 Course의 비멤버는 `403 COURSE_ACCESS_DENIED`, 존재하지 않거나 삭제된 Course는 `404 RESOURCE_NOT_FOUND`다.
+- 현재 active Session이 있으면 그 Session을 먼저 두고, 완료 class는 `started_at DESC, id DESC`로 정렬한다. 같은 Session의 Material은 `created_at ASC, id ASC`다.
+- 현재 연결된 Material만 반환하며 detached Material, 내부 storage key·path와 물리 object URL은 반환하지 않는다. Material이 없는 Session은 응답 항목을 만들지 않는다.
+- 각 항목은 `session`, `material`, nullable `content_url`, nullable `download_url`을 포함한다. `UPLOADED`, `PROCESSING`, `READY`는 각각 기본 inline 본문 URL과 `disposition=attachment` 다운로드 URL을 제공한다. `FAILED`는 두 URL이 모두 `null`이고 상태만 제공한다.
+- zip 일괄 다운로드는 제공하지 않는다.
+- 응답은 `items`, `next_cursor`이며 cursor는 Course ID, archive 종류, 정렬 위치에 묶인다. 다른 Course·archive·필터에 재사용하거나 변조하면 `400 INVALID_CURSOR`다.
+
+### 6.8 Course 전체 Transcript archive
+
+```http
+GET /api/v1/courses/{course_id}/transcripts?cursor=<cursor>&limit=20
+```
+
+- 권한과 cursor 오류는 6.7절과 같다.
+- `LIVE`, `PROCESSING`, `COMPLETED` Session을 반환한다. active Session이 있으면 먼저 두고 완료 class는 `started_at DESC, id DESC`로 정렬한다. `READY`는 아직 Transcript가 없으므로 제외한다.
+- 각 항목은 `session`과 `RecordTranscriptIndex` 형태의 `transcript`를 포함한다. 최신 처리 상태와 canonical 선택을 분리해 표시하고, HQ 실패 뒤 보존된 LIVE canonical을 HQ 성공으로 표현하지 않는다.
+- Segment·Gap 본문은 이 응답에 embed하지 않는다. 클라이언트는 사용자가 class를 선택하거나 펼칠 때 `transcript.timeline_url`을 따라 9.3절의 기존 timeline cursor API를 지연 조회한다.
+- Transcript 파일 다운로드 URL은 제공하지 않는다.
+
+### 6.9 Course 전체 공용 FINAL Summary archive
+
+```http
+GET /api/v1/courses/{course_id}/summaries?cursor=<cursor>&limit=20
+```
+
+- 권한과 cursor 오류는 6.7절과 같다.
+- `PROCESSING`, `COMPLETED` Session을 반환한다. active `PROCESSING` Session이 있으면 먼저 두고 완료 class는 `started_at DESC, id DESC`로 정렬한다.
+- 각 항목은 `session`, `FinalSummaryState`인 `state`, nullable `summary`, nullable `summary_url`을 포함한다. `state.status=AVAILABLE`일 때만 `summary`와 `summary_url`이 non-null이다.
+- SQL 조회 단계와 public schema 모두 `summary_type=FINAL`, `visibility=COURSE_MEMBERS`, `requester_user_id=null`인 공용 결과만 허용한다. 요청자 전용 LIVE Summary·Chat·Message·Evidence·개인 AIJob은 포함하지 않는다.
+- provider 원문 오류는 반환하지 않고 12절의 안전한 FINAL Summary 상태와 오류 코드만 공개한다.
+
+### 6.10 Course 전체 Q&A archive
+
+```http
+GET /api/v1/courses/{course_id}/qna?cursor=<cursor>&limit=20
+```
+
+- 권한과 cursor 오류는 6.7절과 같다.
+- 현재 active Session이 있으면 먼저 두고 완료 class는 `started_at DESC, id DESC`로 정렬한다. 같은 class 안에서는 `occurred_at DESC`, 동일 시각이면 target ID 내림차순으로 정렬한다.
+- 항목은 `target_type` discriminator로 `STUDENT_QUESTION`과 `AI_REPRESENTATIVE_QUESTION`을 구분한다. 두 유형 모두 class 요약, immutable `target_text_snapshot`, nullable 또는 완료된 공개 Answer, class 기록으로 이동하는 `record_url`을 포함한다.
+- 학생 질문은 작성자 식별정보 없이 모두 포함한다. 미답변 질문은 `answer=null`, 답변된 질문은 `status=COMPLETED`인 Answer만 포함한다. 학생 Question 공개 표현에도 계정 ID·이름·이메일을 추가하지 않는다.
+- AI 대표질문은 `status=COMPLETED` Answer가 있는 target만 포함하고 Answer의 immutable snapshot을 질문 문구로 사용한다. `CAPTURING`·취소 Answer와 폐기된 미답변 대표질문은 제외하며, 내부 clustering·provider Job ID를 공개하지 않는다.
+- archive는 읽기 전용이다. Answer 작성·수정·철회와 실패 Job 재시도는 기존 class 기록 API와 화면에서 수행한다.
+
 ## 7. Lecture Session API
 
 ### 7.1 class 목록
@@ -525,8 +575,8 @@ GET /api/v1/courses/{course_id}/sessions?status=<status>&cursor=<cursor>&limit=2
 ```
 
 - 권한: Course 멤버
-- 기본 정렬과 완료 목록 정렬은 `lecture_date DESC, started_at DESC NULLS FIRST, id DESC`이다. 같은 날짜의 완료 class는 실제 시작 시각으로 구분한다.
-- 페이지 커서는 이 정렬 tuple 전체를 보존한다.
+- 목록은 `started_at DESC NULLS LAST, id DESC`로 안정 정렬한다. `status=COMPLETED` 목록의 active Session은 Course의 `current_session`으로 별도 조회하므로 완료 목록에 섞이지 않는다.
+- 페이지 커서는 Course ID, 선택한 status와 마지막 `started_at`·Session ID를 보존한다. 다른 Course나 status에 재사용하거나 변조하면 `400 INVALID_CURSOR`다.
 - `status`는 선택적이다.
 
 ### 7.2 class 생성
@@ -664,13 +714,14 @@ GET /api/v1/materials/{material_id}
 ### 8.3 PDF 열람
 
 ```http
-GET /api/v1/materials/{material_id}/content
+GET /api/v1/materials/{material_id}/content?disposition=inline|attachment
 ```
 
 - 권한: Course 멤버
+- `disposition` 기본값은 `inline`이다. `inline`은 브라우저 열람, `attachment`는 개별 파일 다운로드를 뜻한다. 다른 값은 `422 VALIDATION_ERROR`다.
 - 성공: `200 OK`, `application/pdf`
 - 연결되고 `processing_status`가 `UPLOADED`, `PROCESSING`, `READY`인 Material만 본문을 반환한다. `FAILED`는 사용할 수 없는 자료이므로 원본을 반환하지 않는다.
-- `Content-Disposition` 파일명에는 저장된 `display_name`을 안전하게 인코딩해 사용한다.
+- `Content-Disposition`은 요청한 disposition과 저장된 `display_name`을 안전하게 인코딩한 파일명을 함께 사용한다.
 - 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, `FAILED`, 분리되거나 존재하지 않는 자료는 모두 `404 MATERIAL_NOT_FOUND`로 응답해 존재를 숨긴다.
 - 저장소가 일시적으로 읽히지 않으면 `503 STORAGE_UNAVAILABLE`을 반환한다.
 - 추후 객체 스토리지를 사용하면 짧은 만료 시간의 서명 URL 응답으로 변경할 수 있다.
@@ -1743,6 +1794,11 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | POST-07               | 이전 class          | `GET /courses/{id}/sessions`                                    | —                                                                |
 | POST-08               | PDF 다시 보기       | Material API                                                    | —                                                                |
 | POST-ANSWER           | 종료 후 텍스트 답변 | Answer 생성·수정 API                                            | `answer.updated`                                                 |
+| COURSE-ARCHIVE-01     | Course workspace    | Course 상세·완료 class cursor API                               | —                                                                |
+| COURSE-ARCHIVE-02     | Course PDF archive  | `GET /courses/{id}/materials`, Material content                 | —                                                                |
+| COURSE-ARCHIVE-03     | Transcript archive  | `GET /courses/{id}/transcripts`, Session timeline API           | —                                                                |
+| COURSE-ARCHIVE-04     | FINAL Summary 모음  | `GET /courses/{id}/summaries`, Summary 단건                     | —                                                                |
+| COURSE-ARCHIVE-05     | Course Q&A archive  | `GET /courses/{id}/qna`, class record API                       | —                                                                |
 
 ## 18. 보안과 개인정보
 
