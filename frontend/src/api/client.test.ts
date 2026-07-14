@@ -2,19 +2,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => {
   vi.unstubAllEnvs()
-  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   vi.resetModules()
 })
 
 describe('API client base URL', () => {
   it('does not duplicate the API path when a legacy /api base URL is configured', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '/api')
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ status: 'ok' }), {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: 'ok' }), {
         headers: { 'Content-Type': 'application/json' },
-      }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
+        }),
+      )
 
     const { apiClient, apiUrl } = await import('./client')
     await apiClient.GET('/api/health')
