@@ -549,6 +549,7 @@ Idempotency-Key: <key>
 
 - 권한: Course `PROFESSOR`
 - `LIVE → PROCESSING`을 한 번만 적용한다.
+- **현재 PR-09 구현 범위:** 종료 transaction은 `PROCESSING` 상태와 SHARED·blocking `SESSION_POSTPROCESSING` coordinator 한 건을 함께 저장한다. Recording 전이, LIVE 개인 AI 정리, FINAL clustering 및 coordinator 실행은 후속 실시간·worker PR에서 같은 API 계약에 추가한다. `COMPLETED` 전이는 브라우저의 Job 개수 계산이 아니라 coordinator worker의 명시적 상태 전이로만 수행한다.
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
 - 정상 클라이언트도 종료 확인 즉시 이 API를 호출한다. `audio.stop` 전송과 로컬 녹음 마감은 best-effort로 함께 시작하되 `audio.stopped`나 drain 완료를 HTTP 호출의 선행조건으로 두지 않는다. 서버는 종료 transaction에서 새 audio frame을 차단하고 이미 받은 chunk만 별도로 drain한다.
 - 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
@@ -556,7 +557,7 @@ Idempotency-Key: <key>
 - 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
 - 같은 transaction에서 SHARED·blocking `SESSION_POSTPROCESSING` coordinator를 `PENDING`으로 생성한다. FINAL 대상이 1건 이상이면 4.2절의 종료 시점 입력 상한을 고정한 SHARED·blocking `FINAL` `QUESTION_CLUSTERING` Job도 같은 transaction에서 함께 생성한다. Recording/HQ 또는 Recording이 없는 경우 LIVE Transcript source가 terminal이 되기 전에는 coordinator를 claim하지 않지만, FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다.
 - coordinator는 source terminal 후 Answer mapping·Knowledge 재연결을 수행하고 자신의 terminal 전이와 downstream blocking Job 생성·outbox를 같은 transaction에 commit한다. HQ Transcript version·canonical 전환과 Answer 재매핑은 9절과 11절을 따른다.
-- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 종료 transaction에서 생성된 coordinator 및 조건부 FINAL clustering Job을 `jobs[]`로 반환한다.
+- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 종료 transaction에서 생성된 coordinator 및 조건부 FINAL clustering Job을 `jobs[]`로 반환한다. 현재 구현의 `jobs[]`에는 coordinator 한 건만 포함된다.
 - class 종료 요청 자체의 멱등 재요청은 기존 Session, Recording과 Job 결과를 반환한다.
 
 ## 8. 강의자료 API
