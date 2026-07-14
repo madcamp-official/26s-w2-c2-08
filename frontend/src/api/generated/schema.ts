@@ -196,7 +196,13 @@ export interface paths {
         get: operations["getCurrentUser"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 계정 탈퇴
+         * @description 인증 수단과 개인 프로필을 비식별화한다. 삭제되지 않은 owner Course가 있으면
+         *     409 OWNED_COURSE_REQUIRES_DELETION이며 서버가 Course를 자동 삭제하지 않는다.
+         *     탈퇴는 복구하지 않고 같은 Idempotency-Key·request hash만 24시간 204을 재생한다.
+         */
+        delete: operations["deleteCurrentUser"];
         options?: never;
         head?: never;
         patch?: never;
@@ -306,9 +312,10 @@ export interface paths {
         /**
          * Course 삭제
          * @description Course의 PROFESSOR만 삭제할 수 있다. Course에는 별도 종료 상태나 종료 API가 없다.
-         *     active Session이 있을 때의 삭제 허용 여부와 데이터 삭제·보관 방식은 아직 미정이므로
-         *     구현 전에 이 경우의 응답과 transaction 계약을 확정해야 한다. 삭제와 멱등성 완료
-         *     응답 저장을 한 transaction으로 처리해 Course 삭제 후 재요청에도 기존 204를 반환한다.
+         *     READY, LIVE, PROCESSING Session이 하나라도 있으면 409 COURSE_HAS_ACTIVE_SESSION이고,
+         *     COMPLETED Session만 남은 Course는 삭제할 수 있다. 성공 commit은 즉시 접근과 참여 코드를
+         *     차단하며 object와 하위 row는 internal deletion ledger가 재시도해 정리한다. 삭제와 멱등성
+         *     완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 204를 반환한다.
          */
         delete: operations["deleteCourse"];
         options?: never;
@@ -1533,7 +1540,13 @@ export interface paths {
         get: operations["getSessionRecording"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 완료 녹음 조기 삭제
+         * @description Course PROFESSOR가 COMPLETED Session의 final Recording을 삭제한다. 성공 commit 뒤
+         *     metadata와 playback은 즉시 숨기고 final object는 internal deletion ledger가 멱등적으로
+         *     삭제한다. Transcript와 다른 완료 기록은 삭제하지 않는다.
+         */
+        delete: operations["deleteSessionRecording"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4554,6 +4567,47 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
+    deleteCurrentUser: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+                /**
+                 * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
+                 *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
+                 *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
+                 *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
+                 *     LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
+                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING이 원 리소스·
+                 *     Job을 삭제하고 늦은 결과를 fence하되, 멱등성 행 조기 삭제·24시간
+                 *     보존·종료 후 재응답은 TBD이다. FINAL Summary와 mode=REVIEW Chat·관련
+                 *     Job retry는 이 예외에
+                 *     포함하지 않는다.
+                 */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 계정 탈퇴 완료 */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
     createRealtimeTicket: {
         parameters: {
             query?: never;
@@ -4829,7 +4883,8 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["IdempotencyKeyReused"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     rotateCourseJoinCode: {
@@ -6772,6 +6827,52 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["RecordingNotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    deleteSessionRecording: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+                /**
+                 * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
+                 *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
+                 *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
+                 *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
+                 *     LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
+                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING이 원 리소스·
+                 *     Job을 삭제하고 늦은 결과를 fence하되, 멱등성 행 조기 삭제·24시간
+                 *     보존·종료 후 재응답은 TBD이다. FINAL Summary와 mode=REVIEW Chat·관련
+                 *     Job retry는 이 예외에
+                 *     포함하지 않는다.
+                 */
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
+            };
+            path: {
+                /** @description 불투명 LectureSession ID */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 녹음 삭제 예약 완료 */
+            204: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["RecordingNotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
         };
     };

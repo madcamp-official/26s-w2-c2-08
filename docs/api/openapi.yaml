@@ -340,6 +340,28 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [Users]
+      operationId: deleteCurrentUser
+      summary: 계정 탈퇴
+      description: |
+        인증 수단과 개인 프로필을 비식별화한다. 삭제되지 않은 owner Course가 있으면
+        409 OWNED_COURSE_REQUIRES_DELETION이며 서버가 Course를 자동 삭제하지 않는다.
+        탈퇴는 복구하지 않고 같은 Idempotency-Key·request hash만 24시간 204을 재생한다.
+      parameters:
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
+      responses:
+        "204":
+          description: 계정 탈퇴 완료
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/realtime-tickets:
     parameters:
@@ -570,9 +592,10 @@ paths:
       summary: Course 삭제
       description: |
         Course의 PROFESSOR만 삭제할 수 있다. Course에는 별도 종료 상태나 종료 API가 없다.
-        active Session이 있을 때의 삭제 허용 여부와 데이터 삭제·보관 방식은 아직 미정이므로
-        구현 전에 이 경우의 응답과 transaction 계약을 확정해야 한다. 삭제와 멱등성 완료
-        응답 저장을 한 transaction으로 처리해 Course 삭제 후 재요청에도 기존 204를 반환한다.
+        READY, LIVE, PROCESSING Session이 하나라도 있으면 409 COURSE_HAS_ACTIVE_SESSION이고,
+        COMPLETED Session만 남은 Course는 삭제할 수 있다. 성공 commit은 즉시 접근과 참여 코드를
+        차단하며 object와 하위 row는 internal deletion ledger가 재시도해 정리한다. 삭제와 멱등성
+        완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 204를 반환한다.
       parameters:
         - $ref: "#/components/parameters/RequiredIdempotencyKey"
       responses:
@@ -588,7 +611,9 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/IdempotencyKeyReused"
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/courses/{course_id}/join-code/rotate:
     parameters:
@@ -2500,6 +2525,32 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/RecordingNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [Recordings]
+      operationId: deleteSessionRecording
+      summary: 완료 녹음 조기 삭제
+      description: |
+        Course PROFESSOR가 COMPLETED Session의 final Recording을 삭제한다. 성공 commit 뒤
+        metadata와 playback은 즉시 숨기고 final object는 internal deletion ledger가 멱등적으로
+        삭제한다. Transcript와 다른 완료 기록은 삭제하지 않는다.
+      parameters:
+        - $ref: "#/components/parameters/RequiredIdempotencyKey"
+      responses:
+        "204":
+          description: 녹음 삭제 예약 완료
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 

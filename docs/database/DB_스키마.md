@@ -336,6 +336,8 @@ ticket 소비는 `UPDATE ... SET used_at = now() WHERE ticket_hash = :hash AND u
 | `join_code_ciphertext`         | `bytea`       |    N | -                   | -               | AES-256-GCM 암호문과 auth tag |
 | `join_code_nonce`              | `bytea`       |    N | -                   | -               | 암호화 nonce                  |
 | `join_code_key_version`        | `smallint`    |    N | -                   | CHECK `> 0`     | 암호화 키 버전                |
+| `deleted_at`                   | `timestamptz` |    Y | `NULL`              | INDEX            | 접근 차단 tombstone 시각      |
+| `purge_after`                  | `timestamptz` |    Y | `NULL`              | INDEX            | object 정리 뒤 DB purge 기준  |
 | `version`                      | `bigint`      |    N | `1`                 | CHECK `> 0`     | 리소스 버전                   |
 | `created_at`                   | `timestamptz` |    N | `now()`             | -               | 생성 시각                     |
 | `updated_at`                   | `timestamptz` |    N | `now()`             | -               | 갱신 시각                     |
@@ -351,6 +353,7 @@ ticket 소비는 `UPDATE ... SET used_at = now() WHERE ticket_hash = :hash AND u
 7. 암호화 key는 lookup key와 독립적으로 행 단위 점진 회전할 수 있다.
 8. 참여 코드는 자동 만료하지 않는다. owner의 제품 기능상 코드 회전은 Course row를 잠근 뒤 새 hash·ciphertext·nonce로 현재 값을 원자 교체하고 `version`을 증가시킨다.
 9. 코드 회전이 commit되면 이전 코드는 즉시 무효이며 이전 hash·ciphertext와 회전 이력은 보관하지 않는다. 제품 코드 회전과 6·7항의 비밀키 회전은 서로 다른 작업이다.
+10. Course에는 lifecycle enum을 두지 않는다. `deleted_at IS NOT NULL`이면 모든 Course·membership 조회와 참여 코드 조회에서 제외하며, active Session이 없을 때만 tombstone으로 전이한다. 복구는 제공하지 않는다.
 
 제약·인덱스:
 
@@ -361,6 +364,8 @@ ticket 소비는 `UPDATE ... SET used_at = now() WHERE ticket_hash = :hash AND u
 - `created_by_user_id ON DELETE RESTRICT`
 - `created_by_user_id`는 Course 생성 후 변경하지 않는다.
 - 모든 Course가 같은 활성 lookup key version을 사용하므로 `join_code_lookup_hash`의 UNIQUE 인덱스가 정규화 참여 코드의 전역 중복과 극히 드문 digest 충돌을 막는다.
+- `INDEX courses_active_idx (id) WHERE deleted_at IS NULL`
+- `INDEX courses_purge_due_idx (purge_after, id) WHERE deleted_at IS NOT NULL`
 
 ### 6.2 `course_members`
 
