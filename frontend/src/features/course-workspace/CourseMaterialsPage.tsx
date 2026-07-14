@@ -17,7 +17,12 @@ function hasMaterialUrls(item: object): item is {
   content_url: string
   download_url: string
 } {
-  return 'content_url' in item && 'download_url' in item
+  return (
+    'content_url' in item &&
+    typeof item.content_url === 'string' &&
+    'download_url' in item &&
+    typeof item.download_url === 'string'
+  )
 }
 
 export function CourseMaterialsPage() {

@@ -136,6 +136,59 @@ def test_course_session_list_declares_cursor_contract(
     assert {"items", "next_cursor"} <= set(response_schema["required"])
 
 
+def test_course_material_archive_and_download_disposition_match_contract(
+    app: FastAPI,
+    canonical_openapi: dict[str, Any],
+) -> None:
+    """The Course PDF archive and explicit browser/download modes stay synchronized."""
+
+    archive_path = "/api/v1/courses/{course_id}/materials"
+    canonical_archive = canonical_openapi["paths"][archive_path]["get"]
+    runtime_archive = app.openapi()["paths"][archive_path]["get"]
+    for operation in (canonical_archive, runtime_archive):
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in _resolve_local_refs(operation["parameters"], canonical_openapi)
+        }
+        assert {"cursor", "limit"} <= parameters.keys()
+        assert parameters["limit"]["schema"]["type"] == "integer"
+        assert parameters["limit"]["schema"]["maximum"] == 100
+        assert parameters["limit"]["schema"]["minimum"] == 1
+        assert parameters["limit"]["schema"]["default"] == 20
+        assert {"400", "401", "403", "404", "422"} <= operation["responses"].keys()
+
+    archive_schema = _resolve_local_refs(canonical_archive["responses"]["200"], canonical_openapi)[
+        "content"
+    ]["application/json"]["schema"]
+    assert set(archive_schema["required"]) == {"items", "next_cursor"}
+    item_schema = archive_schema["properties"]["items"]["items"]
+    assert set(item_schema["required"]) == {
+        "session",
+        "material",
+        "content_url",
+        "download_url",
+    }
+
+    content_path = "/api/v1/materials/{material_id}/content"
+    canonical_content = canonical_openapi["paths"][content_path]["get"]
+    runtime_content = app.openapi()["paths"][content_path]["get"]
+    for operation in (canonical_content, runtime_content):
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in _resolve_local_refs(operation["parameters"], canonical_openapi)
+        }
+        assert parameters["disposition"]["schema"]["enum"] == ["inline", "attachment"]
+        assert parameters["disposition"]["schema"]["default"] == "inline"
+        assert "422" in operation["responses"]
+        success = operation["responses"]["200"]
+        assert set(success["content"]) == {"application/pdf"}
+        assert success["content"]["application/pdf"]["schema"] == {
+            "type": "string",
+            "format": "binary",
+        }
+        assert "Content-Disposition" in success["headers"]
+
+
 @pytest.mark.parametrize("path", ["/api/health", "/api/health/db"])
 def test_health_success_payloads_match_canonical_openapi(
     app: FastAPI,

@@ -25,7 +25,16 @@ from tbd.models.materials import LectureMaterial
 from tbd.models.questions import AIJob
 from tbd.models.sessions import LectureSession
 from tbd.repositories.jobs import ClaimedJob
-from tbd.repositories.materials import MaterialRepository
+from tbd.repositories.materials import (
+    CourseMaterialArchivePosition,
+    CourseMaterialArchiveRow,
+    MaterialRepository,
+)
+from tbd.services.course_archives import (
+    CourseArchiveCursorCodec,
+    InvalidCourseArchiveCursorError,
+    JsonValue,
+)
 from tbd.services.courses import (
     CourseAccessDeniedError,
     CourseNotFoundError,
@@ -38,6 +47,18 @@ from tbd.storage import Storage, StorageError, StorageKey, StorageNamespace, sha
 MATERIAL_MAX_COUNT: Final = 10
 UPLOAD_CHUNK_BYTES: Final = 64 * 1024
 MATERIAL_WORKER_LEASE: Final = timedelta(seconds=60)
+COURSE_MATERIAL_ARCHIVE_RESOURCE: Final = "course_materials"
+COURSE_MATERIAL_ARCHIVE_SCOPE: Final[dict[str, JsonValue]] = {
+    "attached": True,
+    "session_statuses": ["READY", "LIVE", "PROCESSING", "COMPLETED"],
+    "sort": [
+        "active_first",
+        "session_started_at_desc",
+        "session_id_desc",
+        "material_created_at_asc",
+        "material_id_asc",
+    ],
+}
 
 
 class MaterialNotFoundError(Exception):
@@ -91,6 +112,14 @@ class MaterialUploadResult:
 
     material: LectureMaterial
     job: AIJob
+
+
+@dataclass(frozen=True)
+class CourseMaterialArchiveResult:
+    """A bounded flat Course archive page and its opaque next position."""
+
+    items: list[CourseMaterialArchiveRow]
+    next_cursor: str | None
 
 
 @dataclass(frozen=True)
@@ -168,6 +197,58 @@ def _encode_cursor(material: LectureMaterial) -> str:
     return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
 
 
+def _decode_course_material_archive_position(
+    position: list[JsonValue],
+) -> CourseMaterialArchivePosition:
+    try:
+        if len(position) != 5:
+            raise ValueError
+        phase_value, started_at_value, session_id_value, created_at_value, material_id_value = (
+            position
+        )
+        if type(phase_value) is not int or phase_value not in {0, 1}:
+            raise ValueError
+        if started_at_value is None:
+            started_at = None
+        elif isinstance(started_at_value, str):
+            started_at = datetime.fromisoformat(started_at_value)
+            if started_at.tzinfo is None or started_at.utcoffset() is None:
+                raise ValueError
+        else:
+            raise ValueError
+        if phase_value == 1 and started_at is None:
+            raise ValueError
+        if not isinstance(created_at_value, str):
+            raise ValueError
+        material_created_at = datetime.fromisoformat(created_at_value)
+        if material_created_at.tzinfo is None or material_created_at.utcoffset() is None:
+            raise ValueError
+        if not isinstance(session_id_value, str) or not isinstance(material_id_value, str):
+            raise ValueError
+        return CourseMaterialArchivePosition(
+            phase=phase_value,
+            session_started_at=started_at,
+            session_id=UUID(session_id_value),
+            material_created_at=material_created_at,
+            material_id=UUID(material_id_value),
+        )
+    except (TypeError, ValueError) as exc:
+        raise InvalidCourseArchiveCursorError from exc
+
+
+def _encode_course_material_archive_position(
+    row: CourseMaterialArchiveRow,
+) -> list[JsonValue]:
+    lecture_session = row.lecture_session
+    return [
+        1 if lecture_session.status == "COMPLETED" else 0,
+        lecture_session.started_at.isoformat() if lecture_session.started_at is not None else None,
+        str(lecture_session.id),
+        row.material.created_at.isoformat(),
+        str(row.material.id),
+    ]
+
+
 class MaterialService:
     """Apply Course role, Session state, and durable Material lifecycle policies."""
 
@@ -176,9 +257,14 @@ class MaterialService:
         *,
         repository: MaterialRepository | None = None,
         kernel: JobKernel | None = None,
+        auth_secret: str | None = None,
+        archive_cursors: CourseArchiveCursorCodec | None = None,
     ) -> None:
         self.repository = repository or MaterialRepository()
         self.kernel = kernel or JobKernel()
+        self.archive_cursors = archive_cursors or (
+            CourseArchiveCursorCodec(auth_secret) if auth_secret is not None else None
+        )
 
     async def validate_upload(
         self,
@@ -334,6 +420,60 @@ class MaterialService:
         has_next = len(rows) > limit
         items = rows[:limit]
         return items, _encode_cursor(items[-1]) if has_next and items else None
+
+    async def list_course_archive(
+        self,
+        session: AsyncSession,
+        *,
+        course_id: UUID,
+        user_id: UUID,
+        cursor: str | None,
+        limit: int,
+    ) -> CourseMaterialArchiveResult:
+        """List attached Materials across the Course without exposing storage internals."""
+
+        course = await self.repository.get_active_course(session, course_id)
+        if course is None:
+            raise CourseNotFoundError
+        role = await self.repository.member_role(
+            session,
+            course_id=course_id,
+            user_id=user_id,
+        )
+        if role is None:
+            raise CourseAccessDeniedError
+        if self.archive_cursors is None:
+            raise RuntimeError("Course archive cursor signing requires auth_secret")
+
+        after = None
+        if cursor is not None:
+            try:
+                position = self.archive_cursors.decode(
+                    cursor=cursor,
+                    course_id=course_id,
+                    resource=COURSE_MATERIAL_ARCHIVE_RESOURCE,
+                    scope=COURSE_MATERIAL_ARCHIVE_SCOPE,
+                )
+                after = _decode_course_material_archive_position(position)
+            except InvalidCourseArchiveCursorError as exc:
+                raise InvalidMaterialCursorError from exc
+
+        rows = await self.repository.list_course_archive(
+            session,
+            course_id=course_id,
+            after=after,
+            limit=limit + 1,
+        )
+        page, extra = rows[:limit], rows[limit:]
+        next_cursor = None
+        if extra and page:
+            next_cursor = self.archive_cursors.encode(
+                course_id=course_id,
+                resource=COURSE_MATERIAL_ARCHIVE_RESOURCE,
+                scope=COURSE_MATERIAL_ARCHIVE_SCOPE,
+                position=_encode_course_material_archive_position(page[-1]),
+            )
+        return CourseMaterialArchiveResult(items=page, next_cursor=next_cursor)
 
     async def get_for_member(
         self,
