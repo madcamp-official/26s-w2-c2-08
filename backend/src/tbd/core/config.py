@@ -1,12 +1,16 @@
 """Application configuration loaded from environment variables and dotenv files."""
 
+import base64
+import binascii
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from tbd.core.crypto import AesGcmResponseCipher
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_POSTGRES_DB = "tbd"
@@ -45,6 +49,8 @@ class Settings(BaseSettings):
     database_url: str | None = None
     storage_root: Path = REPOSITORY_ROOT / "data" / "uploads"
     max_upload_bytes: int = 100_000_000
+    idempotency_response_encryption_key: SecretStr | None = None
+    idempotency_response_encryption_key_version: int = Field(default=1, ge=1)
 
     @property
     def effective_database_url(self) -> str:
@@ -59,6 +65,21 @@ class Settings(BaseSettings):
         return (
             f"postgresql+psycopg://{user}:{password}"
             f"@{self.postgres_host}:{self.postgres_host_port}/{database}"
+        )
+
+    @property
+    def idempotency_response_cipher(self) -> AesGcmResponseCipher | None:
+        """Build the in-memory cipher for encrypted idempotency responses."""
+
+        if self.idempotency_response_encryption_key is None:
+            return None
+        key = base64.b64decode(
+            self.idempotency_response_encryption_key.get_secret_value(),
+            validate=True,
+        )
+        return AesGcmResponseCipher(
+            key,
+            key_version=self.idempotency_response_encryption_key_version,
         )
 
     @model_validator(mode="after")
@@ -78,7 +99,31 @@ class Settings(BaseSettings):
         ):
             raise ValueError("DATABASE_URL must not use the repository development credentials")
 
+        if self.idempotency_response_encryption_key is None:
+            raise ValueError(
+                "IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be set when APP_ENV=production"
+            )
+
         return self
+
+    @field_validator("idempotency_response_encryption_key")
+    @classmethod
+    def validate_idempotency_response_encryption_key(
+        cls,
+        value: SecretStr | None,
+    ) -> SecretStr | None:
+        """Accept only a base64-encoded AES-256 key when the key is configured."""
+
+        if value is None:
+            return None
+        encoded = value.get_secret_value().strip()
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be base64-encoded") from exc
+        if len(decoded) != 32:
+            raise ValueError("IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must decode to exactly 32 bytes")
+        return SecretStr(encoded)
 
     @field_validator("storage_root", mode="after")
     @classmethod

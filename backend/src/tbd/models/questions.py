@@ -60,7 +60,8 @@ class QuestionClusteringState(TimestampMixin, Base):
             name="question_clustering_states_last_job_status_pair_ck",
         ),
         CheckConstraint(
-            "last_job_status IS NULL OR last_job_status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED')",
+            "last_job_status IS NULL OR last_job_status IN "
+            "('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'SUPERSEDED')",
             name="question_clustering_states_last_job_status_ck",
         ),
         ForeignKeyConstraint(
@@ -170,7 +171,8 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         ),
         CheckConstraint("visibility IN ('SHARED', 'REQUESTER_ONLY')", name="ai_jobs_visibility_ck"),
         CheckConstraint(
-            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED')", name="ai_jobs_status_ck"
+            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'SUPERSEDED')",
+            name="ai_jobs_status_ck",
         ),
         CheckConstraint("attempt > 0", name="ai_jobs_attempt_ck"),
         CheckConstraint("version > 0", name="ai_jobs_version_ck"),
@@ -287,7 +289,8 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             "(status = 'PENDING' AND started_at IS NULL AND finished_at IS NULL AND error_code IS NULL AND error_message IS NULL) "
             "OR (status = 'RUNNING' AND started_at IS NOT NULL AND finished_at IS NULL AND error_code IS NULL AND error_message IS NULL) "
             "OR (status = 'SUCCEEDED' AND started_at IS NOT NULL AND finished_at IS NOT NULL AND error_code IS NULL AND error_message IS NULL) "
-            "OR (status = 'FAILED' AND finished_at IS NOT NULL AND error_code IS NOT NULL)",
+            "OR (status IN ('FAILED', 'CANCELLED', 'SUPERSEDED') "
+            "AND finished_at IS NOT NULL AND error_code IS NOT NULL)",
             name="ai_jobs_terminal_state_ck",
         ),
         CheckConstraint(
