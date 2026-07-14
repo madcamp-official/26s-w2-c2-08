@@ -64,7 +64,7 @@ export async function createCourse(
   try {
     const { data, error, response } = await apiClient.POST('/api/v1/courses', {
       body: input,
-      headers: idempotencyHeaders(idempotencyKey),
+      params: { header: { 'Idempotency-Key': idempotencyKey } },
     })
     if (error) throw apiErrorFromResponse(response, error)
     return data
