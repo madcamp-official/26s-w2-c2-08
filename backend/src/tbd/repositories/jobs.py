@@ -73,6 +73,38 @@ class JobRepository:
             return None
         return await self._claim_locked(session, job, timestamp, lease_duration)
 
+    async def claim_requester_by_id(
+        self,
+        session: AsyncSession,
+        job_id: UUID,
+        *,
+        now: datetime | None = None,
+        lease_duration: timedelta,
+        job_types: tuple[str, ...],
+    ) -> ClaimedJob | None:
+        """Claim a private Job after its Session aggregate has been fenced.
+
+        Requester-only jobs intentionally do not use the shared outbox path. The
+        caller locks the Session (and Chat when applicable) before this row so a
+        ``LIVE → PROCESSING`` purge cannot race a late worker result.
+        """
+
+        timestamp = now or datetime.now(UTC)
+        job = await session.scalar(
+            select(AIJob)
+            .where(
+                AIJob.id == job_id,
+                AIJob.status == AIJobStatus.PENDING,
+                AIJob.visibility == AIJobVisibility.REQUESTER_ONLY,
+                AIJob.available_at <= timestamp,
+                AIJob.job_type.in_(job_types),
+            )
+            .with_for_update(skip_locked=True)
+        )
+        if job is None:
+            return None
+        return await self._claim_locked(session, job, timestamp, lease_duration)
+
     @staticmethod
     def _pending_shared_conditions(timestamp: datetime) -> list[object]:
         return [
@@ -276,6 +308,43 @@ class JobRepository:
             job.retryable = True
             job.error_code = "JOB_TIMEOUT" if timed_out else "WORKER_LEASE_EXPIRED"
             job.error_message = "작업 실행이 제한 시간을 초과했습니다."
+            job.version += 1
+            expired.append(job.id)
+        await session.flush()
+        return expired
+
+    async def fail_expired_requester_only(
+        self,
+        session: AsyncSession,
+        *,
+        now: datetime | None = None,
+        job_types: tuple[str, ...],
+    ) -> list[UUID]:
+        """Fail stale private workers without creating a shared outbox event."""
+
+        timestamp = now or datetime.now(UTC)
+        jobs = list(
+            await session.scalars(
+                select(AIJob)
+                .where(
+                    AIJob.status == AIJobStatus.RUNNING,
+                    AIJob.visibility == AIJobVisibility.REQUESTER_ONLY,
+                    AIJob.job_type.in_(job_types),
+                    AIJob.lease_expires_at < timestamp,
+                )
+                .order_by(AIJob.lease_expires_at, AIJob.id)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        expired: list[UUID] = []
+        for job in jobs:
+            job.status = AIJobStatus.FAILED
+            job.run_token = None
+            job.lease_expires_at = None
+            job.finished_at = timestamp
+            job.retryable = True
+            job.error_code = "WORKER_LEASE_EXPIRED"
+            job.error_message = "작업 실행 lease가 만료되었습니다."
             job.version += 1
             expired.append(job.id)
         await session.flush()
