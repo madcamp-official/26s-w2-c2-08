@@ -7500,6 +7500,8 @@ x-recording-contract:
     publisher: first successful audio.start client_stream_id atomically claims the Session publisher
     reconnect: the same client_stream_id reuses the publisher claim and Recording
     conflict: a different client_stream_id receives AUDIO_PUBLISHER_CONFLICT and close code 4409
+    liveness: each accepted frame renews a 45-second liveness timestamp; expiry never transfers the claim
+    takeover: not supported in MVP v1; only the original client_stream_id can reconnect until Session end
     tab_exit_warning: UI responsibility during capture or upload; release condition is TBD, not a WebSocket control message
   recording:
     public_cardinality: zero before audio.start and exactly one logical SessionRecording after the first successful start
@@ -7889,8 +7891,9 @@ x-websocket-channels:
       concurrency: |
         한 Session의 첫 성공 audio.start client_stream_id가 publisher를 원자적으로 claim하고
         Recording을 CAPTURING으로 만든다. 같은 client_stream_id는 reconnect·resume할 수 있다.
-        다른 client_stream_id는 AUDIO_PUBLISHER_CONFLICT를 받은 뒤 4409로 종료된다. 비정상
-        단절의 lease 만료, 재획득과 명시적 takeover 정책은 TBD이다.
+        다른 client_stream_id는 AUDIO_PUBLISHER_CONFLICT를 받은 뒤 4409로 종료된다. 수락한
+        frame은 45초 liveness를 갱신하지만 만료가 claim을 다른 탭·장치로 넘기지 않는다.
+        Session 종료 전에는 원래 client_stream_id만 새 ticket으로 reconnect할 수 있다.
       clientTextMessages:
         - $ref: "#/components/schemas/AudioStartControl"
         - $ref: "#/components/schemas/AudioStopControl"
@@ -7908,7 +7911,8 @@ x-websocket-channels:
           version(1), byte 1은 flags(MVP v1은 0), byte 2..5는 uint32 chunk_sequence, byte 6..13은 uint64
           captured_offset_ms, 나머지는 PCM_S16LE 16000 Hz mono payload다. sequence는
           client_stream_id별 0부터 1씩 증가하고 offset은 stream 시작 기준이다. 기본 chunk는
-          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. 이 frame은 live STT
+          500 ms(16000 bytes)이며 max_chunk_bytes는 audio.ready가 정한다. MVP v1은 최대 10개
+          frame(5초)만 처리 대기하며 각 수락 frame 뒤 ACK한다. 이 frame은 live STT
           전송용이다. 클라이언트는 같은 microphone source를 이 PCM 경로와 브라우저 로컬
           binary 녹음 경로로 동시에 분기하고, 로컬 녹음은 Session 종료 뒤 HTTP resumable
           upload로 영구 저장한다. codec·container와 로컬 저장 방식은 TBD이다.
