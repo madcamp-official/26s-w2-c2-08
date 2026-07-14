@@ -1,0 +1,154 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--color-canvas);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  background:
+    radial-gradient(
+      circle at 84% -10%,
+      rgb(98 87 232 / 10%),
+      transparent 32rem
+    ),
+    var(--color-canvas);
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[tabindex] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  border: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+p,
+h1,
+h2,
+h3,
+h4 {
+  overflow-wrap: anywhere;
+}
+
+[aria-disabled='true'],
+:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.52;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(98 87 232 / 38%);
+  outline-offset: 3px;
+  box-shadow: var(--shadow-focus);
+}
+
+.skip-link {
+  position: fixed;
+  z-index: calc(var(--z-toast) + 1);
+  top: var(--space-3);
+  left: var(--space-3);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  background: var(--color-brand-dark);
+  transform: translateY(-160%);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.container {
+  width: min(var(--container-wide), calc(100% - 40px));
+  margin-inline: auto;
+}
+
+.page-main {
+  padding-block: 48px 88px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin: 0;
+  color: var(--color-brand-dark);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page-title {
+  max-width: 760px;
+  margin: var(--space-3) 0 0;
+  font-size: clamp(42px, 6.5vw, 78px);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+}
+
+.page-description {
+  max-width: 650px;
+  margin: var(--space-5) 0 0;
+  color: var(--color-muted);
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+@media (max-width: 640px) {
+  .container {
+    width: min(100% - 28px, var(--container-wide));
+  }
+
+  .page-main {
+    padding-block: 34px 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
