@@ -1050,7 +1050,7 @@ GET /api/v1/sessions/{session_id}/summaries?summary_type=LIVE&cursor=<cursor>&li
 - 목록은 `created_at DESC, id DESC`로 안정적으로 정렬한다.
 - 성공한 `LIVE` 요약은 요청자 전용으로 반드시 저장하고, `FINAL` 요약은 Course 멤버에게 공개한다.
 - Summary 저장이 완료돼 `result.resource_url`로 조회할 수 있을 때만 AIJob을 `SUCCEEDED`로 변경한다.
-- `LIVE → PROCESSING` 전이 transaction이 `LIVE` Summary·해당 Job을 즉시 삭제해 목록과 새 RAG 대상에서 사라지게 하고, 느린 Worker 결과는 fence한다. 삭제된 기존 Summary·Job ID의 단건 조회·polling HTTP status와 관련 멱등성 재요청 응답은 TBD이다.
+- `LIVE → PROCESSING` 전이 transaction이 `LIVE` Summary·해당 Job을 즉시 삭제해 목록과 새 RAG 대상에서 사라지게 하고, 느린 Worker 결과는 fence한다. 삭제된 기존 Summary·Job ID의 단건 조회·polling은 `404 RESOURCE_NOT_FOUND`이며, 같은 key·request hash의 purge-scoped terminal 멱등성 재요청은 원래 TTL 동안 `410 LIVE_AI_RESULT_PURGED`를 replay한다.
 - `FINAL`은 class 종료 후 생성된 강의 요약을 의미한다.
 - `FINAL_SUMMARY` Job은 최신 HQ TranscriptVersion이 `source=RECORDING`, `status=FINALIZED`, final Segment 1건 이상일 때만 자동 생성한다. canonical LIVE version이 `FINALIZED`여도 자동 생성 근거로 사용하지 않는다.
 - 유효한 RECORDING `FINALIZED` source와 final Segment가 있지만 필수 `FINAL_SUMMARY` Job이 없으면 watchdog도 실패 Job을 합성하지 않는다. `/record.summary.state.status=DATA_INTEGRITY_ERROR`, `reason=null`, `summary_url=null`로 원장 누락을 안전하게 표시한다.
@@ -1726,7 +1726,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - AI 모델 입력에 학생의 실제 식별 정보를 포함하지 않는다.
 - 모든 Material, Recording, RecordingUpload, Transcript, Question, Answer, Summary, Chat과 Job 접근은 현재 인증과 Course 접근 권한을 검증한다.
 - 개인 요약·Chat Job 상태는 Session 전체에 broadcast하지 않는다. 질문 초안은 동기 REST 응답에서만 반환한다.
-- 개인 Summary·Chat·Message·`REQUESTER_ONLY` Job 조회는 해당 소유자/요청자와 현재 Course 멤버십을 재검증한다. 비소유자·비요청자·비멤버에는 `404`로 응답해 존재 여부를 숨긴다. Session 종료로 삭제된 기존 LIVE 리소스·Job의 소유자 재조회 status는 별도 TBD이다.
+- 개인 Summary·Chat·Message·`REQUESTER_ONLY` Job 조회는 해당 소유자/요청자와 현재 Course 멤버십을 재검증한다. 비소유자·비요청자·비멤버에는 `404`로 응답해 존재 여부를 숨긴다. Session 종료로 삭제된 기존 LIVE 리소스·Job은 소유자에게도 `404 RESOURCE_NOT_FOUND`다.
 - PDF·녹음의 스토리지 키, 서버 파일 경로, fragment key·manifest와 Material의 `detached_at`은 외부 API에 노출하지 않는다.
 - Chat Evidence는 현재 사용자의 Course 권한과 source 상태를 다시 검증한 `link`만 제공한다. `knowledge_chunk_id`, pagination cursor, 배열 위치와 학생 식별정보는 노출하지 않는다.
 
