@@ -347,6 +347,7 @@ class SessionPostprocessingWorker:
                     await self._schedule_final_summary(
                         session,
                         lecture_session=lecture_session,
+                        source_version=version,
                     )
                 if not await self.kernel.succeed(
                     session,
@@ -498,17 +499,36 @@ class SessionPostprocessingWorker:
             )
 
     async def _schedule_final_summary(
-        self, session: AsyncSession, *, lecture_session: LectureSession
+        self,
+        session: AsyncSession,
+        *,
+        lecture_session: LectureSession,
+        source_version: TranscriptVersion,
     ) -> None:
-        existing = await session.scalar(
+        active = await session.scalar(
             select(AIJob)
             .where(
                 AIJob.session_id == lecture_session.id,
                 AIJob.job_type == AIJobType.FINAL_SUMMARY,
+                AIJob.status.in_((AIJobStatus.PENDING, AIJobStatus.RUNNING)),
             )
             .with_for_update()
         )
-        if existing is not None:
+        if active is not None:
+            return
+        latest_summary = await session.scalar(
+            select(LectureSummary)
+            .where(
+                LectureSummary.session_id == lecture_session.id,
+                LectureSummary.summary_type == SummaryType.FINAL,
+            )
+            .order_by(LectureSummary.created_at.desc(), LectureSummary.id.desc())
+            .with_for_update()
+        )
+        if (
+            latest_summary is not None
+            and latest_summary.source_transcript_version_id == source_version.id
+        ):
             return
         await self.kernel.enqueue(
             session,

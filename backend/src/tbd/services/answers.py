@@ -13,10 +13,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tbd.models.clustering import AIRepresentativeQuestion, Answer
+from tbd.models.clustering import AIRepresentativeQuestion, Answer, AnswerOrganization
 from tbd.models.courses import CourseMember
+from tbd.models.enums import AIJobType, LectureSessionStatus
 from tbd.models.materials import TranscriptSegment
-from tbd.models.questions import Question
+from tbd.models.questions import AIJob, Question
 from tbd.models.sessions import LectureSession
 from tbd.repositories.answers import AnswerCursorPosition, AnswerRepository
 from tbd.repositories.outbox import OutboxRepository
@@ -444,6 +445,44 @@ class AnswerService:
             if mapping is not None
             else None
         )
+        organization_state = AnswerOrganizationStateResponse(status="NOT_APPLICABLE")
+        if answer_type == "VOICE":
+            organization_job = await session.scalar(
+                select(AIJob).where(
+                    AIJob.job_type == AIJobType.ANSWER_ORGANIZATION,
+                    AIJob.target_answer_id == answer.id,
+                )
+            )
+            organization = await session.scalar(
+                select(AnswerOrganization).where(AnswerOrganization.answer_id == answer.id)
+            )
+            if organization is not None:
+                organization_state = AnswerOrganizationStateResponse(
+                    status="SUCCEEDED",
+                    job_id=organization.created_by_job_id,
+                    attempt=organization.created_by_job_attempt,
+                )
+            elif organization_job is not None:
+                status = str(organization_job.status)
+                if status == "SUCCEEDED":
+                    status = "DATA_INTEGRITY_ERROR"
+                elif status not in ("PENDING", "RUNNING", "FAILED"):
+                    status = "FAILED"
+                organization_state = AnswerOrganizationStateResponse(
+                    status=status,
+                    job_id=organization_job.id,
+                    attempt=organization_job.attempt,
+                    retryable=organization_job.retryable,
+                )
+            elif answer.status != "COMPLETED":
+                organization_state = AnswerOrganizationStateResponse(status="NOT_STARTED")
+            elif (
+                lecture_session is not None
+                and lecture_session.status == LectureSessionStatus.PROCESSING
+            ):
+                organization_state = AnswerOrganizationStateResponse(status="WAITING_SOURCE")
+            else:
+                organization_state = AnswerOrganizationStateResponse(status="DATA_INTEGRITY_ERROR")
         return AnswerResponse(
             id=answer.id,
             session_id=answer.session_id,
@@ -455,9 +494,7 @@ class AnswerService:
             text_content=answer.text_content,
             source_transcript_version_id=answer.source_transcript_version_id,
             canonical_transcript_mapping=mapping_response,
-            organization_state=AnswerOrganizationStateResponse(
-                status="NOT_STARTED" if answer_type == "VOICE" else "NOT_APPLICABLE"
-            ),
+            organization_state=organization_state,
             capture_started_after_sequence=answer.capture_started_after_sequence,
             start_sequence=start_sequence,
             end_sequence=end_sequence,
