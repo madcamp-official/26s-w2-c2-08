@@ -4,12 +4,16 @@ import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/errors'
 import { HealthStatus } from '../../features/health/HealthStatus'
 import { currentUserQueryOptions } from '../../features/auth/queries'
+import { Dashboard } from '../../features/courses/Dashboard'
 
 export function FoundationPage() {
   const currentUser = useQuery(currentUserQueryOptions)
-  const authenticated = currentUser.isSuccess
   const unauthenticated =
     currentUser.error instanceof ApiError && currentUser.error.status === 401
+
+  if (currentUser.isSuccess) {
+    return <Dashboard displayName={currentUser.data.display_name} />
+  }
 
   return (
     <div className="foundation-grid">
@@ -23,16 +27,6 @@ export function FoundationPage() {
           연결합니다.
         </p>
         <div className="foundation-actions">
-          {authenticated && (
-            <>
-              <span className="auth-greeting">
-                {currentUser.data.display_name}님, 다시 오신 것을 환영합니다.
-              </span>
-              <Link className="button button--primary" to="/account">
-                내 정보 보기
-              </Link>
-            </>
-          )}
           {unauthenticated && (
             <Link className="button button--primary" to="/login?return_to=/">
               Google로 시작하기

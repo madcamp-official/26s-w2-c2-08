@@ -24,7 +24,7 @@ export function AppShell({ children, standalone = false }: AppShellProps) {
             </span>
           </Link>
           <nav className="header-nav" aria-label="주요 메뉴">
-            <Link to="/">홈</Link>
+            <Link to="/">Course</Link>
             <Link to="/account">내 정보</Link>
           </nav>
         </div>
