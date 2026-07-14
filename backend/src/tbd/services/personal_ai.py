@@ -292,6 +292,13 @@ class PersonalAIService:
             if items:
                 return items, "AVAILABLE", None
             return [], "NOT_STARTED", None
+        return await self.final_summary_state(session, lecture_session)
+
+    async def final_summary_state(
+        self, session: AsyncSession, lecture_session: LectureSession
+    ) -> tuple[list[LectureSummary], str, dict[str, str] | None]:
+        """Expose the canonical FINAL state projection to public Course archives."""
+
         return await self._final_summary_state(session, lecture_session)
 
     async def _final_summary_state(
@@ -331,6 +338,8 @@ class PersonalAIService:
             .where(
                 LectureSummary.session_id == lecture_session.id,
                 LectureSummary.summary_type == SummaryType.FINAL,
+                LectureSummary.visibility == SummaryVisibility.COURSE_MEMBERS,
+                LectureSummary.requester_user_id.is_(None),
                 LectureSummary.source_transcript_version_id == version.id,
             )
             .order_by(LectureSummary.created_at.desc(), LectureSummary.id.desc())
@@ -350,6 +359,8 @@ class PersonalAIService:
             .where(
                 AIJob.session_id == lecture_session.id,
                 AIJob.job_type == AIJobType.FINAL_SUMMARY,
+                AIJob.visibility == AIJobVisibility.SHARED,
+                AIJob.requester_user_id.is_(None),
             )
             .order_by(AIJob.created_at.desc(), AIJob.id.desc())
         )

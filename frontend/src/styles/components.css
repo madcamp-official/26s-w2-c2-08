@@ -1287,6 +1287,19 @@
   list-style: none;
 }
 
+.course-summary-archive,
+.course-summary-archive > li,
+.course-summary-archive__content {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.course-summary-archive {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .course-qna-archive__item {
   justify-items: start;
 }
@@ -1323,6 +1336,29 @@
   font-size: 13px;
 }
 
+.course-summary-archive > li {
+  grid-template-columns: minmax(170px, 0.36fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.course-summary-archive__heading h3,
+.course-summary-archive__heading p,
+.course-summary-archive__content p,
+.course-summary-archive__state-copy {
+  margin: 0;
+}
+
+.course-summary-archive__heading h3 {
+  margin-top: var(--space-3);
+  font-size: 22px;
+}
+
+.course-summary-archive__heading p {
+  margin-top: var(--space-2);
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
 .course-qna-archive__answer {
   width: 100%;
   padding: var(--space-4);
@@ -1333,6 +1369,51 @@
 
 .course-qna-archive__answer p {
   line-height: 1.65;
+}
+
+.course-summary-status {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-surface-soft);
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.course-summary-status--available {
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
+.course-summary-status--pending {
+  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  color: var(--color-brand-dark);
+}
+
+.course-summary-status--failed,
+.course-summary-status--integrity {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger);
+}
+
+.course-summary-archive__content,
+.course-summary-archive__state-copy {
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--color-line);
+}
+
+.course-summary-archive__content p,
+.course-summary-archive__state-copy {
+  color: var(--color-muted);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.course-summary-archive__content .button {
+  width: max-content;
 }
 
 .current-session-card,
@@ -2312,6 +2393,18 @@
 
   .course-transcript-timeline li {
     grid-template-columns: 1fr;
+  }
+
+  .course-summary-archive > li {
+    grid-template-columns: 1fr;
+  }
+
+  .course-summary-archive__content,
+  .course-summary-archive__state-copy {
+    padding-top: var(--space-4);
+    padding-left: 0;
+    border-top: 1px solid var(--color-line);
+    border-left: 0;
   }
 
   .join-code-box {
