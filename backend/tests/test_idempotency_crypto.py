@@ -1,8 +1,9 @@
 """Unit tests for deterministic idempotency fingerprints and encrypted responses."""
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
-from tbd.core.crypto import AesGcmResponseCipher, EncryptedPayload
+from tbd.core.crypto import AesGcmResponseCipher, CourseJoinCodeCodec, EncryptedPayload
 from tbd.core.request_hash import canonical_request_hash, idempotency_key_hash
 
 pytestmark = pytest.mark.unit
@@ -60,3 +61,22 @@ def test_response_cipher_requires_aes_256_key_material() -> None:
 
     with pytest.raises(ValueError, match="32 bytes"):
         AesGcmResponseCipher(b"short")
+
+
+def test_course_join_code_codec_separates_lookup_and_course_bound_encryption() -> None:
+    """A join code can be looked up without plaintext and cannot move between Courses."""
+
+    codec = CourseJoinCodeCodec(
+        encryption_key=b"e" * 32,
+        encryption_key_version=4,
+        lookup_key=b"h" * 32,
+        lookup_key_version=7,
+    )
+    encrypted = codec.encrypt("ABCXYZ", course_id="course-a")
+
+    assert len(codec.lookup_hash("ABCXYZ")) == 32
+    assert codec.lookup_hash("ABCXYZ") == codec.lookup_hash("ABCXYZ")
+    assert codec.decrypt(encrypted, course_id="course-a") == "ABCXYZ"
+
+    with pytest.raises(InvalidTag):
+        codec.decrypt(encrypted, course_id="course-b")

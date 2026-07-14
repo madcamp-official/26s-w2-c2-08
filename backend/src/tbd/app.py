@@ -42,6 +42,7 @@ def create_app(
     app.state.google_oidc_provider = runtime_google_oidc_provider
     cipher = runtime_settings.idempotency_response_cipher
     app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None
+    app.state.course_join_code_codec = runtime_settings.course_join_code_codec
     app.add_middleware(RequestIdMiddleware)
     install_exception_handlers(app)
     app.include_router(api_router)
