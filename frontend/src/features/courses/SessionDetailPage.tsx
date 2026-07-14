@@ -9,7 +9,6 @@ import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { createVoiceAnswer, type AnswerTarget } from '../answers/api'
 import { answerKeys } from '../answers/queries'
-import { AnswerPanel } from '../answers/AnswerPanel'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { sessionMaterialsQueryOptions } from '../materials/queries'
 import { questionKeys } from '../questions/queries'
@@ -26,9 +25,8 @@ import {
 } from './queries'
 import { useSessionRealtime } from '../realtime/useSessionRealtime'
 import { LiveClassRoom } from '../live/LiveClassRoom'
-import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
 import { LocalRecordingPanel } from '../recordings/LocalRecordingPanel'
-import { RecordingPlaybackPanel } from '../recordings/RecordingPlaybackPanel'
+import { SessionRecordPage } from '../records/SessionRecordPage'
 
 function statusCopy(status: string) {
   switch (status) {
@@ -164,6 +162,8 @@ export function SessionDetailPage() {
   const hasProcessingMaterial = materials.data?.items.some(
     (material) => material.processing_status === 'PROCESSING',
   )
+  const isRecordView =
+    data.status === 'PROCESSING' || data.status === 'COMPLETED'
 
   return (
     <section
@@ -274,11 +274,13 @@ export function SessionDetailPage() {
           </p>
         )}
       </div>
-      <MaterialPanel
-        sessionId={data.id}
-        professor={professor}
-        sessionStatus={data.status}
-      />
+      {!isRecordView && (
+        <MaterialPanel
+          sessionId={data.id}
+          professor={professor}
+          sessionStatus={data.status}
+        />
+      )}
       {professor && data.status === 'PROCESSING' && (
         <LocalRecordingPanel
           sessionId={data.id}
@@ -297,16 +299,8 @@ export function SessionDetailPage() {
           endPending={end.isPending}
         />
       )}
-      {data.status === 'COMPLETED' && (
-        <>
-          <RecordingPlaybackPanel sessionId={data.id} />
-          <AnswerPanel
-            sessionId={data.id}
-            professor={professor}
-            sessionStatus={data.status}
-          />
-          <PersonalAiPanel sessionId={data.id} mode="REVIEW" />
-        </>
+      {isRecordView && (
+        <SessionRecordPage sessionId={data.id} professor={professor} />
       )}
       {startAnswer.isError && (
         <p className="form-error" role="alert">

@@ -3,8 +3,8 @@ export const questionKeys = {
   session: (sessionId: string) => ['questions', 'session', sessionId] as const,
   list: (sessionId: string, sort: 'POPULAR' | 'RECENT') =>
     ['questions', 'session', sessionId, 'OPEN', sort] as const,
-  clusters: (sessionId: string) =>
-    ['questions', 'session', sessionId, 'clusters', 'CURRENT'] as const,
+  clusters: (sessionId: string, scope: 'CURRENT' | 'FINAL' = 'CURRENT') =>
+    ['questions', 'session', sessionId, 'clusters', scope] as const,
   clusterMembers: (sessionId: string, clusterId: string) =>
     [
       'questions',

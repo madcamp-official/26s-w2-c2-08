@@ -52,6 +52,7 @@ export async function listSessionQuestions({
 
 export async function listQuestionClusters(
   sessionId: string,
+  scope: components['schemas']['QuestionClusterScope'] = 'CURRENT',
   signal?: AbortSignal,
 ): Promise<QuestionClusterListResponse> {
   try {
@@ -60,7 +61,7 @@ export async function listQuestionClusters(
       {
         params: {
           path: { session_id: sessionId },
-          query: { scope: 'CURRENT', limit: 20 },
+          query: { scope, limit: 20 },
         },
         signal,
       },
@@ -68,8 +69,7 @@ export async function listQuestionClusters(
     if (error) throw apiErrorFromResponse(response, error)
     if (!data) throw new Error('클러스터 목록 응답이 비어 있습니다.')
     // OpenAPI's conditional FINAL schema is represented as a wider union by
-    // openapi-typescript. This request fixes scope=CURRENT, so the generated
-    // runtime response is the public list projection used by this feature.
+    // openapi-typescript. This request fixes one public scope at a time.
     return data as unknown as QuestionClusterListResponse
   } catch (error) {
     throw normalizeApiError(error)
