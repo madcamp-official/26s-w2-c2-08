@@ -8,6 +8,10 @@ export type CourseTranscriptArchiveItem =
   components['schemas']['CourseTranscriptArchiveItem']
 type CourseTranscriptArchiveResponse =
   components['schemas']['CourseTranscriptArchiveResponse']
+export type CourseSummaryArchiveItem =
+  components['schemas']['CourseSummaryArchiveItem']
+type CourseSummaryArchiveResponse =
+  components['schemas']['CourseSummaryArchiveResponse']
 
 export async function listCourseMaterialArchive(
   courseId: string,
@@ -53,6 +57,32 @@ export async function listCourseTranscriptArchive(
     // narrowly than the named component even though both represent the same
     // wire schema. Normalize that generator artifact at the API boundary.
     return data as CourseTranscriptArchiveResponse
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
+export async function listCourseSummaryArchive(
+  courseId: string,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<CourseSummaryArchiveResponse> {
+  try {
+    const { data, error, response } = await apiClient.GET(
+      '/api/v1/courses/{course_id}/summaries',
+      {
+        params: {
+          path: { course_id: courseId },
+          query: { cursor, limit: 20 },
+        },
+        signal,
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    // The generated operation response expands the archive's oneOf more
+    // narrowly than its named component. Keep that generator detail at the
+    // API boundary so the screen can consume one stable archive shape.
+    return data as CourseSummaryArchiveResponse
   } catch (error) {
     throw normalizeApiError(error)
   }

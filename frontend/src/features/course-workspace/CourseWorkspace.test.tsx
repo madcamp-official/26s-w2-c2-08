@@ -91,7 +91,7 @@ describe('Course workspace shell', () => {
       ),
     )
     expect(
-      screen.getByRole('heading', { name: '모든 class의 AI 요약' }),
+      await screen.findByRole('heading', { name: '모든 class의 AI 요약' }),
     ).toBeInTheDocument()
   })
 
