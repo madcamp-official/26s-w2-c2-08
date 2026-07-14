@@ -147,6 +147,7 @@ AIJob 유형은 다음 값을 사용한다.
 - `SESSION_POSTPROCESSING`
 - `RECORDING_TRANSCRIPTION`
 - `ANSWER_ORGANIZATION`
+- `KNOWLEDGE_INDEXING`
 
 ## 4. 테이블 구성 요약
 
@@ -1096,7 +1097,7 @@ API `organization_state`는 별도 저장 컬럼 없이 Answer 형태, Session·
 
 ### 9.1 `ai_jobs`
 
-PDF 처리, 클러스터링, Answer organization, 요약, Chat 응답과 Session 후처리 상태를 저장한다. 재시도는 같은 행을 사용한다.
+PDF 처리, KnowledgeChunk 색인, 클러스터링, Answer organization, 요약, Chat 응답과 Session 후처리 상태를 저장한다. 재시도는 같은 행을 사용한다.
 
 | 컬럼                          | 타입          | NULL | 기본값              | 키·제약                    | 설명                                   |
 | ----------------------------- | ------------- | ---: | ------------------- | -------------------------- | -------------------------------------- |
@@ -1139,7 +1140,7 @@ PDF 처리, 클러스터링, Answer organization, 요약, Chat 응답과 Session
 
 - 공통 `target_type + target_id`를 두지 않는다.
 - Job 범위는 `session_id`, 구체 대상은 `target_material_id`, `target_recording_id`, `target_chat_id`, `target_user_message_id`, `target_answer_id`라는 실제 FK로 표현한다. `CHAT_RESPONSE`는 대화 aggregate와 해당 turn의 immutable USER Message를 둘 다 가리킨다.
-- QUESTION_CLUSTERING, Summary와 Session 후처리는 `session_id` 자체가 target이다. 클러스터링 mode·질문 watermark·revision fence·FINAL Answer 시각 상한은 별도 typed 컬럼 네 개로 표현한다.
+- QUESTION_CLUSTERING, Summary, `KNOWLEDGE_INDEXING`과 Session 후처리는 `session_id` 자체가 target이다. `KNOWLEDGE_INDEXING`은 해당 Session의 현재 READY Material, canonical Transcript, 이미 존재하는 수동 Answer text를 멱등적으로 점검하므로 generic source ID·storage key·prompt를 Job에 넣지 않는다. 같은 Session에는 `PENDING|RUNNING` 색인 Job을 최대 하나만 둔다. 새 READY Material 또는 canonical Transcript final Segment가 commit되면 후속 Job을 하나 예약할 수 있고, terminal Job을 재사용하지 않는다.
 - `ANSWER_ORGANIZATION`은 `target_answer_id`와 coordinator가 생성 시 고정한 Transcript version·시작·종료 Segment typed 입력을 모두 가진다. 이 네 값은 Job 행 생성 뒤 수정하지 않는다.
 - 결과는 Job에 generic result ID를 저장하지 않고 결과 테이블의 `created_by_job_id`, `created_by_job_attempt = ai_jobs.attempt`로 현재 attempt 결과를 조회한다.
 
@@ -1178,6 +1179,7 @@ PDF 처리, 클러스터링, Answer organization, 요약, Chat 응답과 Session
 - `UNIQUE INDEX ai_jobs_one_active_chat_response_uq (target_chat_id) WHERE job_type = 'CHAT_RESPONSE' AND status IN ('PENDING', 'RUNNING')`
 - `UNIQUE INDEX ai_jobs_one_chat_response_per_user_message_uq (target_user_message_id) WHERE job_type = 'CHAT_RESPONSE'`; USER Message당 논리 응답 Job은 하나이고 retry는 같은 행을 쓴다.
 - `UNIQUE INDEX ai_jobs_one_active_material_processing_uq (target_material_id) WHERE job_type = 'MATERIAL_PROCESSING' AND status IN ('PENDING', 'RUNNING')`
+- `UNIQUE INDEX ai_jobs_one_active_knowledge_indexing_uq (session_id) WHERE job_type = 'KNOWLEDGE_INDEXING' AND status IN ('PENDING', 'RUNNING')`
 - `UNIQUE INDEX ai_jobs_one_active_question_clustering_uq (session_id) WHERE job_type = 'QUESTION_CLUSTERING' AND status IN ('PENDING', 'RUNNING')`
 - `UNIQUE INDEX ai_jobs_one_final_question_clustering_uq (session_id) WHERE job_type = 'QUESTION_CLUSTERING' AND clustering_mode = 'FINAL'`; Session당 논리 FINAL Job은 terminal 상태까지 합쳐 하나이고 실패 retry는 같은 행을 쓴다.
 - `UNIQUE INDEX ai_jobs_one_recording_transcription_uq (target_recording_id) WHERE job_type = 'RECORDING_TRANSCRIPTION'`; Recording당 논리 HQ STT Job은 하나이고 retry는 같은 행을 쓴다.
@@ -1308,7 +1310,7 @@ PDF, final Transcript, 학생 Question, AI 대표 질문과 교수 수동 Answer
 | `page_number`                  | `integer`               |    Y | `NULL`              | CHECK `> 0`  | Material source 페이지       |
 | `content`                      | `text`                  |    N | -                   | CHECK        | 검색 텍스트                  |
 | `token_count`                  | `integer`               |    Y | `NULL`              | CHECK `>= 0` | 모델 tokenizer 기준          |
-| `embedding`                    | `vector(EMBEDDING_DIM)` |    N | -                   | -            | 임베딩                       |
+| `embedding`                    | `vector(8)`             |    N | -                   | -            | development/CI RAG 임베딩    |
 | `embedding_model`              | `text`                  |    N | -                   | -            | 모델·버전 식별자             |
 | `created_by_job_id`            | `uuid`                  |    N | -                   | 복합 FK      | 생성 Job                     |
 | `created_by_job_attempt`       | `integer`               |    N | -                   | CHECK `> 0`  | 생성 attempt                 |
@@ -1341,11 +1343,20 @@ PDF, final Transcript, 학생 Question, AI 대표 질문과 교수 수동 Answer
 - `UNIQUE INDEX knowledge_chunks_answer_ordinal_uq (answer_id, chunk_index) WHERE answer_id IS NOT NULL`
 - `INDEX knowledge_chunks_scope_idx (course_id, session_id)`
 - `INDEX knowledge_chunks_job_idx (created_by_job_id, created_by_job_attempt)`
-- embedding 모델과 차원을 확정한 뒤 `USING hnsw (embedding vector_cosine_ops)` 인덱스를 생성한다.
+- `INDEX knowledge_chunks_embedding_hnsw_idx USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`를 생성한다.
 
 Transcript 범위의 시작·끝 순서와 같은 Session·version 여부는 복합 FK와 constraint trigger로 검증한다. 모든 vector 검색은 `course_id = :course_id AND session_id = :session_id`를 먼저 강제한다. Transcript source는 `source_transcript_version_id = lecture_sessions.canonical_transcript_version_id`, AI 대표 질문 source는 `ai_representative_questions.lifecycle_status IN ('ACTIVE', 'PRESERVED')`를 같은 SQL에서 적용해 HQ 전환 전 LIVE Chunk와 `DISCARDED` 대표질문 Chunk가 새 검색에 섞이지 않게 한다. 기존 Chat Evidence가 참조하는 과거 version 또는 `DISCARDED` 대표질문 Chunk는 provenance로 유지한다. `course_id`는 vector filter 성능을 위한 의도적 중복이며 `(session_id, course_id)` FK가 불일치를 막는다.
 
 `answer_id` source Chunk는 `answers.text_content IS NOT NULL`인 교수 수동 본문만 색인한다. AI가 정리한 `answer_organizations.content`는 현재 KnowledgeChunk source가 아니며, 성공 결과 재색인 여부·producer Job·생성 및 교체 transaction은 후속 정책으로 남긴다.
+
+현재 RAG 저장 profile은 외부 provider 선택이 아닌 개발·CI 경계다. `FakeEmbeddingProvider`의
+`fake-embedding-v1`, 고정 8차원, cosine distance와 위 HNSW parameter를 사용한다. 실제
+외부 model·credential·GPU runtime은 여전히 미정이며, 다른 차원의 provider를 도입하려면
+새 migration과 전체 재색인을 별도 계약으로 검토한다. PDF는 페이지별 텍스트를 1,000 Unicode
+code point 이하의 공백 경계 Chunk로 나누고, canonical Transcript는 final Segment 하나를
+하나의 안정적인 Chunk 범위로 저장한다. 수동 Answer의 생성·수정 API는 PR-16 범위이므로,
+그 PR은 현재 `text_content` source를 다시 색인하도록 `KNOWLEDGE_INDEXING` Job을 예약해야
+한다. text 변경과 기존 Chat Evidence의 Chunk 보관·교체 정책은 그 시점에 별도 확정한다.
 
 ## 11. 요약·AI Chat
 
