@@ -419,9 +419,9 @@ export interface paths {
          *     drain 완료는 이 API의 선행조건이 아니고 서버는 수신분만 별도로 drain한다. CAPTURING
          *     Answer가 있으면 409로 거부한다. Recording upload complete 전에는 HQ STT를 시작하지 않는다.
          *     active·retry-reserved LIVE clustering 실행은 Session·attempt·run-token fence로
-         *     정지하고 느린 결과 commit과 LIVE 재실행을 막는다. 이 Job의 공개
-         *     terminal 표현을 CANCELLED/SUPERSEDED로 확장할지 재시도 불가 FAILED로
-         *     표시할지는 TBD이다.
+         *     정지하고 느린 결과 commit과 LIVE 재실행을 막는다. 같은 transaction의 FINAL
+         *     clustering Job이 입력을 대체하므로 LIVE Job은 SUPERSEDED, retryable=false로
+         *     terminal 처리한다. CANCELLED는 대체 작업 없는 명시 중단에만 사용한다.
          *     종료 transaction은 SHARED·blocking SESSION_POSTPROCESSING coordinator를 PENDING으로
          *     생성하고 source terminal 전에는 claim하지 않는다. upload complete 뒤
          *     RECORDING_TRANSCRIPTION이 RECORDING TranscriptVersion·Segment·Gap·Segment 녹음 시간
@@ -1333,6 +1333,8 @@ export interface paths {
          *     거부한다. FINAL 클러스터링의 공개 재시도는 Session COMPLETED에서만 허용하고
          *     PROCESSING이면 AI_JOB_STATE_CONFLICT로 거부한다. ANSWER_ORGANIZATION 실패는 Course PROFESSOR가 같은 고정 source와
          *     Job 행으로 재시도하며 성공한 정리 Job은 재생성하지 않는다.
+         *     같은 Idempotency-Key request가 처리 중이면 60초 lease 동안
+         *     IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환하고 중복 재시도를 만들지 않는다.
          */
         post: operations["retryAIJob"];
         delete?: never;
@@ -1696,7 +1698,7 @@ export interface components {
         /** @enum {string} */
         ChatMessageRole: "USER" | "ASSISTANT";
         /** @enum {string} */
-        AIJobStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
+        AIJobStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "SUPERSEDED";
         /**
          * @description 현재는 새 generation으로 교체·폐기된 성공 clustering 결과에만 사용
          * @enum {string}
@@ -3010,9 +3012,9 @@ export interface components {
              * @description AI_TIMEOUT, AI_SERVICE_UNAVAILABLE 등 provider 원문을 제거한 안전한 오류 코드.
              *     Session 10분 deadline이 생성·종료한 downstream Job은 SESSION_PROCESSING_TIMEOUT.
              *     PRESERVED membership 취소가 stale 처리한 실행은
-             *     CLUSTER_REVISION_CHANGED, retryable=false이다. Session 종료가 중지한
-             *     LIVE clustering의 공개 terminal status·error를 CANCELLED/SUPERSEDED 또는
-             *     재시도 불가 FAILED 중 어떻게 표현할지는 TBD이다.
+             *     CLUSTER_REVISION_CHANGED, retryable=false이다. Session 종료가 FINAL
+             *     clustering으로 대체한 LIVE clustering은 SUPERSEDED·JOB_SUPERSEDED이며
+             *     retryable=false이다. 대체 없는 명시 중단만 CANCELLED·JOB_CANCELLED다.
              */
             code: string;
             /** @description 프롬프트·모델 응답·내부 stack을 포함하지 않는 안전한 사용자 메시지 */
@@ -4048,7 +4050,8 @@ export interface components {
         /**
          * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
          *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-         *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+         *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+         *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
          *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
          *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
          *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4064,7 +4067,8 @@ export interface components {
         /**
          * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
          *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-         *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+         *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+         *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
          *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
          *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
          *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4349,7 +4353,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4405,7 +4410,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4501,7 +4507,8 @@ export interface operations {
                 /**
                  * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
                  *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-                 *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
                  *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
                  *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4545,7 +4552,8 @@ export interface operations {
                 /**
                  * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
                  *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-                 *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
                  *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
                  *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4633,7 +4641,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4723,7 +4732,8 @@ export interface operations {
                 /**
                  * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
                  *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-                 *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
                  *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
                  *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4838,7 +4848,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -4925,7 +4936,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5016,7 +5028,8 @@ export interface operations {
                 /**
                  * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
                  *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-                 *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
                  *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
                  *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5256,7 +5269,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5600,7 +5614,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5654,7 +5669,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5779,7 +5795,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5865,7 +5882,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -5995,7 +6013,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -6120,7 +6139,8 @@ export interface operations {
                 /**
                  * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
                  *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
+                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP
                  *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
                  *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -6225,30 +6245,31 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     retryAIJob: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
                 "X-Request-ID"?: components["parameters"]["RequestId"];
                 /**
-                 * @description 중복 제출을 방지하는 클라이언트 생성 키. 서버는 정규화한 HTTP method·path·body로
-                 *     request_hash를 계산한다. 같은 사용자·경로·키와 같은 request_hash가 처리 중이면
-                 *     중복 실행하지 않고 기존 처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP
-                 *     status와 body를 반환한다. 다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다.
-                 *     terminal 완료 응답은 완료 시각부터 정확히 24시간 보관하고 재사용한다.
+                 * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
+                 *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
+                 *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
                  *     LIVE_SUMMARY·LIVE-mode CHAT_RESPONSE Job retry의 원장은
-                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING transaction이 원
-                 *     리소스·Job을 삭제하고 늦은 결과를 fence하는 것은 확정이지만,
-                 *     멱등성 행을 조기 삭제할지 24시간 보존할지와 종료 후 같은 키에
-                 *     기존 202·201을 재응답할지 별도 응답을 줄지는 TBD이다. FINAL Summary와
-                 *     mode=REVIEW Chat·관련 Job retry는
-                 *     이 예외에 포함하지 않는다.
+                 *     purge_on_session_end로 범위를 표시한다. LIVE→PROCESSING이 원 리소스·
+                 *     Job을 삭제하고 늦은 결과를 fence하되, 멱등성 행 조기 삭제·24시간
+                 *     보존·종료 후 재응답은 TBD이다. FINAL Summary와 mode=REVIEW Chat·관련
+                 *     Job retry는 이 예외에
+                 *     포함하지 않는다.
                  */
-                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+                "Idempotency-Key": components["parameters"]["RequiredIdempotencyKey"];
             };
             path: {
                 /** @description 불투명 AIJob ID */
@@ -6272,6 +6293,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["AIJobRetryConflict"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -6388,7 +6410,8 @@ export interface operations {
                 /**
                  * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
                  *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-                 *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
                  *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
                  *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
@@ -6510,7 +6533,8 @@ export interface operations {
                 /**
                  * @description 필수 멱등성 키. 서버는 정규화한 HTTP method·path·body로 request_hash를 계산한다.
                  *     같은 사용자·경로·키와 같은 request_hash가 처리 중이면 중복 실행하지 않고 기존
-                 *     처리 상태를 재사용하며, terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
+                 *     처리 상태를 재사용하며, 60초 PROCESSING lease 안에는
+                 *     409 IDEMPOTENCY_REQUEST_IN_PROGRESS를 반환한다. terminal 완료 후에는 같은 HTTP status와 body를 반환한다.
                  *     다른 request_hash면 409 IDEMPOTENCY_KEY_REUSED를 반환한다. terminal 완료 응답은
                  *     완료 시각부터 정확히 24시간 보관하고 재사용한다.
                  *     단 LIVE Summary 요청, mode=LIVE Chat 생성·Message 요청과 관련
