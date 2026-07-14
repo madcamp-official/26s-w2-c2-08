@@ -1,5 +1,7 @@
 """Tests for application settings precedence."""
 
+import base64
+
 import pytest
 from pydantic import ValidationError
 
@@ -77,6 +79,25 @@ def test_production_accepts_explicit_non_default_database_url() -> None:
         _env_file=None,
         app_env=AppEnvironment.PRODUCTION,
         database_url="postgresql+psycopg://goal:strong-password@database:5432/goal",
+        idempotency_response_encryption_key=base64.b64encode(b"x" * 32).decode(),
     )
 
     assert settings.effective_database_url.endswith("@database:5432/goal")
+
+
+def test_idempotency_response_key_must_be_a_base64_aes_256_key() -> None:
+    """A configured response cipher key cannot be malformed or the wrong size."""
+
+    with pytest.raises(ValidationError, match="must decode to exactly 32 bytes"):
+        Settings(_env_file=None, idempotency_response_encryption_key="dG9vLXNob3J0")
+
+
+def test_production_requires_idempotency_response_encryption_key() -> None:
+    """Production must not start an encrypted-response API without its key."""
+
+    with pytest.raises(ValidationError, match="IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY"):
+        Settings(
+            _env_file=None,
+            app_env=AppEnvironment.PRODUCTION,
+            database_url="postgresql+psycopg://goal:strong-password@database:5432/goal",
+        )

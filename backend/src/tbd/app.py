@@ -10,6 +10,7 @@ from tbd.core.config import Settings, get_settings
 from tbd.core.errors import install_exception_handlers
 from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
+from tbd.repositories.idempotency import IdempotencyRepository
 
 
 @asynccontextmanager
@@ -35,6 +36,10 @@ def create_app(
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
+    cipher = runtime_settings.idempotency_response_cipher
+    app.state.idempotency_repository = (
+        IdempotencyRepository(cipher) if cipher is not None else None
+    )
     app.add_middleware(RequestIdMiddleware)
     install_exception_handlers(app)
     app.include_router(api_router)

@@ -248,7 +248,53 @@ def test_retry_fences_the_previous_worker_result(migrated_database_url: str) -> 
     asyncio.run(assert_late_result_is_rejected())
 
 
-def test_watchdog_failure_and_supersession_are_non_retryable_terminal_states(
+def test_heartbeat_extends_the_active_worker_lease(migrated_database_url: str) -> None:
+    """A current run token extends its lease, while a later watchdog still fences it."""
+
+    async def assert_heartbeat() -> None:
+        _, session_id = await _create_session_aggregate(migrated_database_url)
+        job_id = await _enqueue_final_summary_job(migrated_database_url, session_id)
+        database = _database(migrated_database_url)
+        kernel = JobKernel()
+        now = datetime.now(UTC)
+        try:
+            async with database.session_factory() as session:
+                async with session.begin():
+                    run = await kernel.claim_next_shared(
+                        session,
+                        now=now,
+                        lease_duration=timedelta(seconds=60),
+                    )
+                    assert run is not None
+                    assert await kernel.jobs.heartbeat(
+                        session,
+                        run,
+                        now=now + timedelta(seconds=30),
+                        lease_duration=timedelta(seconds=60),
+                    )
+
+            async with database.session_factory() as session:
+                async with session.begin():
+                    assert await kernel.fail_expired_shared(
+                        session,
+                        now=now + timedelta(seconds=61),
+                        general_timeout=timedelta(minutes=5),
+                    ) == []
+
+            async with database.session_factory() as session:
+                async with session.begin():
+                    assert await kernel.fail_expired_shared(
+                        session,
+                        now=now + timedelta(seconds=91),
+                        general_timeout=timedelta(minutes=5),
+                    ) == [job_id]
+        finally:
+            await database.dispose()
+
+    asyncio.run(assert_heartbeat())
+
+
+def test_watchdog_failure_is_retryable_and_supersession_is_non_retryable(
     migrated_database_url: str,
 ) -> None:
     """Lease expiry fences a late worker, while supersession never creates a retry candidate."""
@@ -286,6 +332,7 @@ def test_watchdog_failure_and_supersession_are_non_retryable_terminal_states(
                     assert failed is not None
                     assert failed.status == AIJobStatus.FAILED
                     assert failed.error_code == "WORKER_LEASE_EXPIRED"
+                    assert failed.retryable
 
             async with database.session_factory() as session:
                 async with session.begin():
@@ -294,7 +341,8 @@ def test_watchdog_failure_and_supersession_are_non_retryable_terminal_states(
                         job_id,
                         now=now + timedelta(seconds=63),
                     )
-                    assert retried is None
+                    assert retried is not None
+                    assert retried.attempt == 2
 
             _, second_session_id = await _create_session_aggregate(migrated_database_url)
             second_job_id = await _enqueue_final_summary_job(
