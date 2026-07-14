@@ -115,6 +115,21 @@ def test_record_manifest_is_bounded_and_available_while_processing(
             )
             assert record["summary"]["state"]["status"] == "PENDING"
 
+            shared_jobs = client.get(f"/api/v1/sessions/{session_id}/jobs")
+            assert shared_jobs.status_code == 200, shared_jobs.text
+            assert shared_jobs.json()["next_cursor"] is None
+            assert [item["job_type"] for item in shared_jobs.json()["items"]] == [
+                "SESSION_POSTPROCESSING"
+            ]
+            filtered_jobs = client.get(
+                f"/api/v1/sessions/{session_id}/jobs?job_type=SESSION_POSTPROCESSING"
+            )
+            assert filtered_jobs.status_code == 200
+            assert filtered_jobs.json()["items"] == shared_jobs.json()["items"]
+            invalid_cursor = client.get(f"/api/v1/sessions/{session_id}/jobs?cursor=invalid")
+            assert invalid_cursor.status_code == 400
+            assert invalid_cursor.json()["error"]["code"] == "INVALID_CURSOR"
+
             # The manifest intentionally never embeds pageable record arrays.
             for key in ("materials", "transcript", "questions", "answers", "jobs"):
                 assert "items" not in record[key]

@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +12,14 @@ from tbd.api.dependencies import (
     get_current_user_id,
     get_db_session,
     get_idempotency_repository,
+    get_settings,
     require_allowed_origin,
 )
+from tbd.core.config import Settings
 from tbd.core.errors import ApiError
 from tbd.core.request_hash import canonical_request_hash, idempotency_key_hash
 from tbd.db import transaction
+from tbd.models.enums import AIJobStatus
 from tbd.repositories.idempotency import (
     AcquiredIdempotencyRecord,
     IdempotencyKeyReusedError,
@@ -26,16 +29,26 @@ from tbd.repositories.idempotency import (
     ReplayIdempotencyRecord,
 )
 from tbd.schemas.errors import ErrorResponse
-from tbd.schemas.jobs import AIJobAcceptedResponse, AIJobResponse, project_ai_job
+from tbd.schemas.jobs import (
+    AIJobAcceptedResponse,
+    AIJobListResponse,
+    AIJobResponse,
+    SharedAIJobType,
+    project_ai_job,
+)
 from tbd.services.jobs import (
+    InvalidSharedJobCursorError,
     JobAccessDeniedError,
     JobNotFoundError,
     JobRetryConflictError,
     JobService,
+    SessionJobAccessDeniedError,
+    SessionJobNotFoundError,
 )
 from tbd.services.personal_ai import PersonalAIService
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
+session_jobs_router = APIRouter(tags=["Jobs"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 IdempotencyRepositoryDependency = Annotated[
@@ -44,7 +57,57 @@ IdempotencyRepositoryDependency = Annotated[
 ]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1)]
 AllowedOrigin = Annotated[None, Depends(require_allowed_origin)]
+SettingsDependency = Annotated[Settings, Depends(get_settings)]
 PROCESSING_LEASE = timedelta(seconds=60)
+
+
+@session_jobs_router.get(
+    "/sessions/{session_id}/jobs",
+    response_model=AIJobListResponse,
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    },
+)
+async def list_session_shared_jobs(
+    session_id: UUID,
+    user_id: CurrentUserId,
+    session: DatabaseSession,
+    settings: SettingsDependency,
+    job_type: Annotated[SharedAIJobType | None, Query()] = None,
+    status: Annotated[AIJobStatus | None, Query()] = None,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=1024)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AIJobListResponse:
+    """Return a stable page of SHARED Jobs without leaking personal AI work."""
+
+    try:
+        jobs, next_cursor = await JobService(
+            auth_secret=settings.auth_secret_key.get_secret_value()
+        ).list_shared_for_member(
+            session,
+            session_id=session_id,
+            user_id=user_id,
+            job_type=job_type,
+            status=status,
+            cursor=cursor,
+            limit=limit,
+        )
+    except SessionJobNotFoundError as exc:
+        raise ApiError(404, "RESOURCE_NOT_FOUND", "요청한 class를 찾을 수 없습니다.") from exc
+    except SessionJobAccessDeniedError as exc:
+        raise ApiError(403, "COURSE_ACCESS_DENIED", "이 Course에 접근할 권한이 없습니다.") from exc
+    except InvalidSharedJobCursorError as exc:
+        raise ApiError(400, "INVALID_CURSOR", "작업 목록 cursor를 확인해 주세요.") from exc
+    return AIJobListResponse(
+        items=[
+            project_ai_job(job, result=await PersonalAIService().result_link(session, job))
+            for job in jobs
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 @router.get(
