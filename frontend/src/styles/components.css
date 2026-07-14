@@ -287,6 +287,93 @@
   background: #fffaf0;
 }
 
+.personal-ai,
+.personal-ai__summary,
+.personal-ai__chat,
+.personal-ai__messages {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.personal-ai__summary,
+.personal-ai__chat {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-line);
+}
+
+.personal-ai__summary,
+.personal-ai__chat-heading {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.personal-ai__summary p,
+.personal-ai__message p {
+  margin: 8px 0 0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.personal-ai__messages {
+  max-height: 440px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.personal-ai__message {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+}
+.personal-ai__message--user {
+  margin-left: clamp(24px, 10vw, 110px);
+  background: var(--color-brand-soft);
+}
+.personal-ai__message--assistant {
+  margin-right: clamp(24px, 10vw, 110px);
+}
+.chat-evidence {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-evidence li {
+  font-size: 12px;
+}
+.chat-evidence a,
+.chat-evidence span {
+  display: inline-flex;
+  padding: 6px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+}
+.chat-evidence span {
+  color: var(--color-muted);
+  background: var(--color-surface-soft);
+}
+.ai-job-state {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.ai-job-failed {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.ai-job-failed p {
+  margin: 0;
+}
+
 @media (max-width: 900px) {
   .live-class-room__grid {
     grid-template-columns: 1fr;
@@ -310,6 +397,17 @@
   }
   .live-transcript__items li {
     grid-template-columns: 42px minmax(0, 1fr);
+  }
+  .personal-ai__summary,
+  .personal-ai__chat-heading,
+  .ai-job-failed {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .personal-ai__summary .button,
+  .personal-ai__chat-heading .button,
+  .ai-job-failed .button {
+    width: 100%;
   }
 }
 

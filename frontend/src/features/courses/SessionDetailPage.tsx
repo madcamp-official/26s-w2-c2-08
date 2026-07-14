@@ -26,6 +26,7 @@ import {
 } from './queries'
 import { useSessionRealtime } from '../realtime/useSessionRealtime'
 import { LiveClassRoom } from '../live/LiveClassRoom'
+import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
 
 function statusCopy(status: string) {
   switch (status) {
@@ -287,11 +288,14 @@ export function SessionDetailPage() {
         />
       )}
       {data.status === 'COMPLETED' && (
-        <AnswerPanel
-          sessionId={data.id}
-          professor={professor}
-          sessionStatus={data.status}
-        />
+        <>
+          <AnswerPanel
+            sessionId={data.id}
+            professor={professor}
+            sessionStatus={data.status}
+          />
+          <PersonalAiPanel sessionId={data.id} mode="REVIEW" />
+        </>
       )}
       {startAnswer.isError && (
         <p className="form-error" role="alert">
