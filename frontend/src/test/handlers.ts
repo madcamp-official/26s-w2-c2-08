@@ -21,4 +21,7 @@ export const handlers = [
   http.get('*/api/v1/courses/:courseId/sessions', () =>
     HttpResponse.json({ items: [], next_cursor: null }),
   ),
+  http.get('*/api/v1/courses/:courseId/materials', () =>
+    HttpResponse.json({ items: [], next_cursor: null }),
+  ),
 ]

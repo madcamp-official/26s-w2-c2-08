@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote
 from uuid import UUID
 
@@ -31,9 +31,12 @@ from tbd.repositories.idempotency import (
     ProcessingIdempotencyRecord,
     ReplayIdempotencyRecord,
 )
+from tbd.repositories.materials import CourseMaterialArchiveRow
 from tbd.schemas.errors import ErrorResponse
 from tbd.schemas.jobs import project_ai_job
 from tbd.schemas.materials import (
+    CourseMaterialArchiveItem,
+    CourseMaterialArchiveResponse,
     LectureMaterialListResponse,
     LectureMaterialResponse,
     MaterialUploadAcceptedResponse,
@@ -71,6 +74,24 @@ MATERIAL_IDEMPOTENCY_LEASE = timedelta(seconds=60)
 
 def _material_response(material: object) -> LectureMaterialResponse:
     return LectureMaterialResponse.model_validate(material)
+
+
+def _course_archive_item(row: CourseMaterialArchiveRow) -> CourseMaterialArchiveItem:
+    lecture_session = row.lecture_session
+    material = row.material
+    readable = material.processing_status in {"UPLOADED", "PROCESSING", "READY"}
+    content_url = f"/api/v1/materials/{material.id}/content" if readable else None
+    download_url = (
+        f"/api/v1/materials/{material.id}/content?disposition=attachment" if readable else None
+    )
+    return CourseMaterialArchiveItem.model_validate(
+        {
+            "session": lecture_session,
+            "material": _material_response(material),
+            "content_url": content_url,
+            "download_url": download_url,
+        }
+    )
 
 
 def _raise_in_progress() -> None:
@@ -172,6 +193,45 @@ def _raise_session_error(error: Exception) -> None:
             503, "STORAGE_UNAVAILABLE", "파일 저장소를 일시적으로 사용할 수 없습니다."
         ) from error
     raise error
+
+
+@router.get(
+    "/courses/{course_id}/materials",
+    response_model=CourseMaterialArchiveResponse,
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+)
+async def list_course_material_archive(
+    course_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=2048)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> CourseMaterialArchiveResponse:
+    """Return attached PDFs across the Course in a stable active-first order."""
+
+    try:
+        result = await MaterialService(
+            auth_secret=settings.auth_secret_key.get_secret_value()
+        ).list_course_archive(
+            session,
+            course_id=course_id,
+            user_id=user_id,
+            cursor=cursor,
+            limit=limit,
+        )
+    except (CourseNotFoundError, CourseAccessDeniedError, InvalidMaterialCursorError) as exc:
+        _raise_session_error(exc)
+    return CourseMaterialArchiveResponse(
+        items=[_course_archive_item(row) for row in result.items],
+        next_cursor=result.next_cursor,
+    )
 
 
 @router.get(
@@ -329,10 +389,22 @@ async def get_material(
 
 @router.get(
     "/materials/{material_id}/content",
+    response_class=Response,
     responses={
+        200: {
+            "description": "PDF 바이너리",
+            "headers": {
+                "Content-Disposition": {
+                    "description": "저장된 display_name을 안전하게 인코딩한 파일명",
+                    "schema": {"type": "string"},
+                }
+            },
+            "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}},
+        },
         401: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
     },
 )
 async def get_material_content(
@@ -340,6 +412,7 @@ async def get_material_content(
     session: DatabaseSession,
     user_id: CurrentUserId,
     storage: StorageDependency,
+    disposition: Annotated[Literal["inline", "attachment"], Query()] = "inline",
 ) -> Response:
     try:
         material = await MaterialService().get_for_member(
@@ -362,7 +435,7 @@ async def get_material_content(
     return Response(
         content=content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"{disposition}; filename*=UTF-8''{filename}"},
     )
 
 

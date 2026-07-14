@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from tbd.schemas.courses import LectureSessionSummary
 from tbd.schemas.jobs import AIJobResponse
 
 
@@ -30,6 +31,26 @@ class LectureMaterialListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[LectureMaterialResponse]
+    next_cursor: str | None
+
+
+class CourseMaterialArchiveItem(BaseModel):
+    """One attached Material paired with its public class summary and API-only URLs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session: LectureSessionSummary
+    material: LectureMaterialResponse
+    content_url: str | None
+    download_url: str | None
+
+
+class CourseMaterialArchiveResponse(BaseModel):
+    """A stable flat page from every visible class in one Course."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CourseMaterialArchiveItem]
     next_cursor: str | None
 
 
