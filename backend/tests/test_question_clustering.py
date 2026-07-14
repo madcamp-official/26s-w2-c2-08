@@ -263,3 +263,78 @@ def test_live_clustering_retries_same_job_and_supersedes_stale_result(
             assert stale.status == AIJobStatus.SUPERSEDED
     finally:
         asyncio.run(database.dispose())
+
+
+def test_session_end_freezes_and_publishes_a_final_cluster_generation(
+    migrated_database_url: str,
+) -> None:
+    """The final worker can only use the persisted end-time Question watermark."""
+
+    professor_id, student_id = asyncio.run(_seed_users(migrated_database_url))
+    settings = _settings(migrated_database_url)
+    database = create_database(settings)
+    app = create_app(settings=settings, database=database)
+    current_user = {"id": professor_id}
+    app.dependency_overrides[get_current_user_id] = lambda: current_user["id"]
+    try:
+        with TestClient(app) as client:
+            course = client.post(
+                "/api/v1/courses",
+                headers={**TRUSTED_ORIGIN, "Idempotency-Key": "final-cluster-course"},
+                json={"title": "최종 클러스터 수업", "semester": "2026 여름학기"},
+            )
+            assert course.status_code == 201
+            course_id, join_code = course.json()["id"], course.json()["join_code"]
+            created = client.post(
+                f"/api/v1/courses/{course_id}/sessions",
+                headers=TRUSTED_ORIGIN,
+                json={"lecture_date": "2026-07-14"},
+            )
+            session_id = UUID(created.json()["id"])
+            assert (
+                client.post(
+                    f"/api/v1/sessions/{session_id}/start", headers=TRUSTED_ORIGIN
+                ).status_code
+                == 200
+            )
+            current_user["id"] = student_id
+            assert (
+                client.post(
+                    "/api/v1/courses/join", headers=TRUSTED_ORIGIN, json={"join_code": join_code}
+                ).status_code
+                == 201
+            )
+            assert (
+                client.post(
+                    f"/api/v1/sessions/{session_id}/questions",
+                    headers=TRUSTED_ORIGIN,
+                    json={"content": "최종 분류에도 남아야 하는 질문인가요?"},
+                ).status_code
+                == 201
+            )
+
+            current_user["id"] = professor_id
+            ended = client.post(
+                f"/api/v1/sessions/{session_id}/end",
+                headers={**TRUSTED_ORIGIN, "Idempotency-Key": "final-cluster-end"},
+            )
+            assert ended.status_code == 202
+            assert {job["job_type"] for job in ended.json()["jobs"]} == {
+                "SESSION_POSTPROCESSING",
+                "QUESTION_CLUSTERING",
+            }
+
+            worker = QuestionClusteringWorker(
+                database.session_factory, FakeQuestionClusteringProvider()
+            )
+            assert asyncio.run(worker.run_once()) is True
+
+            final_clusters = client.get(
+                f"/api/v1/sessions/{session_id}/question-clusters?scope=FINAL"
+            )
+            assert final_clusters.status_code == 200
+            assert final_clusters.json()["generation"] == 1
+            assert all(item["is_final"] for item in final_clusters.json()["items"])
+            assert final_clusters.json()["items"][0]["member_count"] == 1
+    finally:
+        asyncio.run(database.dispose())
