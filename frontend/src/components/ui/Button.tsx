@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+import { buttonClassName, type ButtonVariant } from './button-class-name'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
@@ -12,9 +12,11 @@ export function Button({
   variant = 'primary',
   ...props
 }: ButtonProps) {
-  const classes = ['button', `button--${variant}`, className]
-    .filter(Boolean)
-    .join(' ')
-
-  return <button className={classes} type={type} {...props} />
+  return (
+    <button
+      className={buttonClassName(variant, className)}
+      type={type}
+      {...props}
+    />
+  )
 }
