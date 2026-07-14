@@ -370,7 +370,7 @@ GET /api/v1/courses?role=ALL&cursor=<cursor>&limit=20
 - `role`: `ALL`, `PROFESSOR`, `STUDENT`
 - 현재 사용자가 참여한 Course만 반환한다.
 - 각 항목에 Course별 현재 사용자 역할과 최근·진행 중 class 요약을 포함한다.
-- 정렬 기준은 미정이며 커서 구현 전에 확정해야 한다.
+- 목록은 `created_at DESC, id DESC`로 안정적으로 정렬한다.
 
 ### 6.2 Course 생성
 

@@ -1,9 +1,13 @@
 """Course creation, joining, role, and join-code rotation policies."""
 
+import base64
+import binascii
+import json
 import re
 import secrets
 import string
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy.exc import IntegrityError
@@ -39,10 +43,20 @@ class JoinCodeGenerationError(Exception):
     """A unique join code could not be generated within the bounded retry policy."""
 
 
+class InvalidCourseCursorError(Exception):
+    """A cursor does not belong to the requested Course list filter."""
+
+
 @dataclass(frozen=True)
 class JoinCourseResult:
     view: CourseView
     created: bool
+
+
+@dataclass(frozen=True)
+class CourseListResult:
+    views: list[CourseView]
+    next_cursor: str | None
 
 
 class CourseService:
@@ -117,6 +131,35 @@ class CourseService:
                 join_code,
             )
         raise JoinCodeGenerationError
+
+    async def list_for_user(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: UUID,
+        role: str,
+        cursor: str | None,
+        limit: int,
+    ) -> CourseListResult:
+        cursor_created_at: datetime | None = None
+        cursor_id: UUID | None = None
+        if cursor is not None:
+            cursor_created_at, cursor_id = self._decode_cursor(cursor, role=role)
+        views = await self.repository.list_views_for_user(
+            session,
+            user_id=user_id,
+            role=role,
+            limit=limit + 1,
+            cursor_created_at=cursor_created_at,
+            cursor_id=cursor_id,
+        )
+        has_more = len(views) > limit
+        page = views[:limit]
+        next_cursor = None
+        if has_more and page:
+            last = page[-1].course
+            next_cursor = self._encode_cursor(last.created_at, last.id, role=role)
+        return CourseListResult(views=page, next_cursor=next_cursor)
 
     async def join(
         self,
@@ -248,3 +291,36 @@ class CourseService:
         course.join_code_nonce = encrypted.nonce
         course.join_code_key_version = encrypted.key_version
         course.version += 1
+
+    @staticmethod
+    def _encode_cursor(created_at: datetime, course_id: UUID, *, role: str) -> str:
+        payload = json.dumps(
+            {
+                "created_at": created_at.isoformat(),
+                "id": str(course_id),
+                "role": role,
+                "v": 1,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+
+    @staticmethod
+    def _decode_cursor(cursor: str, *, role: str) -> tuple[datetime, UUID]:
+        try:
+            padding = "=" * (-len(cursor) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(cursor + padding))
+            if (
+                not isinstance(payload, dict)
+                or payload.get("v") != 1
+                or payload.get("role") != role
+            ):
+                raise ValueError
+            created_at = datetime.fromisoformat(payload["created_at"])
+            course_id = UUID(payload["id"])
+            if created_at.tzinfo is None:
+                raise ValueError
+        except (binascii.Error, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise InvalidCourseCursorError from exc
+        return created_at, course_id

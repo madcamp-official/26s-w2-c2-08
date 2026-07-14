@@ -102,6 +102,12 @@ def get_idempotency_repository(request: Request) -> IdempotencyRepository:
     return repository
 
 
+def get_optional_idempotency_repository(request: Request) -> IdempotencyRepository | None:
+    """Return optional idempotency support for endpoints with an optional header."""
+
+    return request.app.state.idempotency_repository
+
+
 def get_course_join_code_codec(request: Request) -> CourseJoinCodeCodec:
     """Return independent Course join-code crypto or fail closed."""
 
@@ -116,21 +122,29 @@ def get_course_join_code_codec(request: Request) -> CourseJoinCodeCodec:
 
 
 async def require_course_member(
-    course_id: UUID,
+    course_id: str,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     user_id: Annotated[UUID, Depends(get_current_user_id)],
 ) -> CourseView:
     """Authorize an existing Course through the current user's membership."""
 
+    try:
+        parsed_course_id = UUID(course_id)
+    except ValueError as exc:
+        raise ApiError(
+            status_code=404,
+            code="RESOURCE_NOT_FOUND",
+            message="요청한 리소스를 찾을 수 없습니다.",
+        ) from exc
     repository = CourseRepository()
     view = await repository.get_view_for_user(
         session,
-        course_id=course_id,
+        course_id=parsed_course_id,
         user_id=user_id,
     )
     if view is not None:
         return view
-    if await repository.course_exists(session, course_id):
+    if await repository.course_exists(session, parsed_course_id):
         raise ApiError(
             status_code=403,
             code="COURSE_ACCESS_DENIED",
