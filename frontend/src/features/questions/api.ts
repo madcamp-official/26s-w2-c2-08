@@ -6,6 +6,8 @@ export type Question = components['schemas']['Question']
 export type QuestionListResponse = components['schemas']['QuestionListResponse']
 export type QuestionCreateResponse =
   components['schemas']['QuestionCreateResponse']
+export type QuestionDraftResponse =
+  components['schemas']['QuestionDraftResponse']
 export type QuestionReactionState =
   components['schemas']['QuestionReactionState']
 export type QuestionSort = components['schemas']['QuestionSort']
@@ -116,6 +118,26 @@ export async function createQuestion(
     )
     if (error) throw apiErrorFromResponse(response, error)
     if (!data) throw new Error('질문 생성 응답이 비어 있습니다.')
+    return data
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
+export async function suggestQuestionDrafts(
+  sessionId: string,
+  draft: string,
+): Promise<QuestionDraftResponse> {
+  try {
+    const { data, error, response } = await apiClient.POST(
+      '/api/v1/sessions/{session_id}/question-drafts',
+      {
+        params: { path: { session_id: sessionId } },
+        body: { draft },
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    if (!data) throw new Error('질문 작성 도움 응답이 비어 있습니다.')
     return data
   } catch (error) {
     throw normalizeApiError(error)

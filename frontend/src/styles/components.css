@@ -754,6 +754,7 @@
 
 .question-panel,
 .question-panel__heading,
+.question-draft-helper,
 .question-composer,
 .question-list {
   display: grid;
@@ -783,6 +784,7 @@
   line-height: 1.6;
 }
 
+.question-draft-helper,
 .question-composer {
   padding: var(--space-5);
   border: 1px solid var(--color-line);
@@ -790,11 +792,13 @@
   background: var(--color-surface-raised);
 }
 
+.question-draft-helper label,
 .question-composer label {
   font-size: 14px;
   font-weight: 800;
 }
 
+.question-draft-helper textarea,
 .question-composer textarea {
   width: 100%;
   resize: vertical;
@@ -806,6 +810,32 @@
   gap: var(--space-3);
   align-items: center;
   justify-content: space-between;
+}
+
+.question-draft-helper__suggestions {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+}
+
+.question-draft-helper__suggestions legend {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.question-draft-helper__suggestions p {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.question-draft-helper__suggestions label {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  cursor: pointer;
 }
 
 .question-list {
