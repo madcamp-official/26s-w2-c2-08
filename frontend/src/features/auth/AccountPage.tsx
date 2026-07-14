@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
 import { StatePanel } from '../../components/feedback/StatePanel'
@@ -14,15 +14,15 @@ export function AccountPage() {
   const currentUser = useQuery(currentUserQueryOptions)
   const queryClient = useQueryClient()
   const location = useLocation()
-  const navigate = useNavigate()
   const { showToast } = useToast()
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [logoutCompleted, setLogoutCompleted] = useState(false)
   const logout = useMutation({
     mutationFn: logoutCurrentSession,
     onSuccess: () => {
+      setLogoutCompleted(true)
       queryClient.removeQueries({ queryKey: currentUserQueryKey })
       setLogoutOpen(false)
-      navigate('/login?logged_out=1', { replace: true })
     },
     onError: () => {
       showToast({
@@ -31,6 +31,10 @@ export function AccountPage() {
       })
     },
   })
+
+  if (logoutCompleted) {
+    return <Navigate replace to="/login?logged_out=1" />
+  }
 
   if (currentUser.isPending) {
     return (
