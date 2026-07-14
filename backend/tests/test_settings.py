@@ -1,8 +1,9 @@
 """Tests for application settings precedence."""
 
 import pytest
+from pydantic import ValidationError
 
-from tbd.core.config import REPOSITORY_ROOT, Settings
+from tbd.core.config import REPOSITORY_ROOT, AppEnvironment, Settings
 
 
 def test_database_url_environment_variable_takes_precedence(
@@ -47,3 +48,33 @@ def test_database_url_is_built_from_postgres_settings(
     assert settings.effective_database_url == (
         "postgresql+psycopg://app%20user:secret%2Fvalue@database.local:5544/lecture"
     )
+
+
+def test_production_requires_explicit_database_url() -> None:
+    """Production cannot silently fall back to repository development settings."""
+
+    with pytest.raises(ValidationError, match="DATABASE_URL must be set"):
+        Settings(_env_file=None, app_env=AppEnvironment.PRODUCTION)
+
+
+def test_production_rejects_repository_development_credentials() -> None:
+    """An explicit URL must not embed the documented local password."""
+
+    with pytest.raises(ValidationError, match="repository development credentials"):
+        Settings(
+            _env_file=None,
+            app_env=AppEnvironment.PRODUCTION,
+            database_url="postgresql+psycopg://tbd:tbd_dev@database:5432/tbd",
+        )
+
+
+def test_production_accepts_explicit_non_default_database_url() -> None:
+    """Production can use an explicitly configured non-development database URL."""
+
+    settings = Settings(
+        _env_file=None,
+        app_env=AppEnvironment.PRODUCTION,
+        database_url="postgresql+psycopg://goal:strong-password@database:5432/goal",
+    )
+
+    assert settings.effective_database_url.endswith("@database:5432/goal")
