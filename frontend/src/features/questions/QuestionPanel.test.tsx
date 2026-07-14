@@ -105,5 +105,104 @@ describe('QuestionPanel', () => {
     expect(
       screen.queryByRole('button', { name: '나도 궁금해요' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'AI에게 질문 다듬기' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a draft private until the student selects a candidate and registers it', async () => {
+    let questionCreateCalls = 0
+    server.use(
+      http.get(`*/api/v1/sessions/${sessionId}/questions`, () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.post(
+        `*/api/v1/sessions/${sessionId}/question-drafts`,
+        async ({ request }) => {
+          expect(await request.json()).toEqual({
+            draft: '  음수 가중치 왜 안돼요?  ',
+          })
+          return HttpResponse.json({
+            suggestions: [
+              '음수 가중치가 있으면 왜 이 알고리즘을 사용할 수 없나요?',
+            ],
+          })
+        },
+      ),
+      http.post(`*/api/v1/sessions/${sessionId}/questions`, () => {
+        questionCreateCalls += 1
+        return HttpResponse.json({}, { status: 201 })
+      }),
+    )
+    renderPanel(true)
+
+    fireEvent.change(await screen.findByLabelText('AI 질문 작성 도움'), {
+      target: { value: '  음수 가중치 왜 안돼요?  ' },
+    })
+    expect(screen.getByText('13/500')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'AI에게 질문 다듬기' }))
+
+    const candidate = await screen.findByRole('radio', {
+      name: '음수 가중치가 있으면 왜 이 알고리즘을 사용할 수 없나요?',
+    })
+    expect(questionCreateCalls).toBe(0)
+    fireEvent.click(candidate)
+    expect(screen.getByLabelText('질문 작성')).toHaveValue(
+      '음수 가중치가 있으면 왜 이 알고리즘을 사용할 수 없나요?',
+    )
+  })
+
+  it('keeps the original draft visible when the AI provider is unavailable', async () => {
+    server.use(
+      http.get(`*/api/v1/sessions/${sessionId}/questions`, () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.post(`*/api/v1/sessions/${sessionId}/question-drafts`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'AI_PROVIDER_UNAVAILABLE',
+              message: 'AI 질문 작성 도움을 지금 사용할 수 없습니다.',
+              request_id: 'req_test',
+              details: null,
+            },
+          },
+          { status: 503 },
+        ),
+      ),
+    )
+    renderPanel(true)
+
+    fireEvent.change(await screen.findByLabelText('AI 질문 작성 도움'), {
+      target: { value: '질문 원문' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'AI에게 질문 다듬기' }))
+
+    expect(
+      await screen.findByText(
+        'AI 질문 작성 도움을 지금 사용할 수 없습니다. 초안은 그대로 유지됩니다.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('AI 질문 작성 도움')).toHaveValue('질문 원문')
+  })
+
+  it('does not truncate or submit a draft longer than 500 normalized characters', async () => {
+    server.use(
+      http.get(`*/api/v1/sessions/${sessionId}/questions`, () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+    renderPanel(true)
+    const tooLongDraft = '가'.repeat(501)
+
+    fireEvent.change(await screen.findByLabelText('AI 질문 작성 도움'), {
+      target: { value: tooLongDraft },
+    })
+
+    expect(screen.getByText('501/500')).toBeInTheDocument()
+    expect(screen.getByLabelText('AI 질문 작성 도움')).toHaveValue(tooLongDraft)
+    expect(
+      screen.getByRole('button', { name: 'AI에게 질문 다듬기' }),
+    ).toBeDisabled()
   })
 })

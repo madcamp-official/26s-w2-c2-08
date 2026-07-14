@@ -787,6 +787,8 @@ export interface paths {
          *     1~500 Unicode code point를 검증하고 정규화 결과만 모델에 전달한다.
          *     빈 결과·초과는 자르지 않고 422 VALIDATION_ERROR의 안정적 details를
          *     반환한다. 각 제안은 1~300 code point다.
+         *     provider timeout·가용성·rate limit·잘못된 결과는 provider 원문 없이
+         *     503 AI_PROVIDER_UNAVAILABLE으로 반환한다. 실제 LLM runtime 선택은 미정이다.
          */
         post: operations["suggestQuestionDrafts"];
         delete?: never;

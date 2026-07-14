@@ -12,6 +12,7 @@ from tbd.core.crypto import CourseJoinCodeCodec
 from tbd.core.errors import ApiError
 from tbd.db import Database
 from tbd.models.users import User
+from tbd.providers.ai import LLMProvider
 from tbd.providers.google_oidc import GoogleOIDCProvider
 from tbd.repositories.courses import CourseRepository, CourseView
 from tbd.repositories.idempotency import IdempotencyRepository
@@ -41,6 +42,12 @@ def get_google_oidc_provider(request: Request) -> GoogleOIDCProvider:
     """Return the configured or test-injected Google provider."""
 
     return request.app.state.google_oidc_provider
+
+
+def get_llm_provider(request: Request) -> LLMProvider:
+    """Return the configured LLM adapter without exposing its implementation."""
+
+    return request.app.state.llm_provider
 
 
 def require_allowed_origin(

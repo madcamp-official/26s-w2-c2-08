@@ -10,6 +10,7 @@ from tbd.core.config import Settings, get_settings
 from tbd.core.errors import install_exception_handlers
 from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
+from tbd.providers.ai import FakeLLMProvider, LLMProvider
 from tbd.providers.google_oidc import GoogleOIDCClient, GoogleOIDCProvider
 from tbd.providers.stt import StreamingSTTProvider, UnavailableStreamingSTTProvider
 from tbd.realtime.hub import RealtimeHub
@@ -39,6 +40,7 @@ def create_app(
     google_oidc_provider: GoogleOIDCProvider | None = None,
     storage: Storage | None = None,
     streaming_stt_provider: StreamingSTTProvider | None = None,
+    llm_provider: LLMProvider | None = None,
 ) -> FastAPI:
     """Create the HTTP application and mount its public routers."""
 
@@ -55,6 +57,9 @@ def create_app(
     app.state.database = runtime_database
     app.state.google_oidc_provider = runtime_google_oidc_provider
     app.state.storage = runtime_storage
+    # This is a development-safe deterministic adapter. Selecting an actual
+    # external or local model runtime remains a separate operational decision.
+    app.state.llm_provider = llm_provider or FakeLLMProvider()
     app.state.streaming_stt_provider = streaming_stt_provider or UnavailableStreamingSTTProvider()
     cipher = runtime_settings.idempotency_response_cipher
     app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None

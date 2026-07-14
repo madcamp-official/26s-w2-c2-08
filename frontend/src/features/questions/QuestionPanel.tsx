@@ -14,11 +14,13 @@ import {
   createQuestion,
   listSessionQuestions,
   removeQuestionReaction,
+  suggestQuestionDrafts,
   type Question,
 } from './api'
 import { questionKeys } from './queries'
 
 const MAX_QUESTION_LENGTH = 300
+const MAX_QUESTION_DRAFT_LENGTH = 500
 
 interface QuestionPanelProps {
   sessionId: string
@@ -37,6 +39,9 @@ function questionErrorMessage(error: unknown) {
     if (error.code === 'SESSION_STATE_CONFLICT') {
       return '수업이 진행 중일 때만 질문과 반응을 변경할 수 있습니다.'
     }
+    if (error.code === 'AI_PROVIDER_UNAVAILABLE') {
+      return 'AI 질문 작성 도움을 지금 사용할 수 없습니다. 초안은 그대로 유지됩니다.'
+    }
     return error.message
   }
   return '요청을 처리하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.'
@@ -46,8 +51,15 @@ export function QuestionPanel({ sessionId, student }: QuestionPanelProps) {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const [content, setContent] = useState('')
+  const [draft, setDraft] = useState('')
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(
+    null,
+  )
+  const [draftHelpError, setDraftHelpError] = useState<string | null>(null)
   const [interactionError, setInteractionError] = useState<string | null>(null)
   const contentLength = normalizedLength(content)
+  const draftLength = normalizedLength(draft)
   const questions = useInfiniteQuery({
     queryKey: questionKeys.list(sessionId, 'POPULAR'),
     initialPageParam: null as string | null,
@@ -77,6 +89,18 @@ export function QuestionPanel({ sessionId, student }: QuestionPanelProps) {
     },
     onError: (error) => setInteractionError(questionErrorMessage(error)),
   })
+  const draftHelp = useMutation({
+    mutationFn: () => suggestQuestionDrafts(sessionId, draft),
+    onMutate: () => {
+      setDraftHelpError(null)
+      setSuggestions([])
+      setSelectedSuggestion(null)
+    },
+    onSuccess: (response) => {
+      setSuggestions(response.suggestions)
+    },
+    onError: (error) => setDraftHelpError(questionErrorMessage(error)),
+  })
   const react = useMutation({
     mutationFn: async ({
       question,
@@ -97,6 +121,8 @@ export function QuestionPanel({ sessionId, student }: QuestionPanelProps) {
 
   const items = questions.data?.pages.flatMap((page) => page.items) ?? []
   const canSubmit = contentLength >= 1 && contentLength <= MAX_QUESTION_LENGTH
+  const canRequestDraftHelp =
+    draftLength >= 1 && draftLength <= MAX_QUESTION_DRAFT_LENGTH
 
   return (
     <section className="panel question-panel" aria-labelledby="question-title">
@@ -113,37 +139,112 @@ export function QuestionPanel({ sessionId, student }: QuestionPanelProps) {
       </header>
 
       {student && (
-        <form
-          className="question-composer"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (canSubmit && !create.isPending) create.mutate()
-          }}
-        >
-          <label htmlFor="question-content">질문 작성</label>
-          <textarea
-            id="question-content"
-            value={content}
-            maxLength={MAX_QUESTION_LENGTH + 1}
-            onChange={(event) => setContent(event.target.value)}
-            placeholder="지금 이해가 안 되는 내용을 남겨 보세요."
-            rows={3}
-          />
-          <div className="question-composer__footer">
-            <span
-              className={
-                contentLength > MAX_QUESTION_LENGTH
-                  ? 'form-error'
-                  : 'input-hint'
+        <>
+          <form
+            className="question-draft-helper"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (canRequestDraftHelp && !draftHelp.isPending) {
+                draftHelp.mutate()
               }
-            >
-              {contentLength}/{MAX_QUESTION_LENGTH}
-            </span>
-            <Button type="submit" disabled={!canSubmit || create.isPending}>
-              {create.isPending ? '등록 중…' : '익명 질문 등록'}
-            </Button>
-          </div>
-        </form>
+            }}
+          >
+            <div>
+              <label htmlFor="question-draft">AI 질문 작성 도움</label>
+              <p className="input-hint">
+                이해가 안 되는 내용을 편하게 적으면 질문 후보를 만들어 드립니다.
+              </p>
+            </div>
+            <textarea
+              id="question-draft"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="예: 음수 가중치가 있으면 왜 이 알고리즘을 쓰면 안 되나요?"
+              rows={3}
+            />
+            <div className="question-composer__footer">
+              <span
+                className={
+                  draftLength > MAX_QUESTION_DRAFT_LENGTH
+                    ? 'form-error'
+                    : 'input-hint'
+                }
+              >
+                {draftLength}/{MAX_QUESTION_DRAFT_LENGTH}
+              </span>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={!canRequestDraftHelp || draftHelp.isPending}
+              >
+                {draftHelp.isPending ? '다듬는 중…' : 'AI에게 질문 다듬기'}
+              </Button>
+            </div>
+            {draftHelpError && (
+              <p className="form-error" role="alert">
+                {draftHelpError}
+              </p>
+            )}
+            {suggestions.length > 0 && (
+              <fieldset className="question-draft-helper__suggestions">
+                <legend>질문 후보를 선택하세요</legend>
+                <p className="input-hint">
+                  선택한 뒤 아래 질문 입력칸에서 다시 수정할 수 있습니다.
+                </p>
+                {suggestions.map((suggestion, index) => {
+                  const id = `question-suggestion-${index}`
+                  return (
+                    <label key={id} htmlFor={id}>
+                      <input
+                        id={id}
+                        type="radio"
+                        name="question-suggestion"
+                        checked={selectedSuggestion === suggestion}
+                        onChange={() => {
+                          setSelectedSuggestion(suggestion)
+                          setContent(suggestion)
+                        }}
+                      />
+                      <span>{suggestion}</span>
+                    </label>
+                  )
+                })}
+              </fieldset>
+            )}
+          </form>
+
+          <form
+            className="question-composer"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (canSubmit && !create.isPending) create.mutate()
+            }}
+          >
+            <label htmlFor="question-content">질문 작성</label>
+            <textarea
+              id="question-content"
+              value={content}
+              maxLength={MAX_QUESTION_LENGTH + 1}
+              onChange={(event) => setContent(event.target.value)}
+              placeholder="지금 이해가 안 되는 내용을 남겨 보세요."
+              rows={3}
+            />
+            <div className="question-composer__footer">
+              <span
+                className={
+                  contentLength > MAX_QUESTION_LENGTH
+                    ? 'form-error'
+                    : 'input-hint'
+                }
+              >
+                {contentLength}/{MAX_QUESTION_LENGTH}
+              </span>
+              <Button type="submit" disabled={!canSubmit || create.isPending}>
+                {create.isPending ? '등록 중…' : '익명 질문 등록'}
+              </Button>
+            </div>
+          </form>
+        </>
       )}
 
       {interactionError && (

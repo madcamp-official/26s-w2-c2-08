@@ -817,6 +817,7 @@ POST /api/v1/sessions/{session_id}/question-drafts
 - 권한: Course `STUDENT`. Session이 `LIVE`일 때만 허용한다.
 - 초안은 3.1.1절에 따라 앞뒤 공백 제거·Unicode NFC 정규화 후 `1..500` code point를 검증한다. 초과·빈 결과는 잘라내지 않고 안정적인 `422 VALIDATION_ERROR` details를 반환한다. AI 제안은 각각 `1..300`자이며 정규화한 초안은 영구 저장하지 않는다.
 - `200 OK`에서 짧은 질문 문장 후보를 직접 반환하고 Question·AIJob·초안을 저장하지 않는다. 제안을 실제 질문으로 등록하려면 10.3 API를 다시 호출한다.
+- 서버는 내부 `question-draft-help-v1` prompt version과 5초 deadline을 사용한다. provider timeout·가용성·rate limit·잘못된 결과는 provider 원문 없이 `503 AI_PROVIDER_UNAVAILABLE`으로 반환하며, 학생 초안은 화면에 남긴다. 실제 외부 또는 local LLM runtime 선택은 아직 미정이다.
 
 ### 10.5 ‘나도 궁금해요’ 추가·취소
 

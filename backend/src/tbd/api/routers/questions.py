@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tbd.api.dependencies import (
     get_current_user_id,
     get_db_session,
+    get_llm_provider,
     get_optional_idempotency_repository,
     get_settings,
     require_allowed_origin,
@@ -19,6 +20,7 @@ from tbd.core.config import Settings
 from tbd.core.errors import ApiError
 from tbd.core.request_hash import canonical_request_hash, idempotency_key_hash
 from tbd.db import transaction
+from tbd.providers.ai import LLMProvider
 from tbd.repositories.idempotency import (
     AcquiredIdempotencyRecord,
     IdempotencyKeyReusedError,
@@ -36,6 +38,8 @@ from tbd.schemas.errors import ErrorResponse
 from tbd.schemas.questions import (
     QuestionCreateRequest,
     QuestionCreateResponse,
+    QuestionDraftRequest,
+    QuestionDraftResponse,
     QuestionListResponse,
     QuestionReactionState,
     QuestionResponse,
@@ -43,6 +47,11 @@ from tbd.schemas.questions import (
 from tbd.services.question_clusters import (
     InvalidClusterCursorError,
     QuestionClusterService,
+)
+from tbd.services.question_drafts import (
+    QuestionDraftProviderError,
+    QuestionDraftService,
+    QuestionDraftValidationError,
 )
 from tbd.services.questions import (
     InvalidQuestionCursorError,
@@ -59,6 +68,7 @@ router = APIRouter(tags=["Questions"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
+LLMProviderDependency = Annotated[LLMProvider, Depends(get_llm_provider)]
 OptionalIdempotency = Annotated[
     IdempotencyRepository | None,
     Depends(get_optional_idempotency_repository),
@@ -76,6 +86,10 @@ def _service(settings: Settings) -> QuestionService:
 
 def _cluster_service(settings: Settings) -> QuestionClusterService:
     return QuestionClusterService(auth_secret=settings.auth_secret_key.get_secret_value())
+
+
+def _draft_service(provider: LLMProvider) -> QuestionDraftService:
+    return QuestionDraftService(provider=provider)
 
 
 def _project(question: object, *, reacted_by_me: bool) -> QuestionResponse:
@@ -116,6 +130,24 @@ def _raise_error(error: Exception, *, hide_access: bool = False) -> None:
                 "max_length": 300,
                 "actual_length": error.actual_length,
             },
+        ) from error
+    if isinstance(error, QuestionDraftValidationError):
+        raise ApiError(
+            422,
+            "VALIDATION_ERROR",
+            "질문 초안을 확인해 주세요.",
+            details={
+                "field": "draft",
+                "reason": error.reason,
+                "max_length": 500,
+                "actual_length": error.actual_length,
+            },
+        ) from error
+    if isinstance(error, QuestionDraftProviderError):
+        raise ApiError(
+            503,
+            "AI_PROVIDER_UNAVAILABLE",
+            "AI 질문 작성 도움을 지금 사용할 수 없습니다.",
         ) from error
     raise error
 
@@ -338,6 +370,38 @@ async def create_question(
         _raise_error(exc)
     response.headers["Location"] = f"/api/v1/questions/{result.question.id}"
     return result
+
+
+@router.post(
+    "/sessions/{session_id}/question-drafts",
+    response_model=QuestionDraftResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def suggest_question_drafts(
+    session_id: UUID,
+    payload: QuestionDraftRequest,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    provider: LLMProviderDependency,
+) -> QuestionDraftResponse:
+    """Return one ephemeral candidate without creating a Question or AIJob."""
+
+    try:
+        return await _draft_service(provider).suggest(
+            session,
+            session_id=session_id,
+            user_id=user_id,
+            draft=payload.draft,
+        )
+    except Exception as exc:
+        _raise_error(exc)
 
 
 @router.get(
