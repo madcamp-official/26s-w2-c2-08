@@ -125,6 +125,39 @@ def test_filesystem_storage_rejects_bad_checksum_offset_and_range(tmp_path: Path
     asyncio.run(exercise())
 
 
+def test_filesystem_storage_serializes_same_offset_appends(tmp_path: Path) -> None:
+    """Two concurrent retries cannot both append at the same confirmed offset."""
+
+    async def exercise() -> None:
+        storage = FilesystemStorage(tmp_path / "storage")
+        temporary = StorageKey.new(StorageNamespace.TEMPORARY)
+        first = b"first"
+        second = b"second"
+        await storage.create_temporary(temporary)
+
+        results = await asyncio.gather(
+            storage.append(
+                temporary,
+                first,
+                expected_offset=0,
+                checksum=sha256_bytes(first),
+            ),
+            storage.append(
+                temporary,
+                second,
+                expected_offset=0,
+                checksum=sha256_bytes(second),
+            ),
+            return_exceptions=True,
+        )
+
+        assert sum(isinstance(result, StorageOffsetMismatchError) for result in results) == 1
+        assert sum(not isinstance(result, Exception) for result in results) == 1
+        assert (await storage.stat(temporary)).byte_size in {len(first), len(second)}
+
+    asyncio.run(exercise())
+
+
 def test_filesystem_storage_never_follows_namespace_symlink(tmp_path: Path) -> None:
     """A malicious namespace symlink cannot redirect operations outside STORAGE_ROOT."""
 
@@ -150,12 +183,17 @@ def test_promotion_is_idempotent_only_when_final_digest_matches(tmp_path: Path) 
     async def exercise() -> None:
         storage = FilesystemStorage(tmp_path / "storage")
         first_temporary = StorageKey.new(StorageNamespace.TEMPORARY)
-        second_temporary = StorageKey.new(StorageNamespace.TEMPORARY)
+        matching_temporary = StorageKey.new(StorageNamespace.TEMPORARY)
+        conflicting_temporary = StorageKey.new(StorageNamespace.TEMPORARY)
         final = StorageKey.new(StorageNamespace.FINAL)
         first_payload = b"same content"
-        second_payload = b"different content"
+        conflicting_payload = b"different content"
 
-        for key, payload in ((first_temporary, first_payload), (second_temporary, second_payload)):
+        for key, payload in (
+            (first_temporary, first_payload),
+            (matching_temporary, first_payload),
+            (conflicting_temporary, conflicting_payload),
+        ):
             await storage.create_temporary(key)
             await storage.append(
                 key,
@@ -168,11 +206,16 @@ def test_promotion_is_idempotent_only_when_final_digest_matches(tmp_path: Path) 
             final,
             expected_sha256=sha256_bytes(first_payload),
         )
+        await storage.promote(
+            matching_temporary,
+            final,
+            expected_sha256=sha256_bytes(first_payload),
+        )
         with pytest.raises(StorageConflictError):
             await storage.promote(
-                second_temporary,
+                conflicting_temporary,
                 final,
-                expected_sha256=sha256_bytes(second_payload),
+                expected_sha256=sha256_bytes(conflicting_payload),
             )
         assert await storage.read_range(final, start=0, end=len(first_payload)) == first_payload
 

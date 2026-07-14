@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import os
 import stat
 from collections.abc import AsyncIterator
@@ -132,13 +133,17 @@ class FilesystemStorage:
         self._require_regular(path)
         try:
             with path.open("r+b") as handle:
-                handle.seek(0, os.SEEK_END)
-                actual_offset = handle.tell()
-                if actual_offset != expected_offset:
-                    raise StorageOffsetMismatchError(expected_offset, actual_offset)
-                handle.write(data)
-                handle.flush()
-                os.fsync(handle.fileno())
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    handle.seek(0, os.SEEK_END)
+                    actual_offset = handle.tell()
+                    if actual_offset != expected_offset:
+                        raise StorageOffsetMismatchError(expected_offset, actual_offset)
+                    handle.write(data)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         except StorageOffsetMismatchError:
             raise
         except FileNotFoundError as exc:
