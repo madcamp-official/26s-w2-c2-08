@@ -183,6 +183,13 @@ make db-down
 | 품질 관리 | ESLint, Prettier, Ruff, pytest, GitHub Actions |
 | 외부 API / 서비스 | 현재 없음 |
 
+### Backend 공통 경계
+
+- `tbd.app.create_app()`이 FastAPI app과 `/api`, `/api/v1` router 경계를 조립한다. 현재 `/api/v1` business endpoint는 구현되지 않았다.
+- app별 SQLAlchemy engine·session factory는 lifespan 종료 시 dispose한다. router와 repository는 transaction을 commit하지 않고, 이후 service·job 계층이 명시적으로 transaction을 소유한다.
+- 모든 HTTP 응답은 `X-Request-ID`를 반환한다. 오류는 `{ "error": { "code", "message", "request_id", "details" } }` 형식이며, provider·DB 예외 원문을 응답에 포함하지 않는다.
+- `APP_ENV=production`에서는 `DATABASE_URL`을 명시하고 repository의 `tbd/tbd_dev` 개발 자격 증명을 사용하지 않아야 한다. OAuth 등 이후 PR에서 추가할 secret은 해당 기능 PR에서 검증한다.
+
 ---
 
 ## 회고 문서

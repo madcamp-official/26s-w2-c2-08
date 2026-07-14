@@ -151,7 +151,7 @@ POST /api/v1/auth/logout
 
 ### 2.7 요청 ID
 
-클라이언트는 선택적으로 `X-Request-ID`를 보낼 수 있다. 서버는 없거나 유효하지 않으면 새로 생성하고 응답 헤더에 반환한다.
+클라이언트는 선택적으로 `X-Request-ID`를 보낼 수 있다. 서버는 영문 대소문자, 숫자, `.`, `_`, `-`만 사용한 1~128자 값을 수용한다. 값이 없거나 이 형식에 맞지 않으면 서버가 `req_` 접두사의 새 불투명 ID를 생성하고, 성공·오류 응답의 header와 오류 body에 같은 값을 반환한다. 이 값은 요청 추적용일 뿐 인증·권한에 사용하지 않는다.
 
 ## 3. 공통 응답과 오류
 
@@ -255,8 +255,8 @@ POST /api/v1/auth/logout
 
 ### 3.3 현재 스캐폴딩과 목표 계약의 차이
 
-- 현재 FastAPI 코드는 상태 확인 API만 구현되어 있고 나머지 경로는 설계 계약이다.
-- 현재 `/api/health/db` 장애 응답과 FastAPI 기본 `422`는 `detail` 형식이다. 비즈니스 API 구현 시 공통 exception handler를 추가해 본 문서의 `error` envelope로 통일한다.
+- 현재 FastAPI 코드는 app factory와 `/api/health`, `/api/health/db` 상태 확인 API만 구현되어 있고 나머지 경로는 설계 계약이다.
+- HTTP request ID middleware와 공통 exception handler는 구현됐다. `/api/health/db`의 PostgreSQL 장애, FastAPI validation 오류, framework HTTP 오류와 예상 밖 오류는 모두 본 문서의 `error` envelope로 반환하며 내부 예외 원문을 노출하지 않는다. 비즈니스 API는 이후 PR에서 이 handler에 `ApiError` 기반의 세부 오류 코드를 추가한다.
 - 구현 후 CI에서 FastAPI `/openapi.json`과 `docs/api/openapi.yaml`의 path·method·schema 차이를 검사한다.
 
 ## 4. 상태와 권한 규칙

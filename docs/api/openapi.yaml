@@ -2509,9 +2509,10 @@ components:
 
   headers:
     RequestId:
-      description: 요청 추적용 식별자. 요청의 `X-Request-ID`를 수용하거나 서버가 생성한다.
+      description: 요청 추적용 식별자. 영문 대소문자·숫자·`.`·`_`·`-`만 사용한 1~128자 요청 값을 수용하고, 없거나 형식이 맞지 않으면 서버가 생성한다.
       schema:
         type: string
+        pattern: "^[A-Za-z0-9._-]{1,128}$"
         example: req_01HXYZ
     RetryAfter:
       description: 다시 요청하기 전 대기 시간(초)
@@ -2683,9 +2684,12 @@ components:
       name: X-Request-ID
       in: header
       required: false
-      description: 클라이언트가 선택적으로 지정하는 요청 추적 ID
+      description: 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다.
       schema:
         type: string
+        minLength: 1
+        maxLength: 128
+        pattern: "^[A-Za-z0-9._-]{1,128}$"
 
   responses:
     BadRequest:
