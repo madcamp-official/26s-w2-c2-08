@@ -19,6 +19,28 @@
   min-height: 72px;
 }
 
+.header-nav {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.header-nav a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding-inline: 14px;
+  border-radius: var(--radius-pill);
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.header-nav a:hover {
+  color: var(--color-ink);
+  background: var(--color-surface-soft);
+}
+
 .brand {
   display: inline-flex;
   gap: 11px;
@@ -174,6 +196,194 @@
 .foundation-status {
   display: grid;
   gap: var(--space-6);
+}
+
+.foundation-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-7);
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.auth-greeting {
+  flex-basis: 100%;
+  color: var(--color-ink);
+  font-weight: 800;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.75fr);
+  gap: clamp(32px, 7vw, 96px);
+  align-items: center;
+  min-height: calc(100vh - 208px);
+}
+
+.auth-card {
+  min-height: 320px;
+}
+
+.auth-card__content {
+  display: grid;
+  gap: var(--space-5);
+  align-content: center;
+  min-height: 260px;
+}
+
+.auth-card__content > p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.google-login {
+  display: flex;
+  gap: var(--space-3);
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 18px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-pill);
+  font-weight: 800;
+  background: var(--color-surface-raised);
+}
+
+.google-login span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 900;
+  background: #4285f4;
+}
+
+.auth-notice {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--color-success) !important;
+  background: var(--color-success-soft);
+}
+
+.auth-notice--warning {
+  color: var(--color-warning) !important;
+  background: #fff4d6;
+}
+
+.account-page {
+  display: grid;
+  gap: var(--space-7);
+}
+
+.account-heading h1 {
+  margin: var(--space-3) 0 0;
+  font-size: clamp(38px, 5vw, 62px);
+  letter-spacing: -0.05em;
+}
+
+.account-heading p:last-child {
+  margin: var(--space-3) 0 0;
+  color: var(--color-muted);
+}
+
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+.profile-card {
+  display: grid;
+  gap: var(--space-7);
+}
+
+.profile-card__identity {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+}
+
+.profile-card__identity img,
+.profile-card__fallback {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
+  place-items: center;
+  border-radius: 24px;
+  object-fit: cover;
+  color: var(--color-brand-dark);
+  font-size: 28px;
+  font-weight: 900;
+  background: var(--color-brand-soft);
+}
+
+.profile-card__identity h2,
+.profile-card__identity p {
+  margin: 0;
+}
+
+.profile-card__identity h2 {
+  margin-top: var(--space-3);
+  font-size: 28px;
+}
+
+.profile-card__identity p {
+  margin-top: 4px;
+  color: var(--color-muted);
+}
+
+.account-details {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.account-details div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.35fr) 1fr;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+
+.account-details dt {
+  color: var(--color-muted);
+}
+
+.account-details dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.account-security {
+  display: flex;
+  gap: var(--space-6);
+  align-items: start;
+  justify-content: space-between;
+  flex-direction: column;
+}
+
+.account-security h2,
+.account-security p {
+  margin: 0;
+}
+
+.account-security h2 {
+  margin-top: var(--space-3);
+}
+
+.account-security p:last-child {
+  margin-top: var(--space-2);
+  color: var(--color-muted);
+  line-height: 1.6;
 }
 
 .foundation-status h2 {
@@ -334,7 +544,9 @@
 }
 
 @media (max-width: 900px) {
-  .foundation-grid {
+  .foundation-grid,
+  .auth-grid,
+  .account-layout {
     grid-template-columns: 1fr;
     align-content: center;
   }
@@ -350,8 +562,30 @@
     display: none;
   }
 
+  .header-nav a {
+    padding-inline: 10px;
+  }
+
   .foundation-grid {
     min-height: auto;
+  }
+
+  .auth-grid {
+    min-height: auto;
+  }
+
+  .auth-card {
+    min-height: 0;
+  }
+
+  .profile-card__identity {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .account-details div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .state-panel {

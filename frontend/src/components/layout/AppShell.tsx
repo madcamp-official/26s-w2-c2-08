@@ -23,7 +23,10 @@ export function AppShell({ children, standalone = false }: AppShellProps) {
               <small>God Of All Lectures</small>
             </span>
           </Link>
-          <span className="badge">Frontend foundation</span>
+          <nav className="header-nav" aria-label="주요 메뉴">
+            <Link to="/">홈</Link>
+            <Link to="/account">내 정보</Link>
+          </nav>
         </div>
       </header>
       <main className="container page-main" id="main-content" tabIndex={-1}>
