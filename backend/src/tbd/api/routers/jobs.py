@@ -12,6 +12,7 @@ from tbd.api.dependencies import (
     get_current_user_id,
     get_db_session,
     get_idempotency_repository,
+    require_allowed_origin,
 )
 from tbd.core.errors import ApiError
 from tbd.core.request_hash import canonical_request_hash, idempotency_key_hash
@@ -41,6 +42,7 @@ IdempotencyRepositoryDependency = Annotated[
     Depends(get_idempotency_repository),
 ]
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1)]
+AllowedOrigin = Annotated[None, Depends(require_allowed_origin)]
 PROCESSING_LEASE = timedelta(seconds=60)
 
 
@@ -88,6 +90,7 @@ async def retry_job(
     user_id: CurrentUserId,
     session: DatabaseSession,
     idempotency: IdempotencyRepositoryDependency,
+    _allowed_origin: AllowedOrigin,
 ) -> AIJobAcceptedResponse | JSONResponse:
     """Atomically requeue one eligible Job and persist its replayable 202 response."""
 

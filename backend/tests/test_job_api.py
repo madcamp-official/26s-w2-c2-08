@@ -133,10 +133,19 @@ def test_job_retry_is_authorized_atomic_and_replayable(migrated_database_url: st
                 "resource_url": f"/api/v1/sessions/{before.json()['session_id']}",
             }
 
-            headers = {"Idempotency-Key": "retry-final-summary-001"}
+            forbidden = client.post(
+                f"/api/v1/jobs/{job_id}/retry",
+                headers={"Idempotency-Key": "retry-final-summary-001"},
+            )
+            headers = {
+                "Idempotency-Key": "retry-final-summary-001",
+                "Origin": "http://localhost:5173",
+            }
             first = client.post(f"/api/v1/jobs/{job_id}/retry", headers=headers)
             replay = client.post(f"/api/v1/jobs/{job_id}/retry", headers=headers)
 
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "ORIGIN_NOT_ALLOWED"
         assert first.status_code == 202
         assert replay.status_code == 202
         assert replay.json() == first.json()

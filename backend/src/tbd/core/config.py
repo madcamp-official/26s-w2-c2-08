@@ -17,6 +17,7 @@ DEFAULT_POSTGRES_DB = "tbd"
 DEFAULT_POSTGRES_HOST = "127.0.0.1"
 DEFAULT_POSTGRES_PASSWORD = "tbd_dev"
 DEFAULT_POSTGRES_USER = "tbd"
+DEFAULT_AUTH_SECRET = "goal-development-secret-change-before-production"
 
 
 class AppEnvironment(StrEnum):
@@ -49,6 +50,16 @@ class Settings(BaseSettings):
     database_url: str | None = None
     storage_root: Path = REPOSITORY_ROOT / "data" / "uploads"
     max_upload_bytes: int = 100_000_000
+    frontend_origin: str = "http://localhost:5173"
+    auth_allowed_origins: str = "http://localhost:5173"
+    auth_secret_key: SecretStr = SecretStr(DEFAULT_AUTH_SECRET)
+    auth_cookie_secure: bool = True
+    auth_session_ttl_seconds: int = 604_800
+    auth_oauth_ttl_seconds: int = 600
+    auth_last_seen_interval_seconds: int = 300
+    google_oidc_client_id: str | None = None
+    google_oidc_client_secret: SecretStr | None = None
+    google_oidc_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
     idempotency_response_encryption_key: SecretStr | None = None
     idempotency_response_encryption_key_version: int = Field(default=1, ge=1)
 
@@ -68,6 +79,12 @@ class Settings(BaseSettings):
         )
 
     @property
+    def allowed_origins(self) -> tuple[str, ...]:
+        """Return normalized exact origins configured for state-changing requests."""
+
+        return tuple(origin.strip().rstrip("/") for origin in self.auth_allowed_origins.split(","))
+
+    @property
     def idempotency_response_cipher(self) -> AesGcmResponseCipher | None:
         """Build the in-memory cipher for encrypted idempotency responses."""
 
@@ -84,7 +101,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_database(self) -> "Settings":
-        """Reject repository defaults when a process claims to be production."""
+        """Reject repository defaults and incomplete auth configuration in production."""
+
+        self._validate_auth_urls()
 
         if self.app_env is not AppEnvironment.PRODUCTION:
             return self
@@ -104,7 +123,57 @@ class Settings(BaseSettings):
                 "IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be set when APP_ENV=production"
             )
 
+        if self.auth_secret_key.get_secret_value() == DEFAULT_AUTH_SECRET:
+            raise ValueError("AUTH_SECRET_KEY must be changed when APP_ENV=production")
+        if not self.google_oidc_client_id or self.google_oidc_client_secret is None:
+            raise ValueError("Google OIDC credentials must be set when APP_ENV=production")
+        if not self.auth_cookie_secure:
+            raise ValueError("AUTH_COOKIE_SECURE must be true when APP_ENV=production")
+
+        for field_name, url in (
+            ("FRONTEND_ORIGIN", self.frontend_origin),
+            ("GOOGLE_OIDC_REDIRECT_URI", self.google_oidc_redirect_uri),
+            *(("AUTH_ALLOWED_ORIGINS", origin) for origin in self.allowed_origins),
+        ):
+            if urlsplit(url).scheme != "https":
+                raise ValueError(f"{field_name} must use HTTPS when APP_ENV=production")
+
         return self
+
+    def _validate_auth_urls(self) -> None:
+        """Validate exact origins and the backend callback URL."""
+
+        if len(self.auth_secret_key.get_secret_value().encode()) < 32:
+            raise ValueError("AUTH_SECRET_KEY must contain at least 32 bytes")
+        if not self.allowed_origins or any(not origin for origin in self.allowed_origins):
+            raise ValueError("AUTH_ALLOWED_ORIGINS must contain at least one origin")
+
+        for origin in (self.frontend_origin.rstrip("/"), *self.allowed_origins):
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("auth origins must be exact scheme://host[:port] values")
+
+        callback = urlsplit(self.google_oidc_redirect_uri)
+        if callback.scheme not in {"http", "https"} or not callback.netloc:
+            raise ValueError("GOOGLE_OIDC_REDIRECT_URI must be an absolute HTTP(S) URL")
+        if callback.fragment:
+            raise ValueError("GOOGLE_OIDC_REDIRECT_URI must not contain a fragment")
+
+        for field_name in (
+            "auth_session_ttl_seconds",
+            "auth_oauth_ttl_seconds",
+            "auth_last_seen_interval_seconds",
+        ):
+            if getattr(self, field_name) <= 0:
+                raise ValueError(f"{field_name.upper()} must be positive")
 
     @field_validator("idempotency_response_encryption_key")
     @classmethod

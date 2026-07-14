@@ -211,6 +211,10 @@ Google 계정과 내부 User를 분리한다. 이메일 변경과 향후 인증 
 
 `goal_session` Cookie의 원문을 저장하지 않고 hash만 저장한다.
 
+세션 만료는 callback 발급 시점부터 7일인 절대 만료다. 인증 요청은 `last_seen_at`을 최대
+5분 간격으로 갱신하지만 `expires_at`을 연장하지 않는다. 같은 브라우저가 Google callback을
+다시 완료하면 기존 활성 token을 폐기하고 새 token hash를 발급해 session fixation을 막는다.
+
 | 컬럼           | 타입          | NULL | 기본값              | 키·제약         | 설명                    |
 | -------------- | ------------- | ---: | ------------------- | --------------- | ----------------------- |
 | `id`           | `uuid`        |    N | `gen_random_uuid()` | PK              | 세션 행 ID              |
@@ -232,6 +236,11 @@ Google 계정과 내부 User를 분리한다. 이메일 변경과 향후 인증 
 ### 5.4 `oauth_transactions`
 
 Google callback의 state·nonce·PKCE를 10분 동안 보관한다. PKCE verifier는 callback에서 필요하므로 암호화한다.
+
+callback은 `browser_binding_hash`, `state_hash`, 만료와 `consumed_at IS NULL`을 한 transaction에서
+잠금·검증하고 provider token 교환 전에 `consumed_at`을 commit한다. 따라서 동일 state나 임시
+Cookie의 동시·반복 callback은 provider 호출 전에 하나만 성공한다. provider 장애가 발생해도
+소비한 transaction을 되살리지 않고 사용자는 새 로그인 흐름을 시작한다.
 
 | 컬럼                       | 타입          | NULL | 기본값              | 키·제약     | 설명                          |
 | -------------------------- | ------------- | ---: | ------------------- | ----------- | ----------------------------- |
