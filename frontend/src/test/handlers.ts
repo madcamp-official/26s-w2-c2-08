@@ -15,6 +15,9 @@ export const handlers = [
       { status: 401 },
     ),
   ),
+  http.get('*/api/v1/courses', () =>
+    HttpResponse.json({ items: [], next_cursor: null }),
+  ),
   http.get('*/api/v1/sessions/:sessionId/materials', () =>
     HttpResponse.json({ items: [], next_cursor: null }),
   ),

@@ -3,15 +3,102 @@ import { useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
+import { CourseRoleBadge } from '../../components/domain/LmsStatus'
 import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
+import { PageHeader } from '../../components/layout/PageHeader'
 import { Button } from '../../components/ui/Button'
+import { Card } from '../../components/ui/Card'
 import { Dialog } from '../../components/ui/Dialog'
+import { LinkButton } from '../../components/ui/LinkButton'
+import { Skeleton } from '../../components/ui/Skeleton'
+import { Status } from '../../components/ui/Status'
+import { courseListQueryOptions } from '../courses/queries'
 import { logoutCurrentSession, withdrawCurrentUser } from './api'
-import { currentUserQueryKey, currentUserQueryOptions } from './queries'
+import { currentUserQueryOptions } from './queries'
+
+type CourseRole = 'PROFESSOR' | 'STUDENT'
+
+function useAccountCourseList(role: CourseRole, enabled: boolean) {
+  return useQuery({ ...courseListQueryOptions(role), enabled })
+}
+
+type AccountCourseQuery = ReturnType<typeof useAccountCourseList>
+
+function courseCountCopy(query: AccountCourseQuery) {
+  if (!query.isSuccess) return { accessible: '확인 중', visible: '—' }
+  const count = query.data.items.length
+  const hasMore = query.data.next_cursor !== null
+  return {
+    accessible: hasMore ? `${count}개 이상` : `${count}개`,
+    visible: `${count}${hasMore ? '+' : ''}`,
+  }
+}
+
+function AccountCourseRoleCard({
+  query,
+  role,
+}: {
+  query: AccountCourseQuery
+  role: CourseRole
+}) {
+  const professor = role === 'PROFESSOR'
+  const count = courseCountCopy(query)
+  const title = professor ? '관리 중인 Course' : '참여 중인 Course'
+
+  return (
+    <Card
+      as="article"
+      className="account-course-role"
+      aria-busy={query.isPending}
+    >
+      <header>
+        <CourseRoleBadge role={role} />
+        <span className="account-course-role__label">{title}</span>
+      </header>
+
+      {query.isPending && (
+        <Skeleton label={`${title} 개수를 불러오는 중`} lines={2} />
+      )}
+
+      {query.isError && (
+        <div className="account-course-role__error" role="alert">
+          <strong>개수를 확인하지 못했습니다</strong>
+          <p>다른 계정 정보는 계속 확인할 수 있습니다.</p>
+          <Button variant="secondary" onClick={() => void query.refetch()}>
+            다시 확인
+          </Button>
+        </div>
+      )}
+
+      {query.isSuccess && (
+        <div className="account-course-role__count">
+          <strong aria-label={`${title} ${count.accessible}`}>
+            {count.visible}
+          </strong>
+          <span>Course</span>
+          <p>
+            {query.data.items.length === 0
+              ? professor
+                ? '아직 관리 중인 Course가 없습니다.'
+                : '아직 참여 중인 Course가 없습니다.'
+              : professor
+                ? 'Course별 교수자 권한으로 관리합니다.'
+                : 'Course별 학생 권한으로 참여합니다.'}
+          </p>
+        </div>
+      )}
+    </Card>
+  )
+}
 
 export function AccountPage() {
   const currentUser = useQuery(currentUserQueryOptions)
+  const professorCourses = useAccountCourseList(
+    'PROFESSOR',
+    currentUser.isSuccess,
+  )
+  const studentCourses = useAccountCourseList('STUDENT', currentUser.isSuccess)
   const queryClient = useQueryClient()
   const location = useLocation()
   const { showToast } = useToast()
@@ -19,12 +106,13 @@ export function AccountPage() {
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [logoutCompleted, setLogoutCompleted] = useState(false)
   const [withdrawCompleted, setWithdrawCompleted] = useState(false)
+  const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const logout = useMutation({
     mutationFn: logoutCurrentSession,
     onSuccess: () => {
       setLogoutCompleted(true)
-      queryClient.removeQueries({ queryKey: currentUserQueryKey })
       setLogoutOpen(false)
+      queryClient.clear()
     },
     onError: () => {
       showToast({
@@ -35,20 +123,20 @@ export function AccountPage() {
   })
   const withdraw = useMutation({
     mutationFn: withdrawCurrentUser,
+    onMutate: () => setWithdrawError(null),
     onSuccess: () => {
-      queryClient.clear()
-      setWithdrawOpen(false)
       setWithdrawCompleted(true)
+      setWithdrawOpen(false)
+      queryClient.clear()
     },
     onError: (error) => {
-      showToast({
-        tone: 'error',
-        message:
-          error instanceof ApiError &&
-          error.code === 'OWNED_COURSE_REQUIRES_DELETION'
-            ? '생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.'
-            : '계정을 탈퇴하지 못했습니다. 현재 Session은 그대로 유지됩니다.',
-      })
+      const message =
+        error instanceof ApiError &&
+        error.code === 'OWNED_COURSE_REQUIRES_DELETION'
+          ? '생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.'
+          : '계정을 탈퇴하지 못했습니다. 현재 Session은 그대로 유지됩니다.'
+      setWithdrawError(message)
+      showToast({ tone: 'error', message })
     },
   })
 
@@ -95,18 +183,31 @@ export function AccountPage() {
   }
 
   const user = currentUser.data
+  const hasOwnedCourse =
+    professorCourses.isSuccess && professorCourses.data.items.length > 0
+  const ownerCheckUnavailable =
+    professorCourses.isPending || professorCourses.isError
+
   return (
     <section className="account-page" aria-labelledby="account-title">
-      <header className="account-heading">
-        <div>
-          <p className="eyebrow">Account</p>
-          <h1 id="account-title">내 정보</h1>
-          <p>기본 정보와 현재 GOAL 로그인 Session을 확인합니다.</p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Account"
+        title="내 정보"
+        description={
+          <p>
+            기본 계정 정보와 Course별 역할을 확인하고 현재 Session을 안전하게
+            관리합니다.
+          </p>
+        }
+        actions={
+          <LinkButton to="/" variant="secondary">
+            대시보드로 돌아가기
+          </LinkButton>
+        }
+      />
 
-      <div className="account-layout">
-        <article className="panel profile-card">
+      <div className="account-primary-grid">
+        <Card as="article" className="profile-card" elevated>
           <div className="profile-card__identity">
             {user.avatar_url ? (
               <img src={user.avatar_url} alt="" referrerPolicy="no-referrer" />
@@ -116,36 +217,80 @@ export function AccountPage() {
               </span>
             )}
             <div>
-              <span className="status-chip status-chip--success">인증됨</span>
+              <Status tone="success">인증됨</Status>
               <h2>{user.display_name}</h2>
               <p>{user.email ?? '공개된 이메일 없음'}</p>
             </div>
           </div>
           <dl className="account-details">
             <div>
-              <dt>로그인 방식</dt>
+              <dt>현재 인증</dt>
               <dd>GOAL 서버 Session</dd>
             </div>
             <div>
-              <dt>계정 역할</dt>
+              <dt>역할 기준</dt>
               <dd>고정 역할 없음 · Course별 역할 사용</dd>
             </div>
           </dl>
-        </article>
+        </Card>
 
-        <aside className="panel account-security">
+        <Card
+          as="section"
+          className="account-course-summary"
+          elevated
+          aria-labelledby="account-course-title"
+        >
+          <header className="account-section-heading">
+            <div>
+              <p className="eyebrow">Course roles</p>
+              <h2 id="account-course-title">Course별 역할</h2>
+            </div>
+            <LinkButton to="/" variant="secondary">
+              전체 Course 보기
+            </LinkButton>
+          </header>
+          <p className="account-section-description">
+            교수자·학생 역할은 계정 전체가 아니라 각 Course에서 따로 정해집니다.
+          </p>
+          <div className="account-course-summary__grid">
+            <AccountCourseRoleCard query={professorCourses} role="PROFESSOR" />
+            <AccountCourseRoleCard query={studentCourses} role="STUDENT" />
+          </div>
+        </Card>
+      </div>
+
+      <div className="account-management-grid">
+        <Card as="section" className="account-security">
           <div>
-            <p className="eyebrow">Security</p>
+            <p className="eyebrow">Session security</p>
             <h2>로그인 Session</h2>
             <p>공용 기기에서는 이용 후 반드시 로그아웃하세요.</p>
           </div>
           <Button variant="danger" onClick={() => setLogoutOpen(true)}>
             로그아웃
           </Button>
-          <Button variant="ghost" onClick={() => setWithdrawOpen(true)}>
-            계정 탈퇴
+        </Card>
+
+        <Card as="section" className="account-danger-zone">
+          <div>
+            <p className="eyebrow">Account removal</p>
+            <h2>계정 탈퇴</h2>
+            <p>
+              직접 만든 Course를 모두 삭제한 뒤에만 계정을 영구적으로 탈퇴할 수
+              있습니다.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setWithdrawError(null)
+              withdraw.reset()
+              setWithdrawOpen(true)
+            }}
+          >
+            계정 탈퇴 검토
           </Button>
-        </aside>
+        </Card>
       </div>
 
       <Dialog
@@ -174,6 +319,7 @@ export function AccountPage() {
       >
         <p>다시 이용하려면 Google 또는 이메일로 로그인해야 합니다.</p>
       </Dialog>
+
       <Dialog
         open={withdrawOpen}
         title="GOAL 계정을 탈퇴할까요?"
@@ -188,9 +334,16 @@ export function AccountPage() {
             >
               취소
             </Button>
+            {hasOwnedCourse && (
+              <LinkButton to="/" variant="secondary">
+                관리 Course 확인
+              </LinkButton>
+            )}
             <Button
               variant="danger"
-              disabled={withdraw.isPending}
+              disabled={
+                ownerCheckUnavailable || hasOwnedCourse || withdraw.isPending
+              }
               onClick={() => withdraw.mutate()}
             >
               {withdraw.isPending ? '탈퇴 중…' : '계정 탈퇴'}
@@ -198,11 +351,50 @@ export function AccountPage() {
           </>
         }
       >
-        <p>
-          직접 생성한 Course가 있으면 먼저 Course를 삭제해야 합니다. 기존 완료
-          기록의 공유 참조는 비식별 처리되지만 현재 계정으로는 다시 접근할 수
-          없습니다.
-        </p>
+        <div className="withdraw-review">
+          {professorCourses.isPending && (
+            <div className="withdraw-review__notice" role="status">
+              <strong>관리 Course를 확인하고 있습니다</strong>
+              <p>확인이 끝난 뒤 탈퇴 가능 여부를 안내합니다.</p>
+            </div>
+          )}
+          {professorCourses.isError && (
+            <div className="withdraw-review__notice" role="alert">
+              <strong>관리 Course를 확인하지 못했습니다</strong>
+              <p>확인되지 않은 상태에서는 계정 탈퇴를 진행하지 않습니다.</p>
+              <Button
+                variant="secondary"
+                onClick={() => void professorCourses.refetch()}
+              >
+                관리 Course 다시 확인
+              </Button>
+            </div>
+          )}
+          {hasOwnedCourse && (
+            <div
+              className="withdraw-review__notice withdraw-review__notice--danger"
+              role="alert"
+            >
+              <strong>관리 중인 Course가 남아 있습니다</strong>
+              <p>생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.</p>
+            </div>
+          )}
+          {professorCourses.isSuccess && !hasOwnedCourse && (
+            <p>
+              관리 중인 Course가 없음을 확인했습니다. 기존 완료 기록의 공유
+              참조는 비식별 처리되지만 현재 계정으로는 다시 접근할 수 없습니다.
+            </p>
+          )}
+          {withdrawError && (
+            <div
+              className="withdraw-review__notice withdraw-review__notice--danger"
+              role="alert"
+            >
+              <strong>탈퇴를 완료하지 못했습니다</strong>
+              <p>{withdrawError}</p>
+            </div>
+          )}
+        </div>
       </Dialog>
     </section>
   )

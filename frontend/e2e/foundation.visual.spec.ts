@@ -61,7 +61,12 @@ const scenarios: FoundationScenario[] = [
     path: '/account',
     auth: 'signed-in',
     heading: '내 정보',
-    requiredRequests: ['GET /api/v1/me'],
+    checkpoint: { level: 2, name: 'Course별 역할' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      'GET /api/v1/courses?role=PROFESSOR&limit=100',
+      'GET /api/v1/courses?role=STUDENT&limit=100',
+    ],
   },
   {
     screenId: 'COURSE_CREATE_PAGE',
@@ -105,3 +110,26 @@ for (const scenario of scenarios) {
     })
   })
 }
+
+test('MY_INFO_PAGE keeps keyboard focus inside the logout dialog and returns it', async ({
+  page,
+}) => {
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto('/account')
+  await expect(
+    page.getByRole('heading', { level: 1, name: '내 정보' }),
+  ).toBeVisible()
+
+  const trigger = page.getByRole('button', { name: '로그아웃' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', {
+    name: 'GOAL에서 로그아웃할까요?',
+  })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator(':focus')).toHaveCount(1)
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+})
