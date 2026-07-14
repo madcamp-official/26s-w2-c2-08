@@ -12,6 +12,7 @@ from tbd.api.routers.personal_ai import router as personal_ai_router
 from tbd.api.routers.questions import router as questions_router
 from tbd.api.routers.realtime import router as realtime_router
 from tbd.api.routers.recordings import router as recordings_router
+from tbd.api.routers.records import router as records_router
 from tbd.api.routers.sessions import router as sessions_router
 from tbd.api.routers.transcripts import router as transcripts_router
 from tbd.api.routers.users import router as users_router
@@ -29,6 +30,7 @@ v1_router.include_router(materials_router)
 v1_router.include_router(personal_ai_router)
 v1_router.include_router(questions_router)
 v1_router.include_router(recordings_router)
+v1_router.include_router(records_router)
 v1_router.include_router(realtime_router)
 v1_router.include_router(sessions_router)
 v1_router.include_router(transcripts_router)
