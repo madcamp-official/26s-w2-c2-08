@@ -6,6 +6,7 @@ import App from './App'
 import './styles/tokens.css'
 import './styles/globals.css'
 import './styles/components.css'
+import './styles/public-auth.css'
 
 const rootElement = document.getElementById('root')
 

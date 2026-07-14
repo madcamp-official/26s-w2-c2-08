@@ -7,7 +7,7 @@
       name="description"
       content="GOAL 실시간 AI 강의 보조 서비스 비로그인 메인 화면 프로토타입"
     />
-    <title>GOAL · 강의의 모든 순간을 놓치지 않게</title>
+    <title>GOAL · 강의의 흐름을 놓치지 않도록</title>
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
@@ -16,7 +16,7 @@
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
-      Static prototype · 실제 Google 로그인을 호출하지 않습니다
+      Static prototype · 실제 Session 확인이나 인증 요청을 호출하지 않습니다
     </div>
 
     <header class="site-header">
@@ -36,15 +36,9 @@
         </nav>
 
         <div class="header-actions">
-          <button
-            class="button button--primary"
-            type="button"
-            data-state-action
-            data-state-target="#authFlow"
-            data-state="loading"
+          <a class="button button--primary" href="login.html?return_to=%2F"
+            >로그인</a
           >
-            Google로 시작하기
-          </button>
         </div>
       </div>
       <nav class="mobile-nav" aria-label="모바일 비로그인 메뉴">
@@ -60,36 +54,37 @@
           <p class="eyebrow">
             <span aria-hidden="true">✶</span> Real-time AI lecture companion
           </p>
-          <h1 id="landingTitle">
-            강의의 모든 순간을,<br /><em>놓치지 않게.</em>
-          </h1>
+          <h1 id="landingTitle">강의의 흐름을<br /><em>놓치지 않도록.</em></h1>
           <p class="landing-copy__description">
-            실시간 Transcript와 AI 요약으로 놓친 내용을 바로 따라잡고, 익명
-            질문으로 수업에 더 깊게 참여하세요. 수업이 끝난 뒤에는 모든 기록이
-            나만의 복습 자료가 됩니다.
+            실시간 Transcript부터 익명 질문, 개인 AI와 수업 기록까지. 수업의
+            맥락을 한곳에서 이어 갑니다.
           </p>
 
           <section
             class="auth-flow"
-            id="authFlow"
+            id="sessionFlow"
             data-demo-state="default"
-            data-query-state="auth"
+            data-query-state="session"
             data-query-default="default"
-            aria-labelledby="authFlowTitle"
+            aria-labelledby="sessionFlowTitle"
           >
-            <h2 class="sr-only" id="authFlowTitle">Google 로그인 모의 흐름</h2>
+            <h2 class="sr-only" id="sessionFlowTitle">
+              Session 확인 모의 흐름
+            </h2>
 
             <div data-show-state="default">
-              <button
-                class="google-button"
-                type="button"
-                data-state-action
-                data-state-target="#authFlow"
-                data-state="loading"
-              >
-                <span class="google-button__mark" aria-hidden="true">G</span>
-                Google 계정으로 계속하기
-              </button>
+              <div class="cluster">
+                <a
+                  class="button button--primary"
+                  href="login.html?return_to=%2F"
+                  >로그인하고 시작하기</a
+                >
+                <a
+                  class="button button--secondary"
+                  href="signup.html?return_to=%2F"
+                  >이메일로 가입하기</a
+                >
+              </div>
               <p class="auth-flow__help">
                 역할은 계정이 아니라 Course별로 결정됩니다.
               </p>
@@ -97,37 +92,14 @@
 
             <div
               class="auth-status"
-              data-show-state="loading"
+              data-show-state="checking"
               hidden
               aria-live="polite"
             >
               <span class="auth-spinner" aria-hidden="true"></span>
               <div>
-                <strong>Google 로그인으로 이동하는 중</strong>
-                <p>
-                  정적 Prototype에서는 외부로 이동하지 않고 callback 상태만
-                  모의합니다.
-                </p>
-              </div>
-              <div class="cluster">
-                <button
-                  class="button button--primary"
-                  type="button"
-                  data-state-action
-                  data-state-target="#authFlow"
-                  data-state="success"
-                >
-                  로그인 완료 상태 보기
-                </button>
-                <button
-                  class="button button--secondary"
-                  type="button"
-                  data-state-action
-                  data-state-target="#authFlow"
-                  data-state="error"
-                >
-                  오류 상태 보기
-                </button>
+                <strong>로그인 상태 확인 중</strong>
+                <p>기존 server Session을 확인하고 있습니다.</p>
               </div>
             </div>
 
@@ -139,40 +111,35 @@
             >
               <span class="auth-status__icon" aria-hidden="true">!</span>
               <div>
-                <strong>로그인을 완료하지 못했습니다</strong>
+                <strong>로그인 상태를 확인하지 못했습니다</strong>
                 <p>
-                  요청이 취소되었거나 인증 제공자 응답을 확인할 수 없습니다.
+                  공개 콘텐츠는 계속 볼 수 있으며 Session 확인만 다시
+                  시도합니다.
                 </p>
               </div>
               <button
                 class="button button--secondary"
                 type="button"
                 data-state-action
-                data-state-target="#authFlow"
-                data-state="loading"
+                data-state-target="#sessionFlow"
+                data-state="checking"
               >
-                다시 시도
+                다시 확인
               </button>
             </div>
 
             <div
               class="auth-status auth-status--success"
-              data-show-state="success"
+              data-show-state="authenticated"
               hidden
               role="status"
             >
               <span class="auth-status__icon" aria-hidden="true">✓</span>
               <div>
-                <strong>로그인 callback 확인 완료</strong>
-                <p>
-                  server Session이 생성됐다고 가정하고 대시보드로 이동할 수
-                  있습니다.
-                </p>
+                <strong>로그인된 Session을 확인했습니다</strong>
+                <p>같은 `/` 경로에서 로그인 후 대시보드를 렌더링합니다.</p>
               </div>
-              <a
-                class="button button--primary"
-                href="dashboard.html?notice=Google+로그인+모의+흐름이+완료되었습니다.&tone=success"
-              >
+              <a class="button button--primary" href="dashboard.html">
                 대시보드로 이동
               </a>
             </div>
@@ -310,25 +277,25 @@
       >
         <div>
           <p class="eyebrow">Review controls</p>
-          <h2 id="stateControlTitle">로그인 상태를 직접 점검하세요.</h2>
+          <h2 id="stateControlTitle">Session 확인 상태를 직접 점검하세요.</h2>
         </div>
         <div
           class="state-switcher"
           data-state-switcher
-          data-state-target="#authFlow"
-          aria-label="로그인 상태 선택"
+          data-state-target="#sessionFlow"
+          aria-label="Session 확인 상태 선택"
         >
           <button type="button" data-state="default" aria-pressed="true">
             기본
           </button>
-          <button type="button" data-state="loading" aria-pressed="false">
-            진행 중
+          <button type="button" data-state="checking" aria-pressed="false">
+            확인 중
           </button>
           <button type="button" data-state="error" aria-pressed="false">
             오류
           </button>
-          <button type="button" data-state="success" aria-pressed="false">
-            반환 성공
+          <button type="button" data-state="authenticated" aria-pressed="false">
+            인증됨
           </button>
         </div>
       </section>

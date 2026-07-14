@@ -44,6 +44,15 @@ describe('application router', () => {
       'href',
       '/signup',
     )
+    expect(
+      screen.getByRole('link', { name: '로그인하고 시작하기' }),
+    ).toHaveAttribute('href', '/login?return_to=/')
+    expect(
+      screen.getByRole('link', { name: '이메일로 가입하기' }),
+    ).toHaveAttribute('href', '/signup?return_to=/')
+    expect(
+      screen.getByRole('heading', { name: '실시간 Transcript' }),
+    ).toBeInTheDocument()
   })
 
   it('offers Course and account navigation from the shared shell when signed in', async () => {
@@ -107,5 +116,8 @@ describe('application router', () => {
     expect(
       screen.queryByRole('link', { name: '로그인' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '실시간 Transcript' }),
+    ).toBeInTheDocument()
   })
 })

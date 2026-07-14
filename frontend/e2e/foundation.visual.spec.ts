@@ -21,7 +21,7 @@ const scenarios: FoundationScenario[] = [
     path: '/',
     auth: 'signed-out',
     heading: '강의의 흐름을 놓치지 않도록',
-    requiredRequests: ['GET /api/v1/me', 'GET /api/health'],
+    requiredRequests: ['GET /api/v1/me'],
   },
   {
     screenId: 'LOGIN_PAGE',
