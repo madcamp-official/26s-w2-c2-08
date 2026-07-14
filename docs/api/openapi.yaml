@@ -7708,10 +7708,10 @@ x-recording-contract:
     range: supports full response and byte Range when UPLOADED
     delivery: API proxy stream only; no download endpoint or signed redirect
   tbd:
-    - browser local-storage implementation and MediaRecorder support remain PR-22 scope
+    - Browser capture uses MediaRecorder and IndexedDB fragment storage; it never stores audio in localStorage. Consent and storage-failure UI are client concerns, not proof of legal consent.
     - publisher disconnect lease, reacquisition and explicit takeover
     - transcript DEGRADED threshold, audio stop timeout and event replay window
-    - recording consent UX and legal operating policy remain PR-22 scope
+    - legal recording consent, retention, deletion and operating policy remain to be decided; browser capture UI alone does not establish that policy
     - final recording retention, deletion and quota release remain PR-28 scope
     - whether the preserved LIVE canonical is eligible as the completed record and Summary final source after RECORDING_TRANSCRIPTION failure or no-result deadline
     - exact per-Job timeout for RECORDING_TRANSCRIPTION, which is excluded from the generic 5-minute postprocessing default while the 10-minute Session deadline remains fixed

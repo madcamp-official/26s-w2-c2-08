@@ -27,6 +27,8 @@ import {
 import { useSessionRealtime } from '../realtime/useSessionRealtime'
 import { LiveClassRoom } from '../live/LiveClassRoom'
 import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
+import { LocalRecordingPanel } from '../recordings/LocalRecordingPanel'
+import { RecordingPlaybackPanel } from '../recordings/RecordingPlaybackPanel'
 
 function statusCopy(status: string) {
   switch (status) {
@@ -277,6 +279,14 @@ export function SessionDetailPage() {
         professor={professor}
         sessionStatus={data.status}
       />
+      {professor && data.status === 'PROCESSING' && (
+        <LocalRecordingPanel
+          sessionId={data.id}
+          stream={null}
+          clientStreamId={null}
+          sessionStatus="PROCESSING"
+        />
+      )}
       {data.status === 'LIVE' && (
         <LiveClassRoom
           session={data}
@@ -289,6 +299,7 @@ export function SessionDetailPage() {
       )}
       {data.status === 'COMPLETED' && (
         <>
+          <RecordingPlaybackPanel sessionId={data.id} />
           <AnswerPanel
             sessionId={data.id}
             professor={professor}

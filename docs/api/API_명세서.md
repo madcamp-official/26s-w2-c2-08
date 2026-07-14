@@ -1268,7 +1268,7 @@ GET /api/v1/sessions/{session_id}/recording
 - 첫 성공 `audio.start` 전에는 Recording이 없고, 성공 뒤에는 Session당 외부에 정확히 하나의 논리 Recording aggregate를 만들고 `CAPTURING`으로 전이한다. 같은 `client_stream_id`의 reconnect는 이 Recording을 재사용한다.
 - Recording은 브라우저 로컬 녹음과 upload·HQ STT·playback의 외부 상태를 나타낸다. MVP는 하나의 `RecordingUpload`가 하나의 비공개 temporary object를 이어 쓰고, 완료 시 하나의 final object로 promote하는 논리 manifest를 사용한다. part·fragment 행과 물리 key는 만들거나 외부 API에 노출하지 않는다.
 - 응답은 `id`, `session_id`, 공개 상태, `version`, nullable `content_type`·`byte_size`·`duration_ms`·`playback_url`과 생성·갱신 시각만 포함한다. storage key, 서버 경로, fragment key와 manifest는 포함하지 않는다.
-- 모든 조회에서 현재 인증과 Course 접근 권한을 다시 확인한다. MVP에서 현재 Course 멤버는 metadata와 playback을 조회할 수 있고, upload는 첫 publisher인 Course `PROFESSOR`만 수행한다. 브라우저는 capture 전에 녹음 동의를 받아야 하지만 동의 UI·보관 정책은 PR-22·PR-28 범위이며 이 HTTP API는 법적 동의를 증명하지 않는다.
+- 모든 조회에서 현재 인증과 Course 접근 권한을 다시 확인한다. MVP에서 현재 Course 멤버는 metadata와 playback을 조회할 수 있고, upload는 첫 publisher인 Course `PROFESSOR`만 수행한다. 브라우저는 capture 전에 녹음 동의를 받고 PR-22 UI는 Blob을 IndexedDB에만 저장한다. 보관 정책은 PR-28 범위이며 이 HTTP API와 브라우저 동의는 법적 동의를 증명하지 않는다.
 - Recording이 없거나 존재를 공개하지 않으면 `404 RECORDING_NOT_FOUND`를 반환한다.
 
 | 상태             | 의미                                                                |

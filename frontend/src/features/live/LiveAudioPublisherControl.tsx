@@ -4,6 +4,7 @@ import { LiveAudioPublisher, type AudioPublisherState } from './audio-publisher'
 
 interface Props {
   sessionId: string
+  onMediaStream?: (stream: MediaStream, clientStreamId: string) => void
 }
 
 const copy: Record<AudioPublisherState, string> = {
@@ -18,7 +19,7 @@ const copy: Record<AudioPublisherState, string> = {
   error: '음성 전송 연결에 문제가 있습니다.',
 }
 
-export function LiveAudioPublisherControl({ sessionId }: Props) {
+export function LiveAudioPublisherControl({ sessionId, onMediaStream }: Props) {
   const publisher = useRef<LiveAudioPublisher | null>(null)
   const [state, setState] = useState<AudioPublisherState>('idle')
   const [message, setMessage] = useState<string | undefined>()
@@ -51,6 +52,7 @@ export function LiveAudioPublisherControl({ sessionId }: Props) {
         setState(value)
         setMessage(detail)
       },
+      onMediaStream,
     })
     publisher.current = next
     await next.start()
