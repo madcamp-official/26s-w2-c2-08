@@ -4203,6 +4203,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            422: components["responses"]["ValidationFailed"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };
@@ -4238,6 +4239,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["BadRequest"];
+            422: components["responses"]["ValidationFailed"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };
@@ -4264,6 +4266,7 @@ export interface operations {
                 content?: never;
             };
             403: components["responses"]["OriginForbidden"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getCurrentUser: {

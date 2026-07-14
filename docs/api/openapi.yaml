@@ -144,6 +144,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/auth/google/callback:
     parameters:
@@ -200,6 +202,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/auth/logout:
     parameters:
@@ -225,6 +229,8 @@ paths:
               $ref: "#/components/headers/RequestId"
         "403":
           $ref: "#/components/responses/OriginForbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/me:
     parameters:

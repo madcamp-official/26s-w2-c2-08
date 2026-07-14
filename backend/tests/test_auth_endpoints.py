@@ -1,0 +1,221 @@
+"""PostgreSQL-backed security tests for OAuth callback and server sessions."""
+
+from dataclasses import replace
+
+import psycopg
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
+
+from fakes import FakeGoogleOIDCProvider
+from tbd.app import create_app
+from tbd.auth.security import AuthCrypto
+from tbd.core.config import AppEnvironment, Settings
+from tbd.db import create_database
+
+pytestmark = pytest.mark.integration
+
+
+def _settings(database_url: str) -> Settings:
+    return Settings(
+        _env_file=None,
+        app_env=AppEnvironment.TEST,
+        database_url=database_url,
+        auth_secret_key="test-auth-secret-that-is-longer-than-thirty-two-bytes",
+        frontend_origin="http://localhost:5173",
+        auth_allowed_origins="http://localhost:5173",
+    )
+
+
+def _sync_dsn(database_url: str) -> str:
+    return make_url(database_url).set(drivername="postgresql").render_as_string(hide_password=False)
+
+
+def _client(database_url: str) -> tuple[TestClient, FakeGoogleOIDCProvider, Settings]:
+    settings = _settings(database_url)
+    provider = FakeGoogleOIDCProvider()
+    app = create_app(
+        settings=settings,
+        database=create_database(settings),
+        google_oidc_provider=provider,
+    )
+    return TestClient(app, base_url="https://testserver"), provider, settings
+
+
+def _start(client: TestClient, provider: FakeGoogleOIDCProvider, return_to: str = "/") -> str:
+    response = client.get(
+        "/api/v1/auth/google/start",
+        params={"return_to": return_to},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["location"].startswith("https://provider.test/authorize?")
+    assert "goal_oauth=" in response.headers["set-cookie"]
+    assert "HttpOnly" in response.headers["set-cookie"]
+    assert "Secure" in response.headers["set-cookie"]
+    assert "SameSite=lax" in response.headers["set-cookie"]
+    return provider.authorization_requests[-1]["state"]
+
+
+def _complete(client: TestClient, state: str, code: str = "valid-code"):
+    return client.get(
+        "/api/v1/auth/google/callback",
+        params={"state": state, "code": code},
+        follow_redirects=False,
+    )
+
+
+def test_callback_issues_hashed_session_and_restores_route(
+    migrated_database_url: str,
+) -> None:
+    """A verified identity becomes an opaque cookie and the requested frontend route."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider, "/account?tab=security")
+        response = _complete(client, state)
+
+        assert response.status_code == 302
+        assert response.headers["location"] == "http://localhost:5173/account?tab=security"
+        assert "goal_session=" in response.headers.get_list("set-cookie")[-1]
+        token = client.cookies.get("goal_session")
+        assert token is not None
+        request = provider.authorization_requests[-1]
+        exchange = provider.exchange_requests[-1]
+        assert AuthCrypto.pkce_challenge(exchange["code_verifier"]) == request["code_challenge"]
+
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            row = connection.execute("SELECT token_hash, revoked_at FROM auth_sessions").fetchone()
+        assert row is not None
+        assert row[0] != token.encode()
+        assert row[1] is None
+
+
+def test_second_login_rotates_existing_session(migrated_database_url: str) -> None:
+    """A browser cannot carry a fixed pre-login session through a new callback."""
+
+    client, provider, settings = _client(migrated_database_url)
+    crypto = AuthCrypto(settings.auth_secret_key.get_secret_value())
+    with client:
+        first_state = _start(client, provider)
+        assert _complete(client, first_state).status_code == 302
+        first_token = client.cookies.get("goal_session")
+
+        second_state = _start(client, provider)
+        assert _complete(client, second_state).status_code == 302
+        second_token = client.cookies.get("goal_session")
+
+        assert first_token is not None
+        assert second_token is not None
+        assert second_token != first_token
+
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            old_revoked_at = connection.execute(
+                "SELECT revoked_at FROM auth_sessions WHERE token_hash = %s",
+                (crypto.hash_token("session", first_token),),
+            ).fetchone()
+            new_revoked_at = connection.execute(
+                "SELECT revoked_at FROM auth_sessions WHERE token_hash = %s",
+                (crypto.hash_token("session", second_token),),
+            ).fetchone()
+        assert old_revoked_at is not None and old_revoked_at[0] is not None
+        assert new_revoked_at is not None and new_revoked_at[0] is None
+
+
+def test_logout_requires_exact_origin_and_is_idempotent(migrated_database_url: str) -> None:
+    """CSRF-like logout requests fail while repeated trusted logout succeeds."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider)
+        assert _complete(client, state).status_code == 302
+
+        missing = client.post("/api/v1/auth/logout")
+        wrong = client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "http://localhost:5173.evil.example"},
+        )
+        first = client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "http://localhost:5173"},
+        )
+        second = client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": "http://localhost:5173"},
+        )
+
+        assert missing.status_code == 403
+        assert wrong.status_code == 403
+        assert wrong.json()["error"]["code"] == "ORIGIN_NOT_ALLOWED"
+        assert first.status_code == 204
+        assert second.status_code == 204
+
+
+def test_cancelled_consent_returns_safe_frontend_error(migrated_database_url: str) -> None:
+    """Provider cancellation does not expose its raw error and preserves the route."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider, "/account")
+        response = client.get(
+            "/api/v1/auth/google/callback",
+            params={"state": state, "error": "provider-private-error"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        assert response.headers["location"] == (
+            "http://localhost:5173/login?auth_error=cancelled&return_to=%2Faccount"
+        )
+        assert "provider-private-error" not in response.headers["location"]
+        assert provider.exchange_requests == []
+
+
+def test_provider_failure_is_sanitized_and_consumes_state(migrated_database_url: str) -> None:
+    """A provider outage is safe to expose and cannot make the callback replayable."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider)
+        provider.unavailable = True
+
+        response = _complete(client, state, code="secret-provider-code")
+        replay = _complete(client, state, code="secret-provider-code")
+
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "DEPENDENCY_UNAVAILABLE"
+        assert "secret-provider-code" not in response.text
+        assert replay.status_code == 400
+        assert replay.json()["error"]["code"] == "INVALID_OAUTH_TRANSACTION"
+
+
+def test_nonce_mismatch_rejects_session_issue(migrated_database_url: str) -> None:
+    """A signed identity with a different nonce cannot create a GOAL session."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider)
+        provider.identity = replace(provider.identity, nonce="wrong-nonce")
+
+        response = _complete(client, state)
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "INVALID_OAUTH_TRANSACTION"
+        assert client.cookies.get("goal_session") is None
+
+
+def test_start_rejects_open_redirect(migrated_database_url: str) -> None:
+    """An external return_to never reaches the provider."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        response = client.get(
+            "/api/v1/auth/google/start",
+            params={"return_to": "https://evil.example/path"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "INVALID_RETURN_TO"
+        assert provider.authorization_requests == []
