@@ -176,6 +176,10 @@ erDiagram
         uuid session_id FK,UK
         uuid publisher_user_id FK
         bytea publisher_client_stream_id_hash
+        bigint last_received_sequence
+        bigint last_processed_sequence
+        bigint last_captured_offset_ms
+        timestamptz live_audio_lease_expires_at
         text status
         text content_type
         bigint byte_size
@@ -293,7 +297,7 @@ erDiagram
     lectureSessions o|--o{ outboxEvents : scopes
 ```
 
-`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않되 Session 잠금과 trigger가 연결된 행을 최대 10개로 제한한다. `session_recordings.session_id` UNIQUE는 Session당 논리 Recording을 최대 하나로, `recording_uploads(recording_id) WHERE status = 'ACTIVE'` partial UNIQUE는 active Upload을 최대 하나로 제한한다. 첫 Recording insert는 publisher `client_stream_id` HMAC claim과 원자적으로 commit하고 같은 claim만 reconnect·resume한다. Material·Recording final·Upload temp storage key는 API·공유 event·로그에 노출하지 않는다. Recording의 논리 storage locator가 단일 파일인지 fragment·manifest 집합인지는 미정이다.
+`lecture_sessions(course_id) WHERE status IN ('READY', 'LIVE', 'PROCESSING')`의 partial UNIQUE가 Course당 active class를 합계 하나로 제한한다. 이 행이 API의 `current_session`이며 없으면 `null`이다. 같은 날짜의 완료 class는 `lecture_date DESC, started_at DESC, id DESC`로 구분한다. `lecture_materials.session_id`에는 UNIQUE를 두지 않되 Session 잠금과 trigger가 연결된 행을 최대 10개로 제한한다. `session_recordings.session_id` UNIQUE는 Session당 논리 Recording을 최대 하나로, `recording_uploads(recording_id) WHERE status = 'ACTIVE'` partial UNIQUE는 active Upload을 최대 하나로 제한한다. 첫 Recording insert는 publisher `client_stream_id` HMAC claim과 원자적으로 commit하고 같은 claim만 reconnect·resume한다. `last_received_sequence`·`last_processed_sequence`·`last_captured_offset_ms`는 process 재시작 뒤에도 duplicate PCM을 제거하고 Gap을 계산하는 내부 ACK watermark이며 원문 audio나 client stream ID는 아니다. 45초 liveness 만료는 다른 stream의 takeover를 허용하지 않는다. Material·Recording final·Upload temp storage key는 API·공유 event·로그에 노출하지 않는다. Recording의 논리 storage locator가 단일 파일인지 fragment·manifest 집합인지는 미정이다.
 
 AIJob은 `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`, `SUPERSEDED` 상태를 사용한다. `FAILED`만 `retryable=true`일 때 같은 행의 `attempt + 1`로 재실행할 수 있다. `CANCELLED`는 대체 작업 없는 명시 중단이고 `SUPERSEDED`는 새 logical Job 또는 generation으로 대체된 terminal 상태다. LIVE→PROCESSING에서 FINAL clustering이 LIVE clustering을 대체하면 후자를 `SUPERSEDED`로 끝내며, timeout·lease 만료는 안전한 오류 code가 있는 `FAILED`다.
 
@@ -550,6 +554,12 @@ erDiagram
     sessionRecordings["session_recordings"] {
         uuid id PK
         uuid session_id FK,UK
+        uuid publisher_user_id FK
+        bytea publisher_client_stream_id_hash
+        bigint last_received_sequence
+        bigint last_processed_sequence
+        bigint last_captured_offset_ms
+        timestamptz live_audio_lease_expires_at
         text status
     }
 

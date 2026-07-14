@@ -108,6 +108,18 @@ class SessionRecording(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             name="session_recordings_publisher_hash_length_ck",
         ),
         CheckConstraint(
+            "last_received_sequence >= -1",
+            name="session_recordings_last_received_sequence_ck",
+        ),
+        CheckConstraint(
+            "last_processed_sequence BETWEEN -1 AND last_received_sequence",
+            name="session_recordings_last_processed_sequence_ck",
+        ),
+        CheckConstraint(
+            "last_captured_offset_ms >= 0",
+            name="session_recordings_last_capture_offset_ck",
+        ),
+        CheckConstraint(
             "status IN ('CAPTURING', 'UPLOAD_PENDING', 'UPLOADING', 'UPLOADED', 'FAILED')",
             name="session_recordings_status_ck",
         ),
@@ -158,6 +170,16 @@ class SessionRecording(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         nullable=True,
     )
     publisher_client_stream_id_hash: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
+    last_received_sequence: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("-1")
+    )
+    last_processed_sequence: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("-1")
+    )
+    last_captured_offset_ms: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    live_audio_lease_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'CAPTURING'"))
     content_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     byte_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

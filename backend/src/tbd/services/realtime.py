@@ -130,6 +130,46 @@ class RealtimeTicketService:
             resume_cursor=ticket.resume_cursor,
         )
 
+    async def consume_audio_ticket(
+        self,
+        session: AsyncSession,
+        *,
+        token: str | None,
+        session_id: UUID,
+        now: datetime | None = None,
+    ) -> RealtimeTicketAccess:
+        """Consume one professor-only LIVE audio ticket at WebSocket upgrade time."""
+
+        if not token:
+            raise RealtimeTicketInvalidError
+        timestamp = now or datetime.now(UTC)
+        ticket = await session.scalar(
+            select(RealtimeTicket)
+            .where(RealtimeTicket.ticket_hash == self._crypto.hash_token("realtime-ticket", token))
+            .with_for_update()
+        )
+        if (
+            ticket is None
+            or ticket.used_at is not None
+            or ticket.expires_at <= timestamp
+            or ticket.session_id != session_id
+            or ticket.scope != RealtimeTicketScope.SESSION_AUDIO_WRITE
+        ):
+            raise RealtimeTicketInvalidError
+        lecture_session, role = await self._require_member(
+            session, session_id=session_id, user_id=ticket.user_id
+        )
+        if role != "PROFESSOR" or lecture_session.status != "LIVE":
+            raise RealtimeScopeDeniedError
+        ticket.used_at = timestamp
+        await session.flush()
+        return RealtimeTicketAccess(
+            session_id=session_id,
+            user_id=ticket.user_id,
+            role=role,
+            resume_cursor=None,
+        )
+
     async def _require_member(
         self,
         session: AsyncSession,

@@ -11,6 +11,7 @@ from tbd.core.errors import install_exception_handlers
 from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
 from tbd.providers.google_oidc import GoogleOIDCClient, GoogleOIDCProvider
+from tbd.providers.stt import StreamingSTTProvider, UnavailableStreamingSTTProvider
 from tbd.realtime.hub import RealtimeHub
 from tbd.realtime.publisher import RealtimeOutboxPublisher
 from tbd.repositories.idempotency import IdempotencyRepository
@@ -37,6 +38,7 @@ def create_app(
     database: Database | None = None,
     google_oidc_provider: GoogleOIDCProvider | None = None,
     storage: Storage | None = None,
+    streaming_stt_provider: StreamingSTTProvider | None = None,
 ) -> FastAPI:
     """Create the HTTP application and mount its public routers."""
 
@@ -53,6 +55,7 @@ def create_app(
     app.state.database = runtime_database
     app.state.google_oidc_provider = runtime_google_oidc_provider
     app.state.storage = runtime_storage
+    app.state.streaming_stt_provider = streaming_stt_provider or UnavailableStreamingSTTProvider()
     cipher = runtime_settings.idempotency_response_cipher
     app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None
     app.state.course_join_code_codec = runtime_settings.course_join_code_codec
