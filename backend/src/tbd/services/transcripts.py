@@ -207,7 +207,13 @@ class TranscriptService:
         after = self._decode_version_cursor(cursor, scope=scope)
         statement = (
             select(TranscriptVersion)
-            .where(TranscriptVersion.session_id == session_id)
+            .where(
+                TranscriptVersion.session_id == session_id,
+                or_(
+                    TranscriptVersion.source != "RECORDING",
+                    TranscriptVersion.status != "FINALIZING",
+                ),
+            )
             .order_by(TranscriptVersion.version.desc(), TranscriptVersion.id.desc())
         )
         if after is not None:
@@ -307,6 +313,8 @@ class TranscriptService:
             else canonical or current
         )
         if selected is None:
+            raise TranscriptNotFoundError
+        if selected.source == "RECORDING" and selected.status == "FINALIZING":
             raise TranscriptNotFoundError
         aggregate = TranscriptAggregateResponse(
             session_id=lecture_session.id,

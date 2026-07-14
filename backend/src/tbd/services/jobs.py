@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tbd.jobs.kernel import JobKernel
 from tbd.models.courses import CourseMember
 from tbd.models.enums import AIJobStatus, AIJobType, AIJobVisibility, LectureSessionStatus
+from tbd.models.materials import SessionRecording, TranscriptVersion
 from tbd.models.questions import AIJob
 from tbd.models.sessions import LectureSession
+from tbd.repositories.recordings import RecordingRepository
 
 
 class JobNotFoundError(Exception):
@@ -117,14 +119,49 @@ class JobService:
                 message="이 작업은 재시도할 수 없습니다.",
             )
 
+        timestamp = now or datetime.now(UTC)
+        recording: SessionRecording | None = None
+        repository = RecordingRepository()
+        if job.job_type == AIJobType.RECORDING_TRANSCRIPTION:
+            lecture_session = await repository.lock_session(session, job.session_id)
+            recording = await repository.lock_recording_for_session(
+                session, session_id=job.session_id
+            )
+            if (
+                lecture_session is None
+                or recording is None
+                or recording.id != job.target_recording_id
+                or recording.status != "UPLOADED"
+            ):
+                raise JobRetryConflictError(
+                    code="AI_JOB_STATE_CONFLICT",
+                    message="재시도할 수 있는 녹음 원본을 찾을 수 없습니다.",
+                )
+
         retried = await self._kernel.retry_failed(
             session,
             job.id,
-            now=now or datetime.now(UTC),
+            now=timestamp,
         )
         if retried is None:
             raise JobRetryConflictError(
                 code="AI_JOB_STATE_CONFLICT",
                 message="작업 상태가 변경되어 재시도할 수 없습니다.",
             )
+        if recording is not None:
+            session.add(
+                TranscriptVersion(
+                    session_id=retried.session_id,
+                    version=await repository.next_transcript_version(
+                        session, session_id=retried.session_id
+                    ),
+                    source="RECORDING",
+                    status="FINALIZING",
+                    recording_id=recording.id,
+                    created_by_job_id=retried.id,
+                    created_by_job_attempt=retried.attempt,
+                    last_sequence=0,
+                )
+            )
+            await session.flush()
         return retried

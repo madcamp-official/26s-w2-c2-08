@@ -18,6 +18,8 @@ from tbd.db import create_database
 from tbd.models.consistency import OutboxEvent
 from tbd.models.materials import RecordingUpload, SessionRecording, TranscriptVersion
 from tbd.models.questions import AIJob
+from tbd.providers.stt import BatchSTTSegment, DeterministicBatchSTTProvider
+from tbd.services.recording_transcription import RecordingTranscriptionWorker
 from tbd.services.recordings import RecordingService
 from tbd.storage import InMemoryStorage, Storage, StorageKey, StorageNamespace
 
@@ -325,6 +327,35 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
     )
     assert "storage_key" not in event_payload
     assert "publisher_client_stream_id_hash" not in event_payload
+
+    hq_database = create_database(_settings(migrated_database_url, tmp_path))
+    try:
+        worker = RecordingTranscriptionWorker(
+            hq_database.session_factory,
+            storage,
+            DeterministicBatchSTTProvider(
+                (
+                    BatchSTTSegment(
+                        start_ms=0,
+                        end_ms=500,
+                        recording_start_ms=0,
+                        recording_end_ms=500,
+                        text="녹음 기반 final 문장",
+                    ),
+                )
+            ),
+        )
+        assert asyncio.run(worker.run_once()) is True
+    finally:
+        asyncio.run(hq_database.dispose())
+
+    _, _, processed_version, processed_job, processed_event_types = asyncio.run(
+        _recording_rows(migrated_database_url, tmp_path, UUID(session_id))
+    )
+    assert processed_version.status == "FINALIZED"
+    assert processed_version.last_sequence == 1
+    assert processed_job.status == "SUCCEEDED"
+    assert "transcript.version.updated" in processed_event_types
     asyncio.run(database.dispose())
 
 

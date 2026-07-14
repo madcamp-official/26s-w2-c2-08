@@ -26,6 +26,7 @@ PUBLIC_EVENT_TYPES = frozenset(
         "clustering.updated",
         "transcript.final",
         "transcript.status",
+        "transcript.version.updated",
     }
 )
 
