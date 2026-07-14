@@ -11,6 +11,7 @@ from tbd.models.clustering import (
     QuestionClusterMember,
 )
 from tbd.models.common import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
+from tbd.models.consistency import IdempotencyRecord, OutboxEvent
 from tbd.models.courses import Course, CourseMember
 from tbd.models.knowledge import (
     ChatMessage,
@@ -44,11 +45,13 @@ __all__ = [
     "ChatSession",
     "Course",
     "CourseMember",
+    "IdempotencyRecord",
     "LectureMaterial",
     "LectureSession",
     "LectureSummary",
     "KnowledgeChunk",
     "OAuthTransaction",
+    "OutboxEvent",
     "Question",
     "QuestionCluster",
     "QuestionClusterMember",
