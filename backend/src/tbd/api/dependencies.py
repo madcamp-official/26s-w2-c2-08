@@ -58,6 +58,14 @@ async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
         yield session
 
 
+async def get_course_authorization_session(request: Request) -> AsyncIterator[AsyncSession]:
+    """Use an isolated read session so mutation transactions start cleanly."""
+
+    database = get_database(request)
+    async with database.session_factory() as session:
+        yield session
+
+
 async def get_current_user(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -123,7 +131,7 @@ def get_course_join_code_codec(request: Request) -> CourseJoinCodeCodec:
 
 async def require_course_member(
     course_id: str,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    session: Annotated[AsyncSession, Depends(get_course_authorization_session)],
     user_id: Annotated[UUID, Depends(get_current_user_id)],
 ) -> CourseView:
     """Authorize an existing Course through the current user's membership."""
