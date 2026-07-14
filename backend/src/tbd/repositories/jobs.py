@@ -232,6 +232,7 @@ class JobRepository:
             job.run_token = None
             job.lease_expires_at = None
             job.finished_at = timestamp
+            job.retryable = True
             job.error_code = "JOB_TIMEOUT" if timed_out else "WORKER_LEASE_EXPIRED"
             job.error_message = "작업 실행이 제한 시간을 초과했습니다."
             job.version += 1
