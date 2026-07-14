@@ -78,7 +78,9 @@ def test_record_manifest_is_bounded_and_available_while_processing(
             assert not_ready.json()["error"]["code"] == "SESSION_STATE_CONFLICT"
 
             assert (
-                client.post(f"/api/v1/sessions/{session_id}/start", headers=TRUSTED_ORIGIN).status_code
+                client.post(
+                    f"/api/v1/sessions/{session_id}/start", headers=TRUSTED_ORIGIN
+                ).status_code
                 == 200
             )
             ended = client.post(

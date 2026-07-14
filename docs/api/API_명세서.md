@@ -1220,6 +1220,7 @@ GET /api/v1/sessions/{session_id}/jobs?job_type=<type>&status=<status>&cursor=<c
 - 권한: Course 멤버
 - 자료 처리, 질문 클러스터링, `ANSWER_ORGANIZATION`, `RECORDING_TRANSCRIPTION`과 Session 후처리처럼 참여자가 상태를 알아야 하는 공용 Job만 반환한다.
 - 목록은 `created_at DESC, id DESC`로 안정적으로 정렬하며 `job_type`, `status`를 cursor에 고정한다.
+- 잘못된 Session UUID·`job_type`·`status`·cursor·`limit` 형식 또는 `limit` 범위는 `422 VALIDATION_ERROR`다. 형식은 맞지만 서명이 틀리거나 현재 필터와 맞지 않는 cursor는 `400 INVALID_CURSOR`다.
 - 개인 LIVE 요약과 Chat Job은 포함하지 않는다. 질문 초안은 동기 `200` 응답이며 Job이 아니다.
 - `QUESTION_CLUSTERING`은 `clustering_mode`, input watermark, base revision을 공개한다. LIVE 실패 재시도는 시스템이 같은 Job 행의 `attempt + 1`로 수행한다. Session 종료가 대체한 LIVE 실행은 `SUPERSEDED`, `retryable=false`로 다시 실행하지 않는다. 최종 clustering 실패는 `COMPLETED` 기록에서 교수자가 같은 Job 행을 재시도할 수 있고 Session을 `PROCESSING`으로 되돌리지 않는다.
 - 현재 generation을 만든 성공 `QUESTION_CLUSTERING`의 result는 단일 Cluster가 아니라 `resource_type=QUESTION_CLUSTER_GENERATION`, 문자열 generation 번호인 `resource_id`, 해당 scope Cluster 목록 `resource_url`을 반환한다. 새 generation으로 교체되면 과거 Job은 `SUPERSEDED` 규칙을 따른다.
@@ -1239,6 +1240,7 @@ GET /api/v1/sessions/{session_id}/record
 
 - 권한: Course 멤버
 - 허용 Session 상태: `PROCESSING`, `COMPLETED`
+- 잘못된 Session UUID는 `422 VALIDATION_ERROR`다.
 - `/record`는 큰 배열을 담는 aggregate가 아니라 수업 기록의 유한한 manifest·index다. Session과 권한이 허용한 nullable Recording 메타데이터는 직접 반환하지만 Summary 본문과 Material·Transcript Segment·Gap·질문·Cluster·Answer·Job 배열은 포함하지 않는다.
 - 대신 각 영역의 `total_count`와 cursor 목록 `list_url`을 반환한다. Transcript는 선택 version의 `selected_version_id`, `segment_count`, `gap_count`, `timeline_url`, `versions_url`을, Cluster는 `clustering_state`와 `CURRENT`·`FINAL` 각각의 count·URL을 반환한다. 모든 URL은 `session_id`와 필요한 stable filter를 포함하고 cursor나 배열 순번을 포함하지 않는다.
 - `transcript.selected_version_id`가 non-null이면 `timeline_url`은 정확히 `/api/v1/sessions/{session_id}/transcript?transcript_version_id={selected_version_id}` 형태로 같은 ID를 고정한다. `selected_version_id=null`이면 query 없는 `/api/v1/sessions/{session_id}/transcript`만 반환한다.

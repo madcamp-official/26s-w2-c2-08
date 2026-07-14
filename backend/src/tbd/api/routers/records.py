@@ -26,7 +26,9 @@ def _raise_record_error(error: Exception) -> NoReturn:
     if isinstance(error, RecordNotFoundError):
         raise ApiError(404, "RESOURCE_NOT_FOUND", "요청한 class를 찾을 수 없습니다.") from error
     if isinstance(error, RecordAccessDeniedError):
-        raise ApiError(403, "COURSE_ACCESS_DENIED", "이 Course에 접근할 권한이 없습니다.") from error
+        raise ApiError(
+            403, "COURSE_ACCESS_DENIED", "이 Course에 접근할 권한이 없습니다."
+        ) from error
     if isinstance(error, RecordSessionStateError):
         raise ApiError(
             409,
@@ -54,8 +56,6 @@ async def get_session_record(
     """Return a bounded record manifest; each linked collection loads independently."""
 
     try:
-        return await RecordService().get_for_member(
-            session, session_id=session_id, user_id=user_id
-        )
+        return await RecordService().get_for_member(session, session_id=session_id, user_id=user_id)
     except Exception as exc:
         _raise_record_error(exc)

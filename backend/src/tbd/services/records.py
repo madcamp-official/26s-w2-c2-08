@@ -95,7 +95,9 @@ class RecordService:
         )
         question_count = await self._count(
             session,
-            select(func.count()).select_from(Question).where(Question.session_id == lecture_session.id),
+            select(func.count())
+            .select_from(Question)
+            .where(Question.session_id == lecture_session.id),
         )
         answer_count = await self._count(
             session,
@@ -135,10 +137,12 @@ class RecordService:
             question_clusters=RecordQuestionClustersIndex(
                 state=clustering_state[0],
                 current=RecordCollectionIndex(
-                    total_count=clustering_state[1], list_url=f"{base}/question-clusters?scope=CURRENT"
+                    total_count=clustering_state[1],
+                    list_url=f"{base}/question-clusters?scope=CURRENT",
                 ),
                 final=RecordCollectionIndex(
-                    total_count=clustering_state[2], list_url=f"{base}/question-clusters?scope=FINAL"
+                    total_count=clustering_state[2],
+                    list_url=f"{base}/question-clusters?scope=FINAL",
                 ),
             ),
             answers=RecordCollectionIndex(total_count=answer_count, list_url=f"{base}/answers"),
@@ -250,7 +254,11 @@ class RecordService:
             session, lecture_session.id, state.current_generation
         )
         final_count = await self._cluster_count(session, lecture_session.id, state.final_generation)
-        return QuestionService.project_clustering_state(state, active=active), current_count, final_count
+        return (
+            QuestionService.project_clustering_state(state, active=active),
+            current_count,
+            final_count,
+        )
 
     async def _cluster_count(
         self, session: AsyncSession, session_id: UUID, generation: int | None
@@ -261,7 +269,9 @@ class RecordService:
             session,
             select(func.count())
             .select_from(QuestionCluster)
-            .where(QuestionCluster.session_id == session_id, QuestionCluster.generation == generation),
+            .where(
+                QuestionCluster.session_id == session_id, QuestionCluster.generation == generation
+            ),
         )
 
     @staticmethod
