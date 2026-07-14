@@ -3858,6 +3858,7 @@ components:
         - SESSION_POSTPROCESSING
         - RECORDING_TRANSCRIPTION
         - ANSWER_ORGANIZATION
+        - KNOWLEDGE_INDEXING
       description: 사용자에게 공개하는 작업 purpose. provider 내부 작업명은 노출하지 않음
 
     SharedAIJobType:
@@ -3869,6 +3870,7 @@ components:
         - SESSION_POSTPROCESSING
         - RECORDING_TRANSCRIPTION
         - ANSWER_ORGANIZATION
+        - KNOWLEDGE_INDEXING
       description: Session 공용 Job 목록에서 조회할 수 있는 유형
 
     RealtimeTicketScope:

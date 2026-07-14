@@ -3,10 +3,12 @@
 from datetime import datetime
 from uuid import UUID
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     ForeignKey,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
@@ -19,12 +21,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from tbd.models.base import Base
 from tbd.models.common import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 
+KNOWLEDGE_EMBEDDING_DIMENSION = 8
+
 
 class KnowledgeChunk(UUIDPrimaryKeyMixin, Base):
     """A scoped RAG source with one typed source reference.
 
-    The vector column and model-specific index are intentionally deferred to PR-18,
-    where the embedding dimension is selected.
+    Development and CI use the fixed eight-dimensional deterministic profile.  A
+    production provider with a different dimension requires a dedicated migration
+    and complete reindex, rather than mixing vectors in this table.
     """
 
     __tablename__ = "knowledge_chunks"
@@ -56,6 +61,13 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, Base):
             "page_number IS NULL OR material_id IS NOT NULL",
             name="knowledge_chunks_page_material_ck",
         ),
+        Index(
+            "knowledge_chunks_embedding_hnsw_idx",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
     )
 
     course_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
@@ -83,6 +95,10 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, Base):
     page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(KNOWLEDGE_EMBEDDING_DIMENSION), nullable=False
+    )
+    embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
     created_by_job_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
     created_by_job_attempt: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))

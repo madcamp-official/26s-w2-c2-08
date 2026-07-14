@@ -837,6 +837,13 @@ erDiagram
 - 기존 Chat Evidence가 참조하는 과거 version Chunk는 provenance로 유지하되 새 검색에는 섞지 않는다.
 - `answer_id` source는 교수 수동 `answers.text_content`만 나타낸다. AI 정리 본문의 재색인 여부와 provenance 연결은 후속 정책이다.
 
+현재 구현 profile은 `fake-embedding-v1`의 고정 8차원 vector와 cosine HNSW
+`m=16`, `ef_construction=64`이다. 이는 개발·CI용 deterministic adapter를 저장 경계에
+연결한 것이며 실제 외부 embedding provider의 선택을 뜻하지 않는다. 다른 차원의 provider는
+기존 vector와 혼합하지 않고 migration·전량 재색인 계약을 거쳐야 한다. `KNOWLEDGE_INDEXING`
+SHARED Job은 Session 범위의 READY Material, canonical Transcript final Segment와 존재하는
+수동 Answer text를 멱등 점검하며, Session당 active Job은 하나다.
+
 `chat_message_evidence`는 내부 `knowledge_chunk_id`와 순위뿐 아니라 Evidence 생성 시점의
 non-null 안전한 `label_snapshot`을 보관하고 이를 공개 `label`로 projection한다. 공개
 `source_kind`는 Chunk의 typed FK를 `MATERIAL`, `TRANSCRIPT`, `QUESTION`, `ANSWER`로

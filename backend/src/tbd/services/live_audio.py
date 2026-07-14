@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.auth.security import AuthCrypto
 from tbd.core.config import Settings
+from tbd.jobs.kernel import JobKernel
 from tbd.models.courses import CourseMember
 from tbd.models.materials import (
     SessionRecording,
@@ -20,6 +21,7 @@ from tbd.models.sessions import LectureSession
 from tbd.providers.stt import STTFinal
 from tbd.realtime.audio import AudioFrame
 from tbd.repositories.outbox import OutboxRepository
+from tbd.services.knowledge import enqueue_knowledge_indexing
 
 LIVE_AUDIO_LEASE = timedelta(seconds=45)
 
@@ -99,6 +101,7 @@ class LiveAudioService:
     def __init__(self, settings: Settings, outbox: OutboxRepository | None = None) -> None:
         self._crypto = AuthCrypto(settings.auth_secret_key.get_secret_value())
         self._outbox = outbox or OutboxRepository()
+        self._kernel = JobKernel(outbox=self._outbox)
 
     async def claim_publisher(
         self,
@@ -315,6 +318,11 @@ class LiveAudioService:
                 "utterance_id": projection.utterance_id,
                 "segment": self._final_event_segment(projection),
             },
+        )
+        await enqueue_knowledge_indexing(
+            session,
+            session_id=lecture_session.id,
+            kernel=self._kernel,
         )
         return projection
 

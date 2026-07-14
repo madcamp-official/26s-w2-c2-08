@@ -31,6 +31,7 @@ from tbd.services.courses import (
     CourseNotFoundError,
     CourseRoleRequiredError,
 )
+from tbd.services.knowledge import enqueue_knowledge_indexing
 from tbd.storage import Storage, StorageError, StorageKey, StorageNamespace, sha256_bytes
 
 MATERIAL_MAX_COUNT: Final = 10
@@ -520,8 +521,9 @@ class MaterialProcessingWorker:
     ) -> None:
         async with self.session_factory() as session:
             async with session.begin():
+                lecture_session = await self.repository.lock_session(session, claimed.session_id)
                 material = await self.repository.lock_material(session, claimed.material_id)
-                if not self._is_current(material, claimed):
+                if lecture_session is None or not self._is_current(material, claimed):
                     await self.kernel.cancel(session, claimed.job_id, now=now)
                     return
                 run = self._as_run(claimed)
@@ -533,6 +535,11 @@ class MaterialProcessingWorker:
                 material.processed_by_job_id = claimed.job_id
                 material.processed_by_job_attempt = claimed.attempt
                 material.version += 1
+                await enqueue_knowledge_indexing(
+                    session,
+                    session_id=claimed.session_id,
+                    kernel=self.kernel,
+                )
                 await session.flush()
 
     async def _finish_failure(
