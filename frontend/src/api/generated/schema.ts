@@ -3580,6 +3580,26 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description 외부 저장소 또는 필수 의존성을 일시적으로 사용할 수 없음 */
+        DependencyUnavailable: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "STORAGE_UNAVAILABLE",
+                 *         "message": "파일 저장소를 일시적으로 사용할 수 없습니다.",
+                 *         "request_id": "req_01HXYZ",
+                 *         "details": null
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Course 멤버십 또는 Course별 역할 권한이 없음 */
         Forbidden: {
             headers: {
@@ -5111,6 +5131,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     uploadSessionMaterial: {
@@ -5174,6 +5195,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     getMaterial: {
@@ -5203,6 +5225,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["MaterialNotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     detachMaterial: {
@@ -5248,6 +5271,8 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["MaterialNotFound"];
             409: components["responses"]["MaterialDetachConflict"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     downloadMaterialContent: {
@@ -5279,6 +5304,8 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["MaterialNotFound"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     listSessionTranscriptTimeline: {

@@ -7,6 +7,8 @@ import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
+import { MaterialPanel } from '../materials/MaterialPanel'
+import { sessionMaterialsQueryOptions } from '../materials/queries'
 import {
   deleteSession,
   endSession,
@@ -51,6 +53,7 @@ export function SessionDetailPage() {
     ...courseDetailQueryOptions(session.data?.course_id ?? ''),
     enabled: Boolean(session.data),
   })
+  const materials = useQuery(sessionMaterialsQueryOptions(sessionId))
   const [title, setTitle] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const endKey = useRef<string | null>(null)
@@ -127,6 +130,9 @@ export function SessionDetailPage() {
   const [statusTitle, statusDescription] = statusCopy(data.status)
   const canDelete = data.status === 'READY' || data.status === 'COMPLETED'
   const professor = course.data?.role === 'PROFESSOR'
+  const hasProcessingMaterial = materials.data?.items.some(
+    (material) => material.processing_status === 'PROCESSING',
+  )
 
   return (
     <section
@@ -185,12 +191,20 @@ export function SessionDetailPage() {
                 {rename.isPending ? '저장 중…' : '제목 저장'}
               </Button>
               {data.status === 'READY' && (
-                <Button
-                  disabled={start.isPending}
-                  onClick={() => start.mutate()}
-                >
-                  {start.isPending ? '시작 중…' : '수업 시작'}
-                </Button>
+                <>
+                  <Button
+                    disabled={start.isPending || Boolean(hasProcessingMaterial)}
+                    onClick={() => start.mutate()}
+                  >
+                    {start.isPending ? '시작 중…' : '수업 시작'}
+                  </Button>
+                  {hasProcessingMaterial && (
+                    <span className="input-hint">
+                      처리 중인 강의자료가 완료되거나 실패하면 수업을 시작할 수
+                      있습니다.
+                    </span>
+                  )}
+                </>
               )}
               {data.status === 'LIVE' && (
                 <Button
@@ -238,6 +252,11 @@ export function SessionDetailPage() {
           </p>
         )}
       </div>
+      <MaterialPanel
+        sessionId={data.id}
+        professor={professor}
+        sessionStatus={data.status}
+      />
       {professor && (
         <Dialog
           open={deleteOpen}
