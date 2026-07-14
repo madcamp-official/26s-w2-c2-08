@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 
 import type { CourseRoleFilter } from './api'
 import { getCourse, getSession, listCourseSessions, listCourses } from './api'
@@ -8,13 +8,29 @@ export const courseKeys = {
   list: (role: CourseRoleFilter) => ['courses', 'list', role] as const,
   detail: (courseId: string) => ['courses', 'detail', courseId] as const,
   sessions: (courseId: string) => ['courses', courseId, 'sessions'] as const,
+  completedSessions: (courseId: string) =>
+    ['courses', courseId, 'sessions', 'COMPLETED'] as const,
   session: (sessionId: string) => ['sessions', 'detail', sessionId] as const,
 }
 
 export function courseSessionsQueryOptions(courseId: string) {
   return queryOptions({
     queryKey: courseKeys.sessions(courseId),
-    queryFn: ({ signal }) => listCourseSessions(courseId, signal),
+    queryFn: ({ signal }) => listCourseSessions(courseId, {}, signal),
+  })
+}
+
+export function courseCompletedSessionsInfiniteQueryOptions(courseId: string) {
+  return infiniteQueryOptions({
+    queryKey: courseKeys.completedSessions(courseId),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) =>
+      listCourseSessions(
+        courseId,
+        { status: 'COMPLETED', cursor: pageParam, limit: 20 },
+        signal,
+      ),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
   })
 }
 

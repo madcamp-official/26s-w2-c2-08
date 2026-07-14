@@ -4,6 +4,11 @@ import { AppShell } from '../components/layout/AppShell'
 import { AccountPage } from '../features/auth/AccountPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { SignupPage } from '../features/auth/SignupPage'
+import { CourseMaterialsPage } from '../features/course-workspace/CourseMaterialsPage'
+import { CourseQnaPage } from '../features/course-workspace/CourseQnaPage'
+import { CourseSummariesPage } from '../features/course-workspace/CourseSummariesPage'
+import { CourseTranscriptsPage } from '../features/course-workspace/CourseTranscriptsPage'
+import { CourseWorkspaceLayout } from '../features/course-workspace/CourseWorkspaceLayout'
 import { AuthenticatedCourseArea } from '../features/courses/auth-guard'
 import { CourseCreatePage } from '../features/courses/CourseCreatePage'
 import { CourseDetailPage } from '../features/courses/CourseDetailPage'
@@ -56,9 +61,31 @@ export const appRoutes: RouteObject[] = [
         path: 'courses/:courseId',
         element: (
           <AuthenticatedCourseArea>
-            <CourseDetailPage />
+            <CourseWorkspaceLayout />
           </AuthenticatedCourseArea>
         ),
+        children: [
+          {
+            index: true,
+            element: <CourseDetailPage />,
+          },
+          {
+            path: 'materials',
+            element: <CourseMaterialsPage />,
+          },
+          {
+            path: 'transcripts',
+            element: <CourseTranscriptsPage />,
+          },
+          {
+            path: 'summaries',
+            element: <CourseSummariesPage />,
+          },
+          {
+            path: 'qna',
+            element: <CourseQnaPage />,
+          },
+        ],
       },
       {
         path: 'courses/:courseId/sessions/new',
