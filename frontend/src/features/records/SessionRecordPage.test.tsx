@@ -122,14 +122,14 @@ function record(status: 'PROCESSING' | 'COMPLETED') {
   }
 }
 
-function renderPage() {
+function renderPage(professor = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   render(
     <QueryClientProvider client={client}>
       <ToastProvider>
-        <SessionRecordPage sessionId={sessionId} professor={false} />
+        <SessionRecordPage sessionId={sessionId} professor={professor} />
       </ToastProvider>
     </QueryClientProvider>,
   )
@@ -251,5 +251,215 @@ describe('SessionRecordPage', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/음성이 누락된 구간입니다/)).toBeInTheDocument()
     expect(screen.getByText('복습 AI')).toBeInTheDocument()
+  })
+
+  it('keeps record management controls out of the student DOM', async () => {
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json(record('COMPLETED')),
+      ),
+      http.get('*/api/v1/sessions/:id/summaries', () =>
+        HttpResponse.json({
+          summary_status: 'AVAILABLE',
+          summary_reason: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/transcript', () =>
+        HttpResponse.json({
+          transcript: record('COMPLETED').transcript.state,
+          selected_version: {},
+          segments: [],
+          gaps: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/questions', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'question-1',
+              session_id: sessionId,
+              content: '라우팅 테이블은 어떻게 갱신되나요?',
+              status: 'OPEN',
+              version: 1,
+              clustering_sequence: 1,
+              reaction_count: 2,
+              reacted_by_me: false,
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: record('COMPLETED').question_clusters.state,
+          generation: 1,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/jobs', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'failed-final-clustering',
+              session_id: sessionId,
+              job_type: 'QUESTION_CLUSTERING',
+              visibility: 'SHARED',
+              status: 'FAILED',
+              attempt: 1,
+              version: 1,
+              progress: null,
+              retryable: true,
+              blocks_session_completion: true,
+              clustering: {
+                mode: 'FINAL',
+                input_through_sequence: 1,
+                base_revision: 1,
+                final_answered_through_at: '2026-07-14T02:00:00Z',
+              },
+              error: {
+                code: 'PROVIDER_UNAVAILABLE',
+                message: '최종 분류를 완료하지 못했습니다.',
+              },
+              target: {
+                resource_type: 'SESSION',
+                resource_id: sessionId,
+                resource_url: null,
+              },
+              result: null,
+              result_unavailable_reason: null,
+              created_at: '2026-07-14T02:00:00Z',
+              updated_at: '2026-07-14T02:00:00Z',
+              started_at: '2026-07-14T02:00:00Z',
+              finished_at: '2026-07-14T02:01:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    renderPage(false)
+
+    expect(await screen.findByText('수업 질문')).toBeInTheDocument()
+    expect(
+      await screen.findByText('라우팅 테이블은 어떻게 갱신되나요?'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('미답변 학생 질문에 텍스트 답변'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '다시 시도' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows only allowed shared-job retries to a professor', async () => {
+    const failedJob = (
+      id: string,
+      jobType: string,
+      clustering: unknown = null,
+    ) => ({
+      id,
+      session_id: sessionId,
+      job_type: jobType,
+      visibility: 'SHARED',
+      status: 'FAILED',
+      attempt: 1,
+      version: 1,
+      progress: null,
+      retryable: true,
+      blocks_session_completion: true,
+      clustering,
+      error: { code: 'PROVIDER_UNAVAILABLE', message: '처리하지 못했습니다.' },
+      target: {
+        resource_type: 'SESSION',
+        resource_id: sessionId,
+        resource_url: null,
+      },
+      result: null,
+      result_unavailable_reason: null,
+      created_at: '2026-07-14T02:00:00Z',
+      updated_at: '2026-07-14T02:00:00Z',
+      started_at: '2026-07-14T02:00:00Z',
+      finished_at: '2026-07-14T02:01:00Z',
+    })
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json(record('COMPLETED')),
+      ),
+      http.get('*/api/v1/sessions/:id/summaries', () =>
+        HttpResponse.json({
+          summary_status: 'AVAILABLE',
+          summary_reason: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/transcript', () =>
+        HttpResponse.json({
+          transcript: record('COMPLETED').transcript.state,
+          selected_version: {},
+          segments: [],
+          gaps: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/questions', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: record('COMPLETED').question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/jobs', () =>
+        HttpResponse.json({
+          items: [
+            failedJob('final-clustering', 'QUESTION_CLUSTERING', {
+              mode: 'FINAL',
+              input_through_sequence: 1,
+              base_revision: 1,
+              final_answered_through_at: '2026-07-14T02:00:00Z',
+            }),
+            failedJob('answer-organization', 'ANSWER_ORGANIZATION'),
+            failedJob('hq-stt', 'RECORDING_TRANSCRIPTION'),
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    renderPage(true)
+
+    expect(await screen.findByText('수업 후처리 작업')).toBeInTheDocument()
+    expect(
+      await screen.findAllByRole('button', { name: '다시 시도' }),
+    ).toHaveLength(2)
+    expect(screen.getByText('고품질 Transcript')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /고품질 Transcript는 수업 기록의 신뢰성을 위해 여기서 재시도하지 않습니다/,
+      ),
+    ).toBeInTheDocument()
   })
 })

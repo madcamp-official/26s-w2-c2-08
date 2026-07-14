@@ -26,6 +26,7 @@ import {
 } from './api'
 import { FinalQuestionMindmap } from './FinalQuestionMindmap'
 import { RecordAnswerPanel } from './RecordAnswerPanel'
+import { RecordJobsPanel } from './RecordJobsPanel'
 import { RecordQuestionPanel } from './RecordQuestionPanel'
 import { recordKeys, recordManifestQueryOptions } from './queries'
 
@@ -534,6 +535,10 @@ export function SessionRecordPage({
               onFocusTranscriptRange={(startSequence, endSequence) =>
                 setHighlightRange({ startSequence, endSequence })
               }
+            />
+            <RecordJobsPanel
+              sessionId={data.session.id}
+              professor={professor}
             />
             <PersonalAiPanel sessionId={data.session.id} mode="REVIEW" />
           </>
