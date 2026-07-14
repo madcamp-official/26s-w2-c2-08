@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from tbd.core.errors import ApiError
 from tbd.db import Database
 from tbd.models.users import User
 from tbd.providers.google_oidc import GoogleOIDCProvider
+from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.services.auth_sessions import AuthSessionService, InvalidSessionError
 
 
@@ -75,3 +77,24 @@ async def get_current_user(
             code="INVALID_SESSION",
             message="로그인 세션이 만료되었거나 유효하지 않습니다.",
         ) from exc
+
+
+async def get_current_user_id(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UUID:
+    """Project the verified server-session user to the ID expected by services."""
+
+    return current_user.id
+
+
+def get_idempotency_repository(request: Request) -> IdempotencyRepository:
+    """Return the configured encrypted response repository or fail closed."""
+
+    repository = request.app.state.idempotency_repository
+    if repository is None:
+        raise ApiError(
+            status_code=503,
+            code="DEPENDENCY_UNAVAILABLE",
+            message="멱등성 응답 암호화 설정을 사용할 수 없습니다.",
+        )
+    return repository

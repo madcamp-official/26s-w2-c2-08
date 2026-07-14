@@ -97,6 +97,8 @@ class AIJobStatus(StrEnum):
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    SUPERSEDED = "SUPERSEDED"
 
 
 class AIJobVisibility(StrEnum):
