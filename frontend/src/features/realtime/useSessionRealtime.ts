@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { courseKeys } from '../courses/queries'
 import { questionKeys } from '../questions/queries'
 import { answerKeys } from '../answers/queries'
+import { materialKeys } from '../materials/queries'
 
 import { createRealtimeTicket } from './api'
 import {
@@ -50,6 +51,12 @@ export function useSessionRealtime({
       })
       void queryClient.invalidateQueries({
         queryKey: answerKeys.session(sessionId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: materialKeys.session(sessionId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: materialKeys.jobs(sessionId),
       })
     }
     const client = new RealtimeSessionClient({

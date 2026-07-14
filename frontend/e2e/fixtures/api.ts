@@ -2,7 +2,12 @@ import type { Page, Route } from '@playwright/test'
 
 import {
   completedSession,
+  failedMaterial,
+  failedMaterialJob,
   professorCourse,
+  professorDraftCourse,
+  readyMaterial,
+  readySession,
   studentCourse,
   studentWorkspaceCourse,
   visualUser,
@@ -18,6 +23,30 @@ interface ApiFixtureResult {
 const jsonHeaders = {
   'cache-control': 'no-store',
   'content-type': 'application/json; charset=utf-8',
+}
+
+export async function installRealtimeSocketFixture(page: Page) {
+  await page.addInitScript(() => {
+    class VisualWebSocket {
+      onclose: (() => void) | null = null
+      onerror: (() => void) | null = null
+      onmessage: ((event: MessageEvent<string>) => void) | null = null
+      onopen: (() => void) | null = null
+
+      constructor() {
+        queueMicrotask(() => this.onopen?.())
+      }
+
+      close() {
+        this.onclose?.()
+      }
+    }
+
+    Object.defineProperty(window, 'WebSocket', {
+      configurable: true,
+      value: VisualWebSocket,
+    })
+  })
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -66,6 +95,19 @@ export async function installApiFixture(
       return
     }
 
+    if (
+      request.method() === 'POST' &&
+      url.pathname === '/api/v1/realtime-tickets'
+    ) {
+      await fulfillJson(route, {
+        ticket: 'visual-session-events-ticket',
+        session_id: readySession.id,
+        scope: 'SESSION_EVENTS_READ',
+        expires_at: '2026-07-15T07:01:00Z',
+      })
+      return
+    }
+
     if (request.method() === 'GET' && url.pathname === '/api/v1/courses') {
       const role = url.searchParams.get('role')
       const items =
@@ -86,7 +128,9 @@ export async function installApiFixture(
         route,
         courseDetailMatch[1] === studentCourse.id
           ? studentWorkspaceCourse
-          : professorCourse,
+          : courseDetailMatch[1] === professorDraftCourse.id
+            ? professorDraftCourse
+            : professorCourse,
       )
       return
     }
@@ -110,6 +154,45 @@ export async function installApiFixture(
                   course_id: courseSessionsMatch[1],
                 },
               ],
+        next_cursor: null,
+      })
+      return
+    }
+
+    if (request.method() === 'POST' && courseSessionsMatch) {
+      await fulfillJson(
+        route,
+        { ...readySession, course_id: courseSessionsMatch[1] },
+        201,
+      )
+      return
+    }
+
+    const sessionDetailMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)$/,
+    )
+    if (request.method() === 'GET' && sessionDetailMatch) {
+      await fulfillJson(route, readySession)
+      return
+    }
+
+    const sessionMaterialsMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/materials$/,
+    )
+    if (request.method() === 'GET' && sessionMaterialsMatch) {
+      await fulfillJson(route, {
+        items: [readyMaterial, failedMaterial],
+        next_cursor: null,
+      })
+      return
+    }
+
+    const sessionJobsMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/jobs$/,
+    )
+    if (request.method() === 'GET' && sessionJobsMatch) {
+      await fulfillJson(route, {
+        items: [failedMaterialJob],
         next_cursor: null,
       })
       return

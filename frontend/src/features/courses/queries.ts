@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 
-import type { CourseRoleFilter } from './api'
+import type { CourseRoleFilter, LectureSession } from './api'
 import { getCourse, getSession, listCourseSessions, listCourses } from './api'
 
 export const courseKeys = {
@@ -13,6 +13,12 @@ export const courseKeys = {
   completedSessions: (courseId: string) =>
     ['courses', courseId, 'sessions', 'COMPLETED'] as const,
   session: (sessionId: string) => ['sessions', 'detail', sessionId] as const,
+}
+
+export function sessionNeedsStatusPolling(
+  session: Pick<LectureSession, 'status'> | undefined,
+) {
+  return session?.status === 'READY'
 }
 
 export function courseSessionsQueryOptions(courseId: string) {
@@ -40,6 +46,8 @@ export function sessionQueryOptions(sessionId: string) {
   return queryOptions({
     queryKey: courseKeys.session(sessionId),
     queryFn: ({ signal }) => getSession(sessionId, signal),
+    refetchInterval: (query) =>
+      sessionNeedsStatusPolling(query.state.data) ? 5_000 : false,
   })
 }
 

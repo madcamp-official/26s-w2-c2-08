@@ -75,8 +75,39 @@ export async function verifyVisualPage(
         },
       }))
 
+    const overflowingElements = Array.from(
+      document.body.querySelectorAll<HTMLElement>('*'),
+    )
+      .filter((element) => {
+        const style = getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          (rect.left < -1 || rect.right > root.clientWidth + 1)
+        )
+      })
+      .slice(-20)
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          element: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${
+            element.className && typeof element.className === 'string'
+              ? `.${element.className.trim().replaceAll(/\s+/g, '.')}`
+              : ''
+          }`,
+          rect: {
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+            width: Math.round(rect.width),
+          },
+        }
+      })
+
     return {
       clientWidth: root.clientWidth,
+      overflowingElements,
       scrollWidth: root.scrollWidth,
       smallControls,
     }
@@ -86,6 +117,10 @@ export async function verifyVisualPage(
     layout.scrollWidth,
     `horizontal overflow: ${JSON.stringify(layout)}`,
   ).toBeLessThanOrEqual(layout.clientWidth + 1)
+  expect(
+    layout.overflowingElements,
+    `elements outside the viewport: ${JSON.stringify(layout)}`,
+  ).toEqual([])
   expect(
     layout.smallControls,
     'visible primary controls smaller than 44px',

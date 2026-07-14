@@ -5,6 +5,7 @@ interface PageHeaderProps {
   description?: ReactNode
   eyebrow?: string
   title: string
+  titleId?: string
 }
 
 export function PageHeader({
@@ -12,12 +13,13 @@ export function PageHeader({
   description,
   eyebrow,
   title,
+  titleId,
 }: PageHeaderProps) {
   return (
     <header className="ui-page-header">
       <div className="ui-page-header__copy">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-        <h1>{title}</h1>
+        <h1 id={titleId}>{title}</h1>
         {description && (
           <div className="ui-page-header__description">{description}</div>
         )}
