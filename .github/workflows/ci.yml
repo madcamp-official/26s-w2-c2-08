@@ -33,7 +33,7 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -71,6 +71,23 @@ jobs:
 
       - name: Build
         run: make frontend-build
+
+      - name: Install Chromium for production-route visual checks
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps --no-shell chromium
+
+      - name: Verify production routes at three viewports
+        run: make frontend-visual
+
+      - name: Upload production-route visual evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-visual-${{ github.run_attempt }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
 
   backend:
     name: Backend
