@@ -14,6 +14,8 @@ def main() -> None:
         host=settings.app_host,
         port=settings.app_port,
         reload=settings.app_env == "development",
+        ws_ping_interval=20,
+        ws_ping_timeout=40,
     )
 
 

@@ -9,6 +9,7 @@ from tbd.models.enums import AIJobVisibility
 from tbd.models.questions import AIJob
 from tbd.repositories.jobs import ClaimedJob, JobRepository
 from tbd.repositories.outbox import OutboxRepository
+from tbd.schemas.jobs import project_ai_job
 
 
 class JobKernel:
@@ -31,7 +32,7 @@ class JobKernel:
 
         session.add(job)
         await session.flush()
-        await self._emit_update(session, job, event_type="job.queued")
+        await self._emit_update(session, job)
         return job
 
     async def claim_next_shared(
@@ -129,7 +130,7 @@ class JobKernel:
 
         job = await self.jobs.retry_failed(session, job_id, now=now)
         if job is not None:
-            await self._emit_update(session, job, event_type="job.queued")
+            await self._emit_update(session, job)
         return job
 
     async def cancel(self, session: AsyncSession, job_id: UUID, *, now: datetime) -> bool:
@@ -176,8 +177,6 @@ class JobKernel:
         self,
         session: AsyncSession,
         job: AIJob,
-        *,
-        event_type: str = "job.updated",
     ) -> None:
         if job.visibility != AIJobVisibility.SHARED:
             return
@@ -185,12 +184,7 @@ class JobKernel:
             session,
             session_id=job.session_id,
             partition_key=f"session:{job.session_id}",
-            event_type=event_type,
+            event_type="job.updated",
             resource_version=job.version,
-            payload={
-                "attempt": job.attempt,
-                "job_id": str(job.id),
-                "status": str(job.status),
-                "version": job.version,
-            },
+            payload=project_ai_job(job).model_dump(mode="json"),
         )

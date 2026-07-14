@@ -1887,6 +1887,14 @@ Evidence는 검색 시점 Chunk ID·순위와 안전한 `label_snapshot`이며, 
 
 도메인 행과 outbox 행을 같은 transaction에 저장하고 commit 후 publisher가 발행한다. 발행 완료 전 장애가 나면 같은 event를 재발행할 수 있으므로 client와 내부 consumer는 event ID와 resource version으로 중복·역순을 처리한다.
 
+현재 PR-11 publisher는 FastAPI process 안에서 `published_at IS NULL`인 행을
+`FOR UPDATE SKIP LOCKED`로 작은 batch 단위 claim한 뒤 `published_at`·`publish_attempt`를
+commit하고, 그 뒤 process-local WebSocket hub로 전달한다. live 전달 직전 장애는 cursor
+replay 또는 REST resync로 복구한다. `outbox_events`는 공용 event와 내부 cleanup/queue hint를
+함께 담으므로 Session WebSocket에는 `session.updated`, `job.updated`처럼 공개 계약에 허용된
+event만 projection한다. 요청자 전용 AI Job, ticket·session token·storage key와 provider 오류는
+outbox payload 또는 공용 event에 넣지 않는다.
+
 ## 15. 보안·보관·삭제 정책
 
 ### 15.1 민감정보

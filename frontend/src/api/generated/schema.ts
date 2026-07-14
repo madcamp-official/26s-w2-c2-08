@@ -218,7 +218,8 @@ export interface paths {
          * WebSocket 연결 티켓 발급
          * @description 정상 HTTP 인증으로 Session scope의 60초 만료·1회용 티켓을 발급한다.
          *     `SESSION_EVENTS_READ`는 Course 멤버, `SESSION_AUDIO_WRITE`는 해당 Course의
-         *     PROFESSOR이면서 LIVE Session일 때만 발급한다. 응답과 티켓을 로그에 남기지 않는다.
+         *     PROFESSOR이면서 LIVE Session일 때만 발급한다. 상태 변경 요청이므로 exact Origin
+         *     allowlist를 검사하며, 응답과 티켓을 로그에 남기지 않는다.
          */
         post: operations["createRealtimeTicket"];
         delete?: never;
@@ -4498,6 +4499,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
         };
     };

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tbd.jobs.kernel import JobKernel
 from tbd.models.enums import (
     AIJobStatus,
     AIJobType,
@@ -17,7 +18,9 @@ from tbd.models.enums import (
 from tbd.models.materials import TranscriptVersion
 from tbd.models.questions import AIJob, QuestionClusteringState
 from tbd.models.sessions import LectureSession
+from tbd.repositories.outbox import OutboxRepository
 from tbd.repositories.sessions import SessionRepository
+from tbd.schemas.sessions import LectureSessionResponse
 from tbd.services.courses import (
     CourseAccessDeniedError,
     CourseNotFoundError,
@@ -57,9 +60,11 @@ class SessionService:
         *,
         timezone_name: str = "Asia/Seoul",
         repository: SessionRepository | None = None,
+        outbox: OutboxRepository | None = None,
     ) -> None:
         self.timezone = ZoneInfo(timezone_name)
         self.repository = repository or SessionRepository()
+        self.outbox = outbox or OutboxRepository()
 
     async def list_for_member(
         self,
@@ -114,6 +119,7 @@ class SessionService:
             if self._is_active_session_constraint(exc):
                 raise ActiveSessionExistsError from exc
             raise
+        await self._emit_session_updated(session, lecture_session)
         return lecture_session
 
     async def get_for_member(
@@ -144,6 +150,7 @@ class SessionService:
         )
         lecture_session.version += 1
         await session.flush()
+        await self._emit_session_updated(session, lecture_session)
         return lecture_session
 
     async def delete(
@@ -194,6 +201,7 @@ class SessionService:
         lecture_session.canonical_transcript_version_id = live_version.id
         lecture_session.version += 1
         await session.flush()
+        await self._emit_session_updated(session, lecture_session)
         return lecture_session
 
     async def end(
@@ -225,8 +233,8 @@ class SessionService:
             blocks_session_completion=True,
             retryable=True,
         )
-        session.add(coordinator)
-        await session.flush()
+        await JobKernel(outbox=self.outbox).enqueue(session, coordinator)
+        await self._emit_session_updated(session, lecture_session)
         return SessionEndResult(lecture_session=lecture_session, coordinator=coordinator)
 
     async def mark_completed(
@@ -245,7 +253,22 @@ class SessionService:
         lecture_session.completed_at = now or datetime.now(UTC)
         lecture_session.version += 1
         await session.flush()
+        await self._emit_session_updated(session, lecture_session)
         return lecture_session
+
+    async def _emit_session_updated(
+        self, session: AsyncSession, lecture_session: LectureSession
+    ) -> None:
+        """Persist the safe member-visible projection with the lifecycle transaction."""
+
+        await self.outbox.enqueue(
+            session,
+            session_id=lecture_session.id,
+            partition_key=f"session:{lecture_session.id}",
+            event_type="session.updated",
+            resource_version=lecture_session.version,
+            payload=LectureSessionResponse.model_validate(lecture_session).model_dump(mode="json"),
+        )
 
     def automatic_title(self, course_title: str, lecture_date: date, created_at: datetime) -> str:
         """Return the persisted title contract using the immutable creation instant."""
