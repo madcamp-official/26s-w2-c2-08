@@ -1460,7 +1460,10 @@ export interface paths {
          *     COMPLETED 후 RECORDING_TRANSCRIPTION 복구 성공은 같은 coordinator를
          *     attempt+1로 자동 requeue하며 사용자가 coordinator를 별도 retry할 필요가 없다.
          *     재시도는 별도 Job API의 권한 규칙을 따른다. 목록은 created_at DESC,
-         *     id DESC로 정렬하고 job_type·status 필터를 cursor에 고정한다.
+         *     id DESC로 정렬하고 job_type·status 필터를 cursor에 고정한다. 잘못된
+         *     Session UUID, job_type·status 값, cursor·limit 형식 또는 범위는
+         *     422 VALIDATION_ERROR이고, 형식은 맞지만 서명이 틀리거나 현재 필터와
+         *     맞지 않는 cursor는 400 INVALID_CURSOR이다.
          */
         get: operations["listSessionSharedJobs"];
         put?: never;
@@ -1494,7 +1497,8 @@ export interface paths {
          *     모든 URL은 cursor·배열 위치를 포함하지 않는다. count는 목록 전체 snapshot
          *     token이 아니므로 PROCESSING 상태가 바뀌면 record를 다시 조회한다.
          *     공용 Job 집계에는 SHARED Job만 포함하고 개인 Summary·Chat Job은 제외한다.
-         *     분리된 Material은 즉시 count와 목록에서 제외한다.
+         *     분리된 Material은 즉시 count와 목록에서 제외한다. 잘못된 Session UUID는
+         *     422 VALIDATION_ERROR다.
          */
         get: operations["getSessionRecord"];
         put?: never;
@@ -6705,6 +6709,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getSessionRecord: {
@@ -6736,6 +6741,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getSessionRecording: {

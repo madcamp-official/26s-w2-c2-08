@@ -21,6 +21,16 @@ ResourceType = Literal[
     "ANSWER",
 ]
 
+SharedAIJobType = Literal[
+    "MATERIAL_PROCESSING",
+    "QUESTION_CLUSTERING",
+    "FINAL_SUMMARY",
+    "SESSION_POSTPROCESSING",
+    "RECORDING_TRANSCRIPTION",
+    "ANSWER_ORGANIZATION",
+    "KNOWLEDGE_INDEXING",
+]
+
 
 class AIJobResourceLink(BaseModel):
     """A stable public link without a provider or internal storage identifier."""
@@ -94,6 +104,15 @@ class AIJobAcceptedResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     job: AIJobResponse
+
+
+class AIJobListResponse(BaseModel):
+    """A stable cursor page of Course-visible shared Job rows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AIJobResponse]
+    next_cursor: str | None
 
 
 def project_ai_job(job: AIJob, *, result: AIJobResourceLink | None = None) -> AIJobResponse:

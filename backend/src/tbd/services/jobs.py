@@ -1,10 +1,13 @@
-"""Authorization-aware AIJob lookup and retry policy."""
+"""Authorization-aware AIJob lookup, listing, and retry policy."""
 
+import base64
+import hmac
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.jobs.kernel import JobKernel
@@ -24,6 +27,18 @@ class JobAccessDeniedError(Exception):
     """Raised when a visible shared Job needs a professor-only control."""
 
 
+class SessionJobNotFoundError(Exception):
+    """The Session whose shared jobs are requested does not exist."""
+
+
+class SessionJobAccessDeniedError(Exception):
+    """The current user is not a member of the Session's Course."""
+
+
+class InvalidSharedJobCursorError(Exception):
+    """The supplied cursor was tampered with or belongs to another filter scope."""
+
+
 @dataclass(frozen=True)
 class JobRetryConflictError(Exception):
     """A stable retry conflict that the HTTP router can render safely."""
@@ -33,11 +48,142 @@ class JobRetryConflictError(Exception):
     details: dict[str, str] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _SharedJobCursor:
+    created_at: datetime
+    job_id: UUID
+
+
+class _SharedJobCursorCodec:
+    """Sign a cursor that cannot switch Session or filter scopes."""
+
+    _PREFIX = b"goal/shared-jobs/cursor/v1\x00"
+
+    def __init__(self, secret: str) -> None:
+        self._key = hmac.digest(secret.encode("utf-8"), self._PREFIX, "sha256")
+
+    def encode(
+        self,
+        *,
+        session_id: UUID,
+        job_type: str | None,
+        status: str | None,
+        position: _SharedJobCursor,
+    ) -> str:
+        raw = json.dumps(
+            {
+                "created_at": position.created_at.isoformat(),
+                "id": str(position.job_id),
+                "job_type": job_type,
+                "session_id": str(session_id),
+                "status": status,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        signature = hmac.digest(self._key, raw, "sha256")[:16]
+        return base64.urlsafe_b64encode(raw + signature).decode("ascii").rstrip("=")
+
+    def decode(
+        self,
+        *,
+        cursor: str,
+        session_id: UUID,
+        job_type: str | None,
+        status: str | None,
+    ) -> _SharedJobCursor:
+        try:
+            payload_bytes = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+            raw, signature = payload_bytes[:-16], payload_bytes[-16:]
+            if not hmac.compare_digest(hmac.digest(self._key, raw, "sha256")[:16], signature):
+                raise ValueError
+            payload = json.loads(raw)
+            if (
+                payload["session_id"] != str(session_id)
+                or payload["job_type"] != job_type
+                or payload["status"] != status
+            ):
+                raise ValueError
+            return _SharedJobCursor(
+                created_at=datetime.fromisoformat(payload["created_at"]),
+                job_id=UUID(payload["id"]),
+            )
+        except (KeyError, TypeError, ValueError, UnicodeError) as exc:
+            raise InvalidSharedJobCursorError from exc
+
+
 class JobService:
     """Apply Course membership and Job lifecycle rules around the shared kernel."""
 
-    def __init__(self, kernel: JobKernel | None = None) -> None:
+    def __init__(self, kernel: JobKernel | None = None, *, auth_secret: str = "") -> None:
         self._kernel = kernel or JobKernel()
+        self._shared_job_cursors = _SharedJobCursorCodec(auth_secret)
+
+    async def list_shared_for_member(
+        self,
+        session: AsyncSession,
+        *,
+        session_id: UUID,
+        user_id: UUID,
+        job_type: str | None,
+        status: str | None,
+        cursor: str | None,
+        limit: int,
+    ) -> tuple[list[AIJob], str | None]:
+        """List only Course-visible SHARED work with a filter-bound keyset cursor."""
+
+        lecture_session = await session.get(LectureSession, session_id)
+        if lecture_session is None:
+            raise SessionJobNotFoundError
+        role = await session.scalar(
+            select(CourseMember.role).where(
+                CourseMember.course_id == lecture_session.course_id,
+                CourseMember.user_id == user_id,
+            )
+        )
+        if role is None:
+            raise SessionJobAccessDeniedError
+        after = (
+            self._shared_job_cursors.decode(
+                cursor=cursor,
+                session_id=session_id,
+                job_type=job_type,
+                status=status,
+            )
+            if cursor is not None
+            else None
+        )
+        statement = select(AIJob).where(
+            AIJob.session_id == session_id,
+            AIJob.visibility == AIJobVisibility.SHARED,
+        )
+        if job_type is not None:
+            statement = statement.where(AIJob.job_type == job_type)
+        if status is not None:
+            statement = statement.where(AIJob.status == status)
+        if after is not None:
+            statement = statement.where(
+                or_(
+                    AIJob.created_at < after.created_at,
+                    and_(AIJob.created_at == after.created_at, AIJob.id < after.job_id),
+                )
+            )
+        rows = list(
+            await session.scalars(
+                statement.order_by(AIJob.created_at.desc(), AIJob.id.desc()).limit(limit + 1)
+            )
+        )
+        page, extra = rows[:limit], rows[limit:]
+        next_cursor = None
+        if extra and page:
+            last = page[-1]
+            next_cursor = self._shared_job_cursors.encode(
+                session_id=session_id,
+                job_type=job_type,
+                status=status,
+                position=_SharedJobCursor(created_at=last.created_at, job_id=last.id),
+            )
+        return page, next_cursor
 
     async def get_visible(
         self,
