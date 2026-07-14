@@ -23,6 +23,8 @@ PUBLIC_EVENT_TYPES = frozenset(
         "question.updated",
         "reaction.updated",
         "clustering.updated",
+        "transcript.final",
+        "transcript.status",
     }
 )
 
