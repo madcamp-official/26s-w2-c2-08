@@ -16,6 +16,7 @@ from tbd.storage.contracts import (
     StorageUnavailableError,
     sha256_bytes,
 )
+from tbd.storage.filesystem import FilesystemStorage
 
 __all__ = [
     "Storage",
@@ -23,6 +24,7 @@ __all__ = [
     "StorageConflictError",
     "StorageDeleteResult",
     "StorageError",
+    "FilesystemStorage",
     "StorageIntegrityError",
     "StorageKey",
     "StorageNamespace",
