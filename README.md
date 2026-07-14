@@ -152,6 +152,9 @@ make dev-web
 # 별도 터미널: PDF 전처리 Worker (자료 업로드를 처리하려면 필요)
 cd backend && uv run python -m tbd.jobs.material_worker
 
+# 별도 터미널: KnowledgeChunk 색인 Worker (자료·Transcript를 AI 검색에 쓰려면 필요)
+cd backend && uv run python -m tbd.jobs.knowledge_worker
+
 # 별도 터미널: LIVE 질문 클러스터링 Worker (질문 마인드맵을 만들려면 필요)
 cd backend && uv run python -m tbd.jobs.clustering_worker
 ```

@@ -1775,12 +1775,12 @@ export interface components {
          * @description 사용자에게 공개하는 작업 purpose. provider 내부 작업명은 노출하지 않음
          * @enum {string}
          */
-        AIJobType: "MATERIAL_PROCESSING" | "QUESTION_CLUSTERING" | "LIVE_SUMMARY" | "FINAL_SUMMARY" | "CHAT_RESPONSE" | "SESSION_POSTPROCESSING" | "RECORDING_TRANSCRIPTION" | "ANSWER_ORGANIZATION";
+        AIJobType: "MATERIAL_PROCESSING" | "QUESTION_CLUSTERING" | "LIVE_SUMMARY" | "FINAL_SUMMARY" | "CHAT_RESPONSE" | "SESSION_POSTPROCESSING" | "RECORDING_TRANSCRIPTION" | "ANSWER_ORGANIZATION" | "KNOWLEDGE_INDEXING";
         /**
          * @description Session 공용 Job 목록에서 조회할 수 있는 유형
          * @enum {string}
          */
-        SharedAIJobType: "MATERIAL_PROCESSING" | "QUESTION_CLUSTERING" | "FINAL_SUMMARY" | "SESSION_POSTPROCESSING" | "RECORDING_TRANSCRIPTION" | "ANSWER_ORGANIZATION";
+        SharedAIJobType: "MATERIAL_PROCESSING" | "QUESTION_CLUSTERING" | "FINAL_SUMMARY" | "SESSION_POSTPROCESSING" | "RECORDING_TRANSCRIPTION" | "ANSWER_ORGANIZATION" | "KNOWLEDGE_INDEXING";
         /** @enum {string} */
         RealtimeTicketScope: "SESSION_EVENTS_READ" | "SESSION_AUDIO_WRITE";
         RealtimeTicketCreateRequest: {
