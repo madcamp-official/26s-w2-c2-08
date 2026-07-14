@@ -14,7 +14,9 @@ from tbd.app import create_app
 from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database, transaction
 from tbd.models.sessions import LectureSession
+from tbd.providers.ai import FakeLLMProvider
 from tbd.services.courses import CourseService
+from tbd.services.postprocessing import SessionPostprocessingWorker
 from tbd.services.sessions import ActiveSessionExistsError, SessionService
 
 pytestmark = pytest.mark.integration
@@ -122,25 +124,9 @@ def test_session_api_persists_lifecycle_and_never_uses_job_count_as_completion(
             == 409
         )
 
-    async def complete_with_worker_hook() -> None:
-        worker_database = create_database(settings)
-        try:
-            async with worker_database.session_factory() as worker_session:
-                async with transaction(worker_session):
-                    completed = await SessionService().mark_completed(
-                        worker_session,
-                        session_id=UUID(session_id),
-                    )
-                    assert completed.status == "COMPLETED"
-        finally:
-            await worker_database.dispose()
-
-    asyncio.run(complete_with_worker_hook())
-
-    reopened_database = create_database(settings)
-    reopened_app = create_app(settings=settings, database=reopened_database)
-    reopened_app.dependency_overrides[get_current_user_id] = lambda: owner_id
-    with TestClient(reopened_app) as client:
+    worker = SessionPostprocessingWorker(database.session_factory, FakeLLMProvider())
+    assert asyncio.run(worker.run_once()) is True
+    with TestClient(app) as client:
         detail = client.get(f"/api/v1/sessions/{session_id}")
         assert detail.json()["status"] == "COMPLETED"
         assert detail.json()["completed_at"] is not None

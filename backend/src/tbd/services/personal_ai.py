@@ -22,6 +22,8 @@ from tbd.models.enums import (
     LectureSessionStatus,
     SummaryType,
     SummaryVisibility,
+    TranscriptSource,
+    TranscriptStatus,
 )
 from tbd.models.knowledge import (
     ChatMessage,
@@ -274,24 +276,95 @@ class PersonalAIService:
         limit: int,
     ) -> tuple[list[LectureSummary], str, dict[str, str] | None]:
         lecture_session = await self._member_session(session, session_id, user_id)
-        statement = select(LectureSummary).where(
-            LectureSummary.session_id == lecture_session.id,
-            LectureSummary.summary_type == summary_type,
-        )
         if summary_type == "LIVE":
-            statement = statement.where(LectureSummary.requester_user_id == user_id)
-        items = list(
-            await session.scalars(
-                statement.order_by(
-                    LectureSummary.created_at.desc(), LectureSummary.id.desc()
-                ).limit(limit)
+            items = list(
+                await session.scalars(
+                    select(LectureSummary)
+                    .where(
+                        LectureSummary.session_id == lecture_session.id,
+                        LectureSummary.summary_type == summary_type,
+                        LectureSummary.requester_user_id == user_id,
+                    )
+                    .order_by(LectureSummary.created_at.desc(), LectureSummary.id.desc())
+                    .limit(limit)
+                )
+            )
+            if items:
+                return items, "AVAILABLE", None
+            return [], "NOT_STARTED", None
+        return await self._final_summary_state(session, lecture_session)
+
+    async def _final_summary_state(
+        self, session: AsyncSession, lecture_session: LectureSession
+    ) -> tuple[list[LectureSummary], str, dict[str, str] | None]:
+        """Project FINAL Summary state from immutable HQ source and Job records."""
+
+        coordinator = await session.scalar(
+            select(AIJob).where(
+                AIJob.session_id == lecture_session.id,
+                AIJob.job_type == AIJobType.SESSION_POSTPROCESSING,
             )
         )
-        if items:
-            return items, "AVAILABLE", None
-        if summary_type == "LIVE":
-            return [], "NOT_STARTED", None
-        return [], "PENDING", None
+        version = await session.scalar(
+            select(TranscriptVersion)
+            .where(
+                TranscriptVersion.session_id == lecture_session.id,
+                TranscriptVersion.source == TranscriptSource.RECORDING,
+            )
+            .order_by(TranscriptVersion.version.desc())
+        )
+        if version is None:
+            if coordinator is None or coordinator.status in (
+                AIJobStatus.PENDING,
+                AIJobStatus.RUNNING,
+            ):
+                return [], "PENDING", None
+            return [], "FAILED", {"code": "SUMMARY_SOURCE_UNAVAILABLE"}
+        if version.status == TranscriptStatus.EMPTY:
+            return [], "NOT_APPLICABLE", {"code": "NO_FINAL_TRANSCRIPT"}
+        if version.status != TranscriptStatus.FINALIZED or version.last_sequence <= 0:
+            if version.status == TranscriptStatus.FAILED:
+                return [], "FAILED", {"code": "SUMMARY_SOURCE_UNAVAILABLE"}
+            return [], "PENDING", None
+        summary = await session.scalar(
+            select(LectureSummary)
+            .where(
+                LectureSummary.session_id == lecture_session.id,
+                LectureSummary.summary_type == SummaryType.FINAL,
+                LectureSummary.source_transcript_version_id == version.id,
+            )
+            .order_by(LectureSummary.created_at.desc(), LectureSummary.id.desc())
+        )
+        if summary is not None:
+            creating_job = await session.get(AIJob, summary.created_by_job_id)
+            if (
+                creating_job is not None
+                and creating_job.job_type == AIJobType.FINAL_SUMMARY
+                and creating_job.status == AIJobStatus.SUCCEEDED
+                and creating_job.attempt == summary.created_by_job_attempt
+            ):
+                return [summary], "AVAILABLE", None
+            return [], "DATA_INTEGRITY_ERROR", None
+        final_job = await session.scalar(
+            select(AIJob)
+            .where(
+                AIJob.session_id == lecture_session.id,
+                AIJob.job_type == AIJobType.FINAL_SUMMARY,
+            )
+            .order_by(AIJob.created_at.desc(), AIJob.id.desc())
+        )
+        if final_job is None:
+            if coordinator is not None and coordinator.status in (
+                AIJobStatus.PENDING,
+                AIJobStatus.RUNNING,
+            ):
+                return [], "PENDING", None
+            return [], "DATA_INTEGRITY_ERROR", None
+        if final_job.status in (AIJobStatus.PENDING, AIJobStatus.RUNNING):
+            return [], "PENDING", None
+        if final_job.status == AIJobStatus.SUCCEEDED:
+            return [], "DATA_INTEGRITY_ERROR", None
+        return [], "FAILED", {"code": final_job.error_code or "FINAL_SUMMARY_FAILED"}
 
     async def get_summary(
         self, session: AsyncSession, *, summary_id: UUID, user_id: UUID

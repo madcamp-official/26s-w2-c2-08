@@ -161,6 +161,9 @@ cd backend && uv run python -m tbd.jobs.clustering_worker
 # 별도 터미널: HQ 녹음 Transcript Worker
 # 현재 기본 provider는 안전하게 실패하도록 구성되어 있다. 실제 Batch STT provider 선택·주입은 미정이다.
 cd backend && uv run python -m tbd.jobs.recording_transcription_worker
+
+# 별도 터미널: 종료 후처리 Worker (Answer 정리·FINAL Summary·완료 전환)
+cd backend && uv run python -m tbd.jobs.postprocessing_worker
 ```
 
 접속 주소:

@@ -602,7 +602,7 @@ Idempotency-Key: <key>
 
 - 권한: Course `PROFESSOR`
 - `LIVE → PROCESSING`을 한 번만 적용한다.
-- **현재 PR-09 구현 범위:** 종료 transaction은 `PROCESSING` 상태와 SHARED·blocking `SESSION_POSTPROCESSING` coordinator 한 건을 함께 저장한다. Recording 전이, LIVE 개인 AI 정리, FINAL clustering 및 coordinator 실행은 후속 실시간·worker PR에서 같은 API 계약에 추가한다. `COMPLETED` 전이는 브라우저의 Job 개수 계산이 아니라 coordinator worker의 명시적 상태 전이로만 수행한다.
+- **현재 구현 범위:** 종료 transaction은 `PROCESSING` 상태, SHARED·blocking `SESSION_POSTPROCESSING` coordinator와 조건부 FINAL clustering Job을 함께 저장한다. 별도 후처리 Worker는 HQ source terminal 뒤 Answer mapping·Knowledge 재색인·Answer organization·FINAL Summary를 예약하고, 저장된 completion predicate로만 `COMPLETED` 전이를 수행한다.
 - `CAPTURING` Answer가 남아 있으면 `409 ANSWER_CAPTURE_ACTIVE`를 반환하므로 먼저 완료하거나 취소해야 한다.
 - 정상 클라이언트도 종료 확인 즉시 이 API를 호출한다. `audio.stop` 전송과 로컬 녹음 마감은 best-effort로 함께 시작하되 `audio.stopped`나 drain 완료를 HTTP 호출의 선행조건으로 두지 않는다. 서버는 종료 transaction에서 새 audio frame을 차단하고 이미 받은 chunk만 별도로 drain한다.
 - 종료 transaction이 commit되면 Session은 즉시 `PROCESSING`이 되고 새 audio 입력과 resume을 차단한다. 첫 `audio.start`에서 만든 논리 Recording은 `CAPTURING → UPLOAD_PENDING`으로 전이한다.
@@ -610,7 +610,7 @@ Idempotency-Key: <key>
 - 브라우저가 로컬 녹음을 확정한 뒤 15.3~15.5절의 resumable upload로 전송한다. Recording upload가 완료되기 전에는 HQ STT를 시작하지 않는다.
 - 같은 transaction에서 SHARED·blocking `SESSION_POSTPROCESSING` coordinator를 `PENDING`으로 생성한다. FINAL 대상이 1건 이상이면 4.2절의 종료 시점 입력 상한을 고정한 SHARED·blocking `FINAL` `QUESTION_CLUSTERING` Job도 같은 transaction에서 함께 생성한다. Recording/HQ 또는 Recording이 없는 경우 LIVE Transcript source가 terminal이 되기 전에는 coordinator를 claim하지 않지만, FINAL clustering은 source와 독립적으로 즉시 실행할 수 있다.
 - coordinator는 source terminal 후 Answer mapping·Knowledge 재연결을 수행하고 자신의 terminal 전이와 downstream blocking Job 생성·outbox를 같은 transaction에 commit한다. HQ Transcript version·canonical 전환과 Answer 재매핑은 9절과 11절을 따른다.
-- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 종료 transaction에서 생성된 coordinator 및 조건부 FINAL clustering Job을 `jobs[]`로 반환한다. 현재 구현의 `jobs[]`에는 coordinator 한 건만 포함된다.
+- 성공: `202 Accepted`, 갱신된 Session, nullable Recording과 종료 transaction에서 생성된 coordinator 및 조건부 FINAL clustering Job을 `jobs[]`로 반환한다.
 - class 종료 요청 자체의 멱등 재요청은 기존 Session, Recording과 Job 결과를 반환한다.
 
 ## 8. 강의자료 API
@@ -697,7 +697,7 @@ Idempotency-Key: <key>
 - TranscriptVersion metadata는 소스·상태·version과 해당 version 안의 마지막 final Segment 순번인 `last_sequence`를 공개한다. Segment가 없으면 `0`이다.
 - Session은 nullable `canonical_transcript_version_id`로 기본 열람에 사용할 canonical version을 가리킨다. `READY`에서는 `null`일 수 있지만 class 시작 transaction이 LIVE version을 만들고 즉시 이 포인터를 설정한다. 응답의 `is_canonical`은 이 포인터에서 계산한다.
 - Transcript aggregate는 최신 처리 version인 `current_version`의 상태를 별도로 공개한다. 따라서 최신 HQ version이 `FAILED`이면 aggregate `status=FAILED`이면서 canonical 포인터는 기존 LIVE version을 계속 가리킨다. aggregate status와 canonical 포인터를 같은 값으로 추정하지 않는다.
-- Session 시작 transaction이 canonical로 설정한 LIVE version은 `FINALIZING`이다. 현재 audio runtime은 final Segment·Gap을 이 version에 기록하고 Session 종료 시 새 frame을 fence하며, `FINALIZED`·`EMPTY` terminal 전이는 후처리 coordinator가 담당한다.
+- Session 시작 transaction이 canonical로 설정한 LIVE version은 `FINALIZING`이다. audio runtime은 final Segment·Gap을 이 version에 기록하고 Session 종료 transaction은 새 frame을 fence한 뒤 Segment 유무로 `FINALIZED` 또는 `EMPTY`로 확정한다. 이 LIVE terminal 상태는 Recording이 없는 class의 coordinator source gate다.
 - Recording upload complete는 다음 version의 `RECORDING`/`FINALIZING` row와 `RECORDING_TRANSCRIPTION` Job을 같은 transaction에서 생성한다.
 - 실패한 `RECORDING_TRANSCRIPTION`을 재시도하면 같은 Job ID의 `attempt + 1`과 새 `RECORDING`/`FINALIZING` Transcript version을 사용한다. 이전 실패 version은 provenance로 보존하고 성공 `result`는 현재 attempt의 version을 가리킨다. `COMPLETED` 후 재시도 성공은 같은 `SESSION_POSTPROCESSING` coordinator 행을 `attempt + 1`로 자동 requeue하며 Session 상태를 되돌리지 않는다.
 - `RECORDING_TRANSCRIPTION` 성공 commit은 Segment·Gap, Segment의 녹음 시간 mapping, version 상태, aggregate current version과 canonical 포인터를 먼저 하나의 결과로 공개한다. 성공 version은 `FINALIZED` 또는 `EMPTY`이다.
@@ -1646,7 +1646,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 - `max_chunk_bytes`는 header를 포함해 32,768 bytes이며 ACK는 각 수락 frame 뒤 전송한다. 이 값과 `max_in_flight`는 `audio.ready`에도 통지한다.
 - audio WS의 PCM frame은 live STT 전송용이며 영구 녹음의 원본으로 취급하지 않는다. 영구 녹음은 같은 microphone source의 브라우저 로컬 branch를 15.3~15.5절로 upload해 저장한다.
 
-교수자가 class 종료를 확인하면 클라이언트는 HTTP 종료 API를 즉시 호출하면서 `audio.stop`과 로컬 녹음 확정을 best-effort 병행한다. `audio.stopped`는 현재 영속 watermark를 반환하지만 HTTP 종료의 선행조건이 아니다. 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단한다. 종료와 경합한 provider 결과는 저장하지 않고 `BACKPRESSURE_DROP` final Gap으로 남긴다. Recording은 `UPLOAD_PENDING`이 되고 upload complete 전에는 HQ STT를 시작하지 않는다. LIVE version의 terminal 전이와 HQ canonical 전환은 후처리 coordinator 범위이며, 연결 손실로 받지 못한 live chunk는 Gap으로 기록하되 후처리 HQ version과 구분한다.
+교수자가 class 종료를 확인하면 클라이언트는 HTTP 종료 API를 즉시 호출하면서 `audio.stop`과 로컬 녹음 확정을 best-effort 병행한다. `audio.stopped`는 현재 영속 watermark를 반환하지만 HTTP 종료의 선행조건이 아니다. 서버는 Session을 즉시 `PROCESSING`으로 전환하고 새 binary frame·audio 연결·resume을 차단한다. 종료와 경합한 provider 결과는 저장하지 않고 `BACKPRESSURE_DROP` final Gap으로 남긴다. 종료 transaction은 LIVE version을 terminal로 확정하고 Recording은 `UPLOAD_PENDING`이 된다. upload complete 전에는 HQ STT를 시작하지 않으며, HQ canonical 전환은 Batch STT worker가 담당한다. 연결 손실로 받지 못한 live chunk는 Gap으로 기록하되 후처리 HQ version과 구분한다.
 
 녹음 또는 upload 중 tab 종료 warning과 로컬 데이터 유실 안내는 화면 책임이다. 브라우저 로컬 저장 방식과 warning 해제 조건은 TBD이며 WebSocket control message로 만들지 않는다.
 
