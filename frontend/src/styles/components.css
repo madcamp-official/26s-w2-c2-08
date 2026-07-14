@@ -1210,6 +1210,69 @@
   background: color-mix(in srgb, var(--color-danger) 6%, var(--color-surface));
 }
 
+.course-transcript-archive,
+.course-transcript-archive > li,
+.course-transcript-timeline,
+.course-transcript-timeline ol {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.course-transcript-archive,
+.course-transcript-timeline ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-transcript-archive__heading {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.course-transcript-archive__heading h3,
+.course-transcript-archive__heading p,
+.course-transcript-timeline p {
+  margin: 0;
+}
+
+.course-transcript-archive__heading h3 {
+  margin-top: var(--space-3);
+  font-size: 22px;
+}
+
+.course-transcript-archive__heading p {
+  margin-top: var(--space-2);
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.course-transcript-timeline {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-line);
+}
+
+.course-transcript-timeline li {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.course-transcript-timeline time {
+  color: var(--color-brand-dark);
+  font-weight: 800;
+}
+
+.course-transcript-timeline__gap {
+  color: var(--color-warning);
+  background: #fffaf0 !important;
+}
+
 .current-session-card,
 .professor-controls,
 .student-course-note {
@@ -2178,6 +2241,15 @@
   .course-material-archive__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .course-transcript-archive__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .course-transcript-timeline li {
+    grid-template-columns: 1fr;
   }
 
   .join-code-box {
