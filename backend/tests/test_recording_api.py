@@ -16,9 +16,13 @@ from tbd.app import create_app
 from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database
 from tbd.models.consistency import OutboxEvent
+from tbd.models.knowledge import LectureSummary
 from tbd.models.materials import RecordingUpload, SessionRecording, TranscriptVersion
 from tbd.models.questions import AIJob
+from tbd.models.sessions import LectureSession
+from tbd.providers.ai import FakeLLMProvider
 from tbd.providers.stt import BatchSTTSegment, DeterministicBatchSTTProvider
+from tbd.services.postprocessing import SessionPostprocessingWorker
 from tbd.services.recording_transcription import RecordingTranscriptionWorker
 from tbd.services.recordings import RecordingService
 from tbd.storage import InMemoryStorage, Storage, StorageKey, StorageNamespace
@@ -356,6 +360,33 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
     assert processed_version.last_sequence == 1
     assert processed_job.status == "SUCCEEDED"
     assert "transcript.version.updated" in processed_event_types
+
+    postprocessing_worker = SessionPostprocessingWorker(database.session_factory, FakeLLMProvider())
+    assert asyncio.run(postprocessing_worker.run_once()) is True
+    assert asyncio.run(postprocessing_worker.run_once()) is True
+
+    async def final_rows() -> tuple[LectureSession, AIJob, LectureSummary]:
+        async with database.session_factory() as session:
+            lecture_session = await session.get(LectureSession, UUID(session_id))
+            summary_job = await session.scalar(
+                select(AIJob).where(
+                    AIJob.session_id == UUID(session_id),
+                    AIJob.job_type == "FINAL_SUMMARY",
+                )
+            )
+            summary = await session.scalar(
+                select(LectureSummary).where(LectureSummary.session_id == UUID(session_id))
+            )
+            assert lecture_session is not None
+            assert summary_job is not None
+            assert summary is not None
+            return lecture_session, summary_job, summary
+
+    completed_session, summary_job, summary = asyncio.run(final_rows())
+    assert completed_session.status == "COMPLETED"
+    assert summary_job.status == "SUCCEEDED"
+    assert summary.summary_type == "FINAL"
+    assert summary.source_transcript_version_id == processed_version.id
     asyncio.run(database.dispose())
 
 

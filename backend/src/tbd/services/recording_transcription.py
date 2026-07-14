@@ -32,6 +32,7 @@ from tbd.providers.stt import (
 from tbd.repositories.jobs import ClaimedJob
 from tbd.repositories.outbox import OutboxRepository
 from tbd.repositories.recordings import RecordingRepository
+from tbd.services.postprocessing import requeue_completed_coordinator
 from tbd.storage import Storage, StorageError, StorageKey
 
 HQ_STT_WORKER_LEASE = timedelta(seconds=60)
@@ -253,6 +254,12 @@ class RecordingTranscriptionWorker:
                 await session.flush()
                 await session.refresh(version)
                 await self._emit_version_updated(session, lecture_session, version)
+                await requeue_completed_coordinator(
+                    session,
+                    lecture_session=lecture_session,
+                    now=now,
+                    outbox=self.outbox,
+                )
 
     async def _finish_failure(
         self,

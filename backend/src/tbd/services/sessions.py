@@ -239,6 +239,22 @@ class SessionService:
         lecture_session.status = "PROCESSING"
         lecture_session.ended_at = timestamp
         lecture_session.version += 1
+        live_version = await session.scalar(
+            select(TranscriptVersion)
+            .where(
+                TranscriptVersion.session_id == lecture_session.id,
+                TranscriptVersion.source == TranscriptSource.LIVE,
+            )
+            .order_by(TranscriptVersion.version.desc())
+            .with_for_update()
+        )
+        if live_version is not None and live_version.status == TranscriptStatus.FINALIZING:
+            live_version.status = (
+                TranscriptStatus.FINALIZED
+                if live_version.last_sequence > 0
+                else TranscriptStatus.EMPTY
+            )
+            live_version.finalized_at = timestamp
         recording = await session.scalar(
             select(SessionRecording)
             .where(SessionRecording.session_id == lecture_session.id)
