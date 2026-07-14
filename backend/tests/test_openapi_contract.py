@@ -109,6 +109,33 @@ def test_runtime_routes_are_a_subset_of_the_canonical_contract(
                 )
 
 
+def test_course_session_list_declares_cursor_contract(
+    app: FastAPI,
+    canonical_openapi: dict[str, Any],
+) -> None:
+    """Runtime and canonical schemas expose the bounded cursor and its 400 response."""
+
+    path = "/api/v1/courses/{course_id}/sessions"
+    canonical_operation = canonical_openapi["paths"][path]["get"]
+    runtime_operation = app.openapi()["paths"][path]["get"]
+
+    for operation in (canonical_operation, runtime_operation):
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in _resolve_local_refs(operation["parameters"], canonical_openapi)
+        }
+        assert {"status", "cursor", "limit"} <= parameters.keys()
+        assert parameters["limit"]["schema"]["default"] == 20
+        assert parameters["limit"]["schema"]["minimum"] == 1
+        assert parameters["limit"]["schema"]["maximum"] == 100
+        assert "400" in operation["responses"]
+
+    response_schema = _resolve_local_refs(
+        canonical_operation["responses"]["200"], canonical_openapi
+    )["content"]["application/json"]["schema"]
+    assert {"items", "next_cursor"} <= set(response_schema["required"])
+
+
 @pytest.mark.parametrize("path", ["/api/health", "/api/health/db"])
 def test_health_success_payloads_match_canonical_openapi(
     app: FastAPI,

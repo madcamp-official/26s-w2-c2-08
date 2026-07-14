@@ -1,7 +1,12 @@
 """Course-scoped lecture-session lifecycle policies."""
 
+import base64
+import binascii
+import hmac
+import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -22,7 +27,7 @@ from tbd.models.questions import AIJob, Question, QuestionClusteringState
 from tbd.models.sessions import LectureSession
 from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.repositories.outbox import OutboxRepository
-from tbd.repositories.sessions import SessionRepository
+from tbd.repositories.sessions import SessionCursorPosition, SessionRepository
 from tbd.schemas.sessions import LectureSessionResponse
 from tbd.services.courses import (
     CourseAccessDeniedError,
@@ -47,7 +52,102 @@ class MaterialProcessingActiveError(Exception):
 
 
 class InvalidSessionCursorError(Exception):
-    """Cursor support is intentionally deferred until a non-empty cursor is supplied."""
+    """A cursor was tampered with or reused outside its Course list scope."""
+
+
+@dataclass(frozen=True)
+class SessionListResult:
+    """A bounded Course Session page and its next opaque position."""
+
+    items: list[LectureSession]
+    next_cursor: str | None
+
+
+class SessionCursorCodec:
+    """Sign one Course Session keyset position and its immutable filters."""
+
+    _PREFIX = b"goal/course-sessions/cursor/v1\x00"
+    _RESOURCE = "course_sessions"
+    _SIGNATURE_BYTES = 16
+
+    def __init__(self, secret: str) -> None:
+        self._key = hmac.digest(secret.encode("utf-8"), self._PREFIX, "sha256")
+
+    def encode(
+        self,
+        *,
+        course_id: UUID,
+        status: str | None,
+        position: SessionCursorPosition,
+    ) -> str:
+        raw = json.dumps(
+            {
+                "course_id": str(course_id),
+                "id": str(position.session_id),
+                "resource": self._RESOURCE,
+                "started_at": (
+                    position.started_at.isoformat() if position.started_at is not None else None
+                ),
+                "status": status,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        signature = hmac.digest(self._key, raw, "sha256")[: self._SIGNATURE_BYTES]
+        return base64.urlsafe_b64encode(raw + signature).decode("ascii").rstrip("=")
+
+    def decode(
+        self,
+        *,
+        cursor: str,
+        course_id: UUID,
+        status: str | None,
+    ) -> SessionCursorPosition:
+        try:
+            encoded = base64.b64decode(
+                cursor + "=" * (-len(cursor) % 4),
+                altchars=b"-_",
+                validate=True,
+            )
+            if len(encoded) <= self._SIGNATURE_BYTES:
+                raise ValueError
+            raw = encoded[: -self._SIGNATURE_BYTES]
+            signature = encoded[-self._SIGNATURE_BYTES :]
+            expected = hmac.digest(self._key, raw, "sha256")[: self._SIGNATURE_BYTES]
+            if not hmac.compare_digest(expected, signature):
+                raise ValueError
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise ValueError
+            if set(payload) != {"course_id", "id", "resource", "started_at", "status"}:
+                raise ValueError
+            if (
+                payload["resource"] != self._RESOURCE
+                or payload["course_id"] != str(course_id)
+                or payload["status"] != status
+            ):
+                raise ValueError
+            started_at_value = payload["started_at"]
+            if started_at_value is None:
+                started_at = None
+            elif isinstance(started_at_value, str):
+                started_at = datetime.fromisoformat(started_at_value)
+                if started_at.tzinfo is None or started_at.utcoffset() is None:
+                    raise ValueError
+            else:
+                raise ValueError
+            return SessionCursorPosition(
+                started_at=started_at,
+                session_id=UUID(payload["id"]),
+            )
+        except (
+            binascii.Error,
+            KeyError,
+            TypeError,
+            ValueError,
+            UnicodeError,
+        ) as exc:
+            raise InvalidSessionCursorError from exc
 
 
 @dataclass(frozen=True)
@@ -66,29 +166,53 @@ class SessionService:
         self,
         *,
         timezone_name: str = "Asia/Seoul",
+        auth_secret: str | None = None,
         repository: SessionRepository | None = None,
         outbox: OutboxRepository | None = None,
     ) -> None:
         self.timezone = ZoneInfo(timezone_name)
         self.repository = repository or SessionRepository()
         self.outbox = outbox or OutboxRepository()
+        self.cursors = SessionCursorCodec(auth_secret) if auth_secret is not None else None
 
     async def list_for_member(
         self,
         session: AsyncSession,
         *,
-        course_id: object,
-        user_id: object,
+        course_id: UUID,
+        user_id: UUID,
         status: str | None,
         cursor: str | None,
         limit: int,
-    ) -> list[LectureSession]:
-        if cursor is not None:
-            raise InvalidSessionCursorError
+    ) -> SessionListResult:
         await self._require_member(session, course_id=course_id, user_id=user_id)
-        return await self.repository.list_for_course(
-            session, course_id=course_id, status=status, limit=limit
+        if self.cursors is None:
+            raise RuntimeError("Session cursor signing requires auth_secret")
+        after = (
+            self.cursors.decode(cursor=cursor, course_id=course_id, status=status)
+            if cursor is not None
+            else None
         )
+        rows = await self.repository.list_for_course(
+            session,
+            course_id=course_id,
+            status=status,
+            after=after,
+            limit=limit + 1,
+        )
+        page, extra = rows[:limit], rows[limit:]
+        next_cursor = None
+        if extra and page:
+            last = page[-1]
+            next_cursor = self.cursors.encode(
+                course_id=course_id,
+                status=status,
+                position=SessionCursorPosition(
+                    started_at=last.started_at,
+                    session_id=last.id,
+                ),
+            )
+        return SessionListResult(items=page, next_cursor=next_cursor)
 
     async def create(
         self,
