@@ -17,7 +17,11 @@ class SessionRepository:
     """Keep lifecycle locking and Course membership joins out of services."""
 
     async def lock_course(self, session: AsyncSession, course_id: UUID) -> Course | None:
-        return await session.scalar(select(Course).where(Course.id == course_id).with_for_update())
+        return await session.scalar(
+            select(Course)
+            .where(Course.id == course_id, Course.deleted_at.is_(None))
+            .with_for_update()
+        )
 
     async def member_role(
         self,

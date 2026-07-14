@@ -24,6 +24,7 @@ from tbd.services.courses import (
     CourseNotFoundError,
     CourseRoleRequiredError,
 )
+from tbd.services.lifecycle import RECORDING_RETENTION
 from tbd.storage import (
     Storage,
     StorageError,
@@ -138,7 +139,7 @@ def recording_response(recording: SessionRecording) -> SessionRecordingResponse:
         version=recording.version,
         playback_url=(
             f"/api/v1/recordings/{recording.id}/playback"
-            if recording.status == "UPLOADED"
+            if recording.status == "UPLOADED" and recording.deleted_at is None
             else None
         ),
         created_at=recording.created_at,
@@ -202,7 +203,7 @@ class RecordingService:
         recording = await self.repository.get_recording_for_member(
             session, recording_id=recording_id, user_id=user_id
         )
-        if recording is None:
+        if recording is None or recording.deleted_at is not None:
             raise RecordingNotFoundError
         return recording
 
@@ -222,7 +223,7 @@ class RecordingService:
         if role is None:
             raise CourseAccessDeniedError
         recording = await self.repository.get_recording_for_session(session, session_id=session_id)
-        if recording is None:
+        if recording is None or recording.deleted_at is not None:
             raise RecordingNotFoundError
         return recording
 
@@ -430,6 +431,9 @@ class RecordingService:
         recording.duration_ms = upload.declared_duration_ms
         recording.storage_key = prepared.final_key.value
         recording.uploaded_at = now
+        lecture_session = await self.repository.get_session(session, recording.session_id)
+        if lecture_session is not None and lecture_session.completed_at is not None:
+            recording.retention_expires_at = lecture_session.completed_at + RECORDING_RETENTION
         recording.failed_at = None
         recording.version += 1
         upload.status = "COMPLETED"
@@ -479,7 +483,11 @@ class RecordingService:
         storage: Storage,
     ) -> tuple[SessionRecording, bytes, int, int, int]:
         recording = await self.get_for_member(session, recording_id=recording_id, user_id=user_id)
-        if recording.status != "UPLOADED" or recording.storage_key is None:
+        if (
+            recording.deleted_at is not None
+            or recording.status != "UPLOADED"
+            or recording.storage_key is None
+        ):
             raise RecordingNotReadyError
         try:
             key = StorageKey.parse(recording.storage_key)

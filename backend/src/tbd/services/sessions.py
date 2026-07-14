@@ -29,6 +29,7 @@ from tbd.services.courses import (
     CourseNotFoundError,
     CourseRoleRequiredError,
 )
+from tbd.services.lifecycle import RECORDING_RETENTION
 from tbd.services.personal_ai import PersonalAIService
 from tbd.services.questions import QuestionService
 
@@ -396,6 +397,19 @@ class SessionService:
         lecture_session.status = "COMPLETED"
         lecture_session.completed_at = now or datetime.now(UTC)
         lecture_session.version += 1
+        recording = await session.scalar(
+            select(SessionRecording)
+            .where(SessionRecording.session_id == lecture_session.id)
+            .with_for_update()
+        )
+        if (
+            recording is not None
+            and recording.status == "UPLOADED"
+            and recording.deleted_at is None
+            and recording.retention_expires_at is None
+        ):
+            recording.retention_expires_at = lecture_session.completed_at + RECORDING_RETENTION
+            recording.version += 1
         await session.flush()
         await self._emit_session_updated(session, lecture_session)
         return lecture_session

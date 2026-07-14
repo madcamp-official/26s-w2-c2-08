@@ -63,6 +63,7 @@ class RecordingRepository:
             .join(CourseMember, CourseMember.course_id == LectureSession.course_id)
             .where(
                 SessionRecording.id == recording_id,
+                SessionRecording.deleted_at.is_(None),
                 CourseMember.user_id == user_id,
             )
         )

@@ -415,12 +415,11 @@ GET /api/v1/me
 
 ```http
 DELETE /api/v1/me
-Idempotency-Key: <key>
 ```
 
-- 권한: 인증 사용자. 같은 key·request hash는 24시간 `204`를 재생한다.
+- 권한: 인증 사용자. exact Origin allowlist를 검사한다. 성공 응답은 현재 서버 Session cookie를 만료시키므로 같은 browser 요청의 재시도는 새 인증 없이는 `401`이다.
 - 삭제되지 않은 owner Course가 하나라도 있으면 `409 OWNED_COURSE_REQUIRES_DELETION`이다. 서버가 owner Course를 자동 삭제하지 않는다.
-- 성공하면 모든 인증 세션·OAuth identity·비밀번호 credential·Course membership·reaction을 정리하고, User row는 이메일·avatar·표시 이름을 비식별화한 tombstone으로 남긴다. 기존 질문·Answer의 내부 참조는 유지하지만 작성자를 재식별할 수 없다.
+- 성공하면 모든 인증 세션·OAuth identity·비밀번호 credential·Course membership·reaction·계정 멱등 응답을 정리하고, User row는 이메일·avatar를 지우고 표시 이름을 `탈퇴한 사용자`로 바꾼 tombstone으로 남긴다. 기존 질문·Answer와 완료 기록의 내부 참조는 유지하지만 탈퇴 계정으로 다시 인증할 수 없다.
 - 탈퇴는 복구하지 않으며 같은 외부 identity 또는 이메일은 새 계정으로만 다시 가입할 수 있다.
 
 ## 6. Course API
@@ -513,7 +512,7 @@ Idempotency-Key: <key>
 - `Idempotency-Key`는 필수이며 2.6절의 24시간 규칙을 따른다.
 - Course에는 종료 상태나 종료 API가 없으며 삭제만 제공한다.
 - `READY`, `LIVE`, `PROCESSING` Session이 하나라도 있으면 `409 COURSE_HAS_ACTIVE_SESSION`이다. `COMPLETED` Session만 남은 Course는 삭제할 수 있다.
-- 성공 commit과 동시에 모든 Course API·WebSocket 재연결·참여 코드 조회는 `404 RESOURCE_NOT_FOUND`로 접근을 차단한다. 복구 API는 없다. PDF·녹음의 object와 Course 하위 DB row는 삭제 ledger가 멱등적으로 정리한다.
+- 성공 commit과 동시에 모든 Course API·WebSocket 재연결·참여 코드 조회는 `404 RESOURCE_NOT_FOUND`로 접근을 차단한다. 복구 API는 없다. Course와 완료 기록은 참조 무결성을 위해 내부 tombstone으로 남기며, PDF·녹음 final object는 deletion ledger가 멱등적으로 정리한다.
 - 삭제와 멱등성 완료 응답 저장을 한 transaction으로 처리해 Course가 사라진 뒤의 재요청도 기존 `204`를 반환한다.
 - 삭제가 허용되는 Course의 성공 응답은 `204 No Content`이다.
 
@@ -1293,7 +1292,7 @@ DELETE /api/v1/sessions/{session_id}/recording
 Idempotency-Key: <key>
 ```
 
-- 권한: 해당 Course `PROFESSOR`. Session이 `COMPLETED`이고 final object가 있는 Recording만 삭제할 수 있다. 다른 상태는 `409 RECORDING_DELETE_NOT_ALLOWED`다.
+- 권한: 해당 Course를 생성한 `PROFESSOR`. Session이 `COMPLETED`이고 final object가 있는 Recording만 삭제할 수 있다. 다른 상태는 `409 RECORDING_DELETE_CONFLICT`다.
 - 완료 시점부터 30일 뒤에도 같은 삭제 흐름을 자동 실행한다. 성공 commit 뒤 metadata·playback은 즉시 `404 RECORDING_NOT_FOUND`이고, final object는 내부 deletion ledger가 재시도해 삭제한다.
 - 삭제는 복구하지 않으며 Transcript·Question·Answer와 완료 기록의 다른 영역은 유지한다.
 

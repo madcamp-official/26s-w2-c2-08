@@ -50,6 +50,7 @@ class CourseRepository:
                     ),
                 )
                 .where(Course.id == course_id)
+                .where(Course.deleted_at.is_(None))
             )
         ).one_or_none()
         if row is None:
@@ -86,6 +87,7 @@ class CourseRepository:
         )
         if role != "ALL":
             statement = statement.where(CourseMember.role == role)
+        statement = statement.where(Course.deleted_at.is_(None))
         if cursor_created_at is not None and cursor_id is not None:
             statement = statement.where(
                 or_(
@@ -104,7 +106,11 @@ class CourseRepository:
         ]
 
     async def course_exists(self, session: AsyncSession, course_id: UUID) -> bool:
-        return (await session.scalar(select(Course.id).where(Course.id == course_id))) is not None
+        return (
+            await session.scalar(
+                select(Course.id).where(Course.id == course_id, Course.deleted_at.is_(None))
+            )
+        ) is not None
 
     async def lock_by_join_code_hash(
         self,
@@ -112,11 +118,17 @@ class CourseRepository:
         lookup_hash: bytes,
     ) -> Course | None:
         return await session.scalar(
-            select(Course).where(Course.join_code_lookup_hash == lookup_hash).with_for_update()
+            select(Course)
+            .where(Course.join_code_lookup_hash == lookup_hash, Course.deleted_at.is_(None))
+            .with_for_update()
         )
 
     async def lock_course(self, session: AsyncSession, course_id: UUID) -> Course | None:
-        return await session.scalar(select(Course).where(Course.id == course_id).with_for_update())
+        return await session.scalar(
+            select(Course)
+            .where(Course.id == course_id, Course.deleted_at.is_(None))
+            .with_for_update()
+        )
 
     async def get_membership(
         self,

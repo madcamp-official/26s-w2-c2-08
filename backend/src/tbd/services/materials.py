@@ -32,6 +32,7 @@ from tbd.services.courses import (
     CourseRoleRequiredError,
 )
 from tbd.services.knowledge import enqueue_knowledge_indexing
+from tbd.services.lifecycle import enqueue_storage_deletion
 from tbd.storage import Storage, StorageError, StorageKey, StorageNamespace, sha256_bytes
 
 MATERIAL_MAX_COUNT: Final = 10
@@ -377,7 +378,8 @@ class MaterialService:
         if material is None:
             raise MaterialDeleteConflictError
         job = await self.repository.material_job(session, material.id)
-        material.detached_at = now or datetime.now(UTC)
+        detached_at = now or datetime.now(UTC)
+        material.detached_at = detached_at
         material.version += 1
         if job is not None:
             if job.status in {AIJobStatus.PENDING, AIJobStatus.RUNNING}:
@@ -393,6 +395,15 @@ class MaterialService:
             event_type="material.cleanup.requested",
             resource_version=material.version,
             payload={"material_id": str(material.id)},
+        )
+        await enqueue_storage_deletion(
+            session,
+            course_id=lecture_session.course_id,
+            resource_id=material.id,
+            resource_type="MATERIAL",
+            storage_key=material.storage_key,
+            byte_size=material.byte_size,
+            now=detached_at,
         )
         await session.flush()
         return StorageKey.parse(material.storage_key)
