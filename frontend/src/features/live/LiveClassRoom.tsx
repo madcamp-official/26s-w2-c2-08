@@ -19,6 +19,7 @@ import { LiveAudioPublisherControl } from './LiveAudioPublisherControl'
 import { LiveTranscriptPanel } from './LiveTranscriptPanel'
 import { initialLiveTranscriptState, liveTranscriptReducer } from './live-state'
 import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
+import { LocalRecordingPanel } from '../recordings/LocalRecordingPanel'
 
 interface Props {
   session: LectureSession
@@ -48,6 +49,12 @@ export function LiveClassRoom({
   >('connecting')
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [endOpen, setEndOpen] = useState(false)
+  const [recordingStream, setRecordingStream] = useState<MediaStream | null>(
+    null,
+  )
+  const [recordingClientStreamId, setRecordingClientStreamId] = useState<
+    string | null
+  >(null)
   const timeline = useQuery({
     queryKey: ['sessions', session.id, 'live-transcript'],
     queryFn: ({ signal }) => getLiveTranscript(session.id, signal),
@@ -127,7 +134,13 @@ export function LiveClassRoom({
         </div>
         {professor && (
           <div className="live-class-room__controls">
-            <LiveAudioPublisherControl sessionId={session.id} />
+            <LiveAudioPublisherControl
+              sessionId={session.id}
+              onMediaStream={(stream, clientStreamId) => {
+                setRecordingStream(stream)
+                setRecordingClientStreamId(clientStreamId)
+              }}
+            />
             <Button
               variant="danger"
               disabled={endPending}
@@ -138,6 +151,14 @@ export function LiveClassRoom({
           </div>
         )}
       </header>
+      {professor && (
+        <LocalRecordingPanel
+          sessionId={session.id}
+          stream={recordingStream}
+          clientStreamId={recordingClientStreamId}
+          sessionStatus="LIVE"
+        />
+      )}
       <div className="live-class-room__grid">
         <LiveTranscriptPanel
           transcript={transcript}

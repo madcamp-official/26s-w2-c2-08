@@ -55,6 +55,7 @@ interface AudioSocket {
 export interface AudioPublisherOptions {
   sessionId: string
   onState: (state: AudioPublisherState, message?: string) => void
+  onMediaStream?: (stream: MediaStream, clientStreamId: string) => void
   getUserMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>
   webSocketFactory?: (url: string) => AudioSocket
 }
@@ -143,6 +144,7 @@ export class LiveAudioPublisher {
           noiseSuppression: true,
         },
       })
+      this.options.onMediaStream?.(this.stream, this.clientStreamId)
     } catch (error) {
       const denied =
         error instanceof DOMException &&
