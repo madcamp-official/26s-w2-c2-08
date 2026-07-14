@@ -187,7 +187,7 @@ export interface paths {
         };
         /**
          * 내 Course 목록 조회
-         * @description 현재 사용자가 멤버인 Course만 반환한다.
+         * @description 현재 사용자가 멤버인 Course만 `created_at DESC, id DESC`로 반환한다.
          */
         get: operations["listMyCourses"];
         put?: never;
@@ -4369,6 +4369,8 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     createCourse: {
@@ -4426,6 +4428,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     joinCourse: {
@@ -4493,6 +4496,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getCourse: {
@@ -4523,6 +4527,8 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     deleteCourse: {
@@ -4615,6 +4621,8 @@ export interface operations {
             403: components["responses"]["JoinCodeRotationForbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["IdempotencyKeyReused"];
+            422: components["responses"]["ValidationFailed"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listCourseSessions: {

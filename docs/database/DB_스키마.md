@@ -1649,15 +1649,16 @@ source에는 `lecture_materials.detached_at IS NULL AND processing_status = 'REA
 
 ### 14.1 Course 생성·참여·코드 회전·삭제
 
-Course 생성은 다음 항목을 한 트랜잭션으로 처리한다.
+Course 생성은 다음 항목을 한 트랜잭션으로 처리한다. `Idempotency-Key`는 선택 사항이며,
+1·5항의 멱등성 처리는 헤더가 제공된 요청에만 적용한다.
 
-1. `idempotency_records`를 선점하고 동일 요청인지 확인한다.
+1. 헤더가 제공됐으면 `idempotency_records`를 선점하고 동일 요청인지 확인한다.
 2. 서버가 참여 코드를 생성하고 정규화한다.
 3. HMAC lookup hash와 AES-256-GCM 암호문을 만든다.
 4. `courses`와 생성자의 `course_members(PROFESSOR)`를 함께 삽입한다.
-5. 암호화한 응답과 멱등성 terminal 상태·`completed_at`·`expires_at`을 기록한다.
+5. 헤더가 제공됐으면 암호화한 응답과 멱등성 terminal 상태·`completed_at`·`expires_at`을 기록한다.
 
-참여 시 정규화한 `[A-Z]{6}` 코드의 HMAC으로 Course를 찾은 뒤 Course 또는 멤버 행을 잠근다. 코드는 자동 만료하지 않으므로 만료 시각을 검사하지 않는다. `(course_id, user_id)`를 멱등 upsert하되 기존 `PROFESSOR` 역할을 `STUDENT`로 변경하지 않는다. HMAC UNIQUE 충돌이 난 코드 생성은 새 코드를 만들어 제한 횟수만큼 재시도한다.
+참여 시 정규화한 `[A-Z]{6}` 코드의 HMAC으로 Course를 찾은 뒤 Course 또는 멤버 행을 잠근다. 코드는 자동 만료하지 않으므로 만료 시각을 검사하지 않는다. `(course_id, user_id)`를 멱등 upsert하되 기존 `PROFESSOR` 역할을 `STUDENT`로 변경하지 않는다. 선택적인 `Idempotency-Key`가 제공되면 같은 transaction에서 멱등성 원장도 처리한다. HMAC UNIQUE 충돌이 난 코드 생성은 새 코드를 만들어 제한 횟수만큼 재시도한다.
 
 제품 참여 코드 회전은 owner 권한과 멱등성 record를 확인하고 Course 행을 잠근 뒤 새 코드의 hash·ciphertext·nonce·key version, Course `version`, 멱등성 terminal 응답을 한 transaction에서 교체한다. commit 전에는 기존 코드가 유효하고 commit 뒤에는 새 코드만 유효하다. 이전 코드나 회전 이력 행은 만들지 않는다.
 

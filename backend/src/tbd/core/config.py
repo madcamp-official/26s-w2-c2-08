@@ -10,7 +10,7 @@ from urllib.parse import quote, unquote, urlsplit
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from tbd.core.crypto import AesGcmResponseCipher
+from tbd.core.crypto import AesGcmResponseCipher, CourseJoinCodeCodec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_POSTGRES_DB = "tbd"
@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     google_oidc_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
     idempotency_response_encryption_key: SecretStr | None = None
     idempotency_response_encryption_key_version: int = Field(default=1, ge=1)
+    course_join_code_encryption_key: SecretStr | None = None
+    course_join_code_encryption_key_version: int = Field(default=1, ge=1)
+    course_join_code_lookup_key: SecretStr | None = None
+    course_join_code_lookup_key_version: int = Field(default=1, ge=1)
 
     @property
     def effective_database_url(self) -> str:
@@ -99,6 +103,27 @@ class Settings(BaseSettings):
             key_version=self.idempotency_response_encryption_key_version,
         )
 
+    @property
+    def course_join_code_codec(self) -> CourseJoinCodeCodec | None:
+        """Build the join-code codec only when both independent keys exist."""
+
+        if self.course_join_code_encryption_key is None or self.course_join_code_lookup_key is None:
+            return None
+        encryption_key = base64.b64decode(
+            self.course_join_code_encryption_key.get_secret_value(),
+            validate=True,
+        )
+        lookup_key = base64.b64decode(
+            self.course_join_code_lookup_key.get_secret_value(),
+            validate=True,
+        )
+        return CourseJoinCodeCodec(
+            encryption_key=encryption_key,
+            encryption_key_version=self.course_join_code_encryption_key_version,
+            lookup_key=lookup_key,
+            lookup_key_version=self.course_join_code_lookup_key_version,
+        )
+
     @model_validator(mode="after")
     def validate_production_database(self) -> "Settings":
         """Reject repository defaults and incomplete auth configuration in production."""
@@ -122,6 +147,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 "IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be set when APP_ENV=production"
             )
+        if self.course_join_code_encryption_key is None:
+            raise ValueError("COURSE_JOIN_CODE_ENCRYPTION_KEY must be set when APP_ENV=production")
+        if self.course_join_code_lookup_key is None:
+            raise ValueError("COURSE_JOIN_CODE_LOOKUP_KEY must be set when APP_ENV=production")
 
         if self.auth_secret_key.get_secret_value() == DEFAULT_AUTH_SECRET:
             raise ValueError("AUTH_SECRET_KEY must be changed when APP_ENV=production")
@@ -192,6 +221,56 @@ class Settings(BaseSettings):
             raise ValueError("IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must be base64-encoded") from exc
         if len(decoded) != 32:
             raise ValueError("IDEMPOTENCY_RESPONSE_ENCRYPTION_KEY must decode to exactly 32 bytes")
+        return SecretStr(encoded)
+
+    @field_validator("course_join_code_encryption_key")
+    @classmethod
+    def validate_course_join_code_encryption_key(
+        cls,
+        value: SecretStr | None,
+    ) -> SecretStr | None:
+        """Accept only a base64-encoded AES-256 key for Course code display."""
+
+        return cls._validate_base64_key(
+            value,
+            field_name="COURSE_JOIN_CODE_ENCRYPTION_KEY",
+            minimum_bytes=32,
+            exact_bytes=32,
+        )
+
+    @field_validator("course_join_code_lookup_key")
+    @classmethod
+    def validate_course_join_code_lookup_key(
+        cls,
+        value: SecretStr | None,
+    ) -> SecretStr | None:
+        """Require at least 256 bits for the independent lookup HMAC key."""
+
+        return cls._validate_base64_key(
+            value,
+            field_name="COURSE_JOIN_CODE_LOOKUP_KEY",
+            minimum_bytes=32,
+        )
+
+    @staticmethod
+    def _validate_base64_key(
+        value: SecretStr | None,
+        *,
+        field_name: str,
+        minimum_bytes: int,
+        exact_bytes: int | None = None,
+    ) -> SecretStr | None:
+        if value is None:
+            return None
+        encoded = value.get_secret_value().strip()
+        try:
+            decoded = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"{field_name} must be base64-encoded") from exc
+        if exact_bytes is not None and len(decoded) != exact_bytes:
+            raise ValueError(f"{field_name} must decode to exactly {exact_bytes} bytes")
+        if len(decoded) < minimum_bytes:
+            raise ValueError(f"{field_name} must decode to at least {minimum_bytes} bytes")
         return SecretStr(encoded)
 
     @field_validator("storage_root", mode="after")

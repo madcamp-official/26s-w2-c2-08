@@ -86,6 +86,8 @@ def test_production_accepts_explicit_non_default_database_url() -> None:
         google_oidc_client_secret="client-secret",
         google_oidc_redirect_uri="https://api.goal.example/api/v1/auth/google/callback",
         idempotency_response_encryption_key=base64.b64encode(b"x" * 32).decode(),
+        course_join_code_encryption_key=base64.b64encode(b"y" * 32).decode(),
+        course_join_code_lookup_key=base64.b64encode(b"z" * 32).decode(),
     )
 
     assert settings.effective_database_url.endswith("@database:5432/goal")
@@ -109,6 +111,15 @@ def test_production_requires_idempotency_response_encryption_key() -> None:
         )
 
 
+def test_course_join_code_keys_are_independent_and_validated() -> None:
+    """Course code encryption and HMAC lookup each require strong configured material."""
+
+    with pytest.raises(ValidationError, match="COURSE_JOIN_CODE_ENCRYPTION_KEY"):
+        Settings(_env_file=None, course_join_code_encryption_key="dG9vLXNob3J0")
+    with pytest.raises(ValidationError, match="COURSE_JOIN_CODE_LOOKUP_KEY"):
+        Settings(_env_file=None, course_join_code_lookup_key="dG9vLXNob3J0")
+
+
 def test_production_rejects_http_auth_origin() -> None:
     """Production browser origins must use HTTPS."""
 
@@ -121,6 +132,8 @@ def test_production_rejects_http_auth_origin() -> None:
             google_oidc_client_id="client-id.apps.googleusercontent.com",
             google_oidc_client_secret="client-secret",
             idempotency_response_encryption_key=base64.b64encode(b"x" * 32).decode(),
+            course_join_code_encryption_key=base64.b64encode(b"y" * 32).decode(),
+            course_join_code_lookup_key=base64.b64encode(b"z" * 32).decode(),
         )
 
 

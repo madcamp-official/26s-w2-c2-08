@@ -370,6 +370,7 @@ GET /api/v1/courses?role=ALL&cursor=<cursor>&limit=20
 - `role`: `ALL`, `PROFESSOR`, `STUDENT`
 - 현재 사용자가 참여한 Course만 반환한다.
 - 각 항목에 Course별 현재 사용자 역할과 최근·진행 중 class 요약을 포함한다.
+- 목록은 `created_at DESC, id DESC`로 안정적으로 정렬한다.
 
 ### 6.2 Course 생성
 
@@ -386,6 +387,7 @@ POST /api/v1/courses
 
 - 권한: 인증 사용자
 - 성공: `201 Created`
+- `Idempotency-Key`는 선택 사항이다. 제공한 요청에만 2.6절의 멱등성 원장을 적용한다.
 - 생성자는 해당 Course의 유일한 `PROFESSOR`가 되며 Course 생성과 교수자 멤버십 생성을 원자적으로 처리한다.
 - 서버가 영문 대문자 6자인 고유한 `join_code`를 생성한다.
 - 참여 코드는 교수자 권한 응답에만 포함한다.
@@ -403,6 +405,7 @@ POST /api/v1/courses/join
 ```
 
 - 권한: 인증 사용자
+- `Idempotency-Key`는 선택 사항이다. 제공한 요청에만 2.6절의 멱등성 원장을 적용한다.
 - 입력 앞뒤 공백을 제거하고 영문자를 대문자로 정규화한 뒤 `[A-Z]{6}`인지 검증한다. 구분자는 허용하지 않는다.
 - 참여 코드는 만료되지 않는다. 회전된 이전 코드는 즉시 무효가 된다.
 - 새 멤버십: `201 Created`

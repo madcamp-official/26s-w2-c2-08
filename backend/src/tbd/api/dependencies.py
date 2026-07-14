@@ -8,10 +8,12 @@ from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.core.config import Settings
+from tbd.core.crypto import CourseJoinCodeCodec
 from tbd.core.errors import ApiError
 from tbd.db import Database
 from tbd.models.users import User
 from tbd.providers.google_oidc import GoogleOIDCProvider
+from tbd.repositories.courses import CourseRepository, CourseView
 from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.services.auth_sessions import AuthSessionService, InvalidSessionError
 
@@ -50,6 +52,14 @@ def require_allowed_origin(
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:
     """Yield a session without assigning commit ownership to the router."""
+
+    database = get_database(request)
+    async with database.session_factory() as session:
+        yield session
+
+
+async def get_course_authorization_session(request: Request) -> AsyncIterator[AsyncSession]:
+    """Use an isolated read session so mutation transactions start cleanly."""
 
     database = get_database(request)
     async with database.session_factory() as session:
@@ -98,3 +108,73 @@ def get_idempotency_repository(request: Request) -> IdempotencyRepository:
             message="멱등성 응답 암호화 설정을 사용할 수 없습니다.",
         )
     return repository
+
+
+def get_optional_idempotency_repository(request: Request) -> IdempotencyRepository | None:
+    """Return optional idempotency support for endpoints with an optional header."""
+
+    return request.app.state.idempotency_repository
+
+
+def get_course_join_code_codec(request: Request) -> CourseJoinCodeCodec:
+    """Return independent Course join-code crypto or fail closed."""
+
+    codec = request.app.state.course_join_code_codec
+    if codec is None:
+        raise ApiError(
+            status_code=503,
+            code="DEPENDENCY_UNAVAILABLE",
+            message="Course 참여 코드 보안 설정을 사용할 수 없습니다.",
+        )
+    return codec
+
+
+async def require_course_member(
+    course_id: str,
+    session: Annotated[AsyncSession, Depends(get_course_authorization_session)],
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+) -> CourseView:
+    """Authorize an existing Course through the current user's membership."""
+
+    try:
+        parsed_course_id = UUID(course_id)
+    except ValueError as exc:
+        raise ApiError(
+            status_code=404,
+            code="RESOURCE_NOT_FOUND",
+            message="요청한 리소스를 찾을 수 없습니다.",
+        ) from exc
+    repository = CourseRepository()
+    view = await repository.get_view_for_user(
+        session,
+        course_id=parsed_course_id,
+        user_id=user_id,
+    )
+    if view is not None:
+        return view
+    if await repository.course_exists(session, parsed_course_id):
+        raise ApiError(
+            status_code=403,
+            code="COURSE_ACCESS_DENIED",
+            message="이 Course에 접근할 권한이 없습니다.",
+        )
+    raise ApiError(
+        status_code=404,
+        code="RESOURCE_NOT_FOUND",
+        message="요청한 리소스를 찾을 수 없습니다.",
+    )
+
+
+async def require_course_professor(
+    view: Annotated[CourseView, Depends(require_course_member)],
+) -> CourseView:
+    """Require the immutable Course professor role for owner controls."""
+
+    if view.role != "PROFESSOR":
+        raise ApiError(
+            status_code=403,
+            code="ROLE_REQUIRED",
+            message="Course를 처음 생성한 교수자만 수행할 수 있습니다.",
+            details={"required_role": "COURSE_CREATOR_PROFESSOR"},
+        )
+    return view
