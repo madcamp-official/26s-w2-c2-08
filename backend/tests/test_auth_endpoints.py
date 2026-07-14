@@ -205,6 +205,30 @@ def test_nonce_mismatch_rejects_session_issue(migrated_database_url: str) -> Non
         assert client.cookies.get("goal_session") is None
 
 
+def test_expired_oauth_transaction_cannot_issue_session(
+    migrated_database_url: str,
+) -> None:
+    """An expired browser transaction is rejected before provider exchange."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider)
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            connection.execute(
+                "UPDATE oauth_transactions "
+                "SET created_at = now() - interval '11 minutes', "
+                "expires_at = now() - interval '1 minute'"
+            )
+            connection.commit()
+
+        response = _complete(client, state)
+
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "INVALID_OAUTH_TRANSACTION"
+        assert provider.exchange_requests == []
+        assert client.cookies.get("goal_session") is None
+
+
 def test_start_rejects_open_redirect(migrated_database_url: str) -> None:
     """An external return_to never reaches the provider."""
 
@@ -257,6 +281,28 @@ def test_rotated_session_cannot_authenticate(migrated_database_url: str) -> None
 
         assert old_token is not None
         client.cookies.set("goal_session", old_token, domain="testserver.local", path="/")
+        response = client.get("/api/v1/me")
+
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "INVALID_SESSION"
+
+
+def test_expired_session_cannot_authenticate(migrated_database_url: str) -> None:
+    """Absolute expiry invalidates the cookie even when the browser retains it."""
+
+    client, provider, _ = _client(migrated_database_url)
+    with client:
+        state = _start(client, provider)
+        assert _complete(client, state).status_code == 302
+
+        with psycopg.connect(_sync_dsn(migrated_database_url)) as connection:
+            connection.execute(
+                "UPDATE auth_sessions "
+                "SET created_at = now() - interval '8 days', "
+                "expires_at = now() - interval '1 day'"
+            )
+            connection.commit()
+
         response = client.get("/api/v1/me")
 
         assert response.status_code == 401
