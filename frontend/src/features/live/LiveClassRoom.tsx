@@ -18,6 +18,7 @@ import { getLiveTranscript } from './api'
 import { LiveAudioPublisherControl } from './LiveAudioPublisherControl'
 import { LiveTranscriptPanel } from './LiveTranscriptPanel'
 import { initialLiveTranscriptState, liveTranscriptReducer } from './live-state'
+import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
 
 interface Props {
   session: LectureSession
@@ -161,6 +162,7 @@ export function LiveClassRoom({
               sessionStatus="LIVE"
             />
           )}
+          <PersonalAiPanel sessionId={session.id} mode="LIVE" />
         </div>
       </div>
       {timeline.isError && (

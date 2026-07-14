@@ -1,4 +1,5 @@
-export type PollableJobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+export type PollableJobStatus =
+  'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'SUPERSEDED'
 
 export function pollingIntervalForJob(
   status: PollableJobStatus | undefined,
