@@ -108,7 +108,8 @@ paths:
       summary: Google 로그인 시작
       description: |
         state, nonce와 PKCE 값을 서버 세션에 저장한 뒤 Google authorization endpoint로
-        redirect한다. `return_to`는 같은 서비스의 허용된 상대 경로만 받는다.
+        redirect한다. `return_to`는 `/`로 시작하고 scheme·host·`//`·제어 문자·`/api`
+        경로가 없는 Frontend 상대 경로만 받는다.
       security: []
       parameters:
         - name: return_to
@@ -154,7 +155,9 @@ paths:
       description: |
         state·nonce·PKCE를 검증하고 authorization code를 교환한 뒤 User와 서버 세션을
         생성하거나 갱신한다. 성공 시 `goal_session` Cookie를 설정하고 저장된 return_to로
-        redirect한다. Provider 오류 원문은 브라우저나 로그에 남기지 않는다.
+        redirect한다. OAuth transaction은 provider 호출 전에 한 번만 소비한다. Google 동의
+        취소는 안전한 Frontend 로그인 오류 경로로 redirect하고, Provider 장애는 원문을
+        숨긴 `503 DEPENDENCY_UNAVAILABLE`로 변환한다.
       security: []
       parameters:
         - name: code
@@ -221,7 +224,7 @@ paths:
             X-Request-ID:
               $ref: "#/components/headers/RequestId"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          $ref: "#/components/responses/OriginForbidden"
 
   /api/v1/me:
     parameters:
@@ -2504,7 +2507,8 @@ components:
       name: goal_session
       description: |
         Google OAuth/OIDC authorization code 흐름 완료 후 서버가 발급하는 세션 Cookie다.
-        HttpOnly, Secure, SameSite=Lax를 사용하고 기본 만료는 7일이다. 클라이언트
+        HttpOnly, Secure, SameSite=Lax를 사용하고 callback 발급 시점부터 절대 만료는
+        7일이다. 일반 요청은 last_seen_at만 갱신하고 만료를 연장하지 않는다. 클라이언트
         JavaScript는 Cookie 값을 읽거나 저장하지 않는다.
 
   headers:
@@ -2737,6 +2741,21 @@ components:
             error:
               code: COURSE_ACCESS_DENIED
               message: 이 Course에 접근할 권한이 없습니다.
+              request_id: req_01HXYZ
+              details: null
+    OriginForbidden:
+      description: 상태 변경 요청의 Origin이 없거나 허용된 정확한 origin과 일치하지 않음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: ORIGIN_NOT_ALLOWED
+              message: 허용되지 않은 요청 출처입니다.
               request_id: req_01HXYZ
               details: null
     NotFound:

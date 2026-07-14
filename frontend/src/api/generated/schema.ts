@@ -63,7 +63,8 @@ export interface paths {
         /**
          * Google 로그인 시작
          * @description state, nonce와 PKCE 값을 서버 세션에 저장한 뒤 Google authorization endpoint로
-         *     redirect한다. `return_to`는 같은 서비스의 허용된 상대 경로만 받는다.
+         *     redirect한다. `return_to`는 `/`로 시작하고 scheme·host·`//`·제어 문자·`/api`
+         *     경로가 없는 Frontend 상대 경로만 받는다.
          */
         get: operations["startGoogleLogin"];
         put?: never;
@@ -88,7 +89,9 @@ export interface paths {
          * Google 로그인 callback
          * @description state·nonce·PKCE를 검증하고 authorization code를 교환한 뒤 User와 서버 세션을
          *     생성하거나 갱신한다. 성공 시 `goal_session` Cookie를 설정하고 저장된 return_to로
-         *     redirect한다. Provider 오류 원문은 브라우저나 로그에 남기지 않는다.
+         *     redirect한다. OAuth transaction은 provider 호출 전에 한 번만 소비한다. Google 동의
+         *     취소는 안전한 Frontend 로그인 오류 경로로 redirect하고, Provider 장애는 원문을
+         *     숨긴 `503 DEPENDENCY_UNAVAILABLE`로 변환한다.
          */
         get: operations["completeGoogleLogin"];
         put?: never;
@@ -3515,6 +3518,26 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description 상태 변경 요청의 Origin이 없거나 허용된 정확한 origin과 일치하지 않음 */
+        OriginForbidden: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "ORIGIN_NOT_ALLOWED",
+                 *         "message": "허용되지 않은 요청 출처입니다.",
+                 *         "request_id": "req_01HXYZ",
+                 *         "details": null
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description 리소스가 없거나 존재를 공개하지 않음 */
         NotFound: {
             headers: {
@@ -4240,7 +4263,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
+            403: components["responses"]["OriginForbidden"];
         };
     };
     getCurrentUser: {

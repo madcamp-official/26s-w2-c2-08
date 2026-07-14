@@ -59,9 +59,10 @@ Cookie: goal_session=<opaque-session-id>
 ```
 
 - Cookie 속성은 `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`이며 기본 만료는 7일이다.
+- 7일은 로그인 callback에서 발급한 절대 만료다. 일반 요청은 `last_seen_at`만 최대 5분 간격으로 갱신하고 세션 수명을 자동 연장하지 않는다.
 - 브라우저 JavaScript와 localStorage에 Google token 또는 서버 session ID를 저장하지 않는다.
 - 서버에는 session ID의 hash, 사용자 ID, 만료와 폐기 시각만 보관하며 Google access token은 API 호출에 필요하지 않으면 저장하지 않는다.
-- 상태 변경 요청은 허용된 `Origin`인지 확인한다.
+- 상태 변경 요청은 설정된 allowlist와 `scheme://host[:port]`가 정확히 일치하는 `Origin`을 필수로 요구한다. `Origin` 누락, `null`, 사용자 정보·path가 포함된 값과 allowlist 불일치는 `403 ORIGIN_NOT_ALLOWED`로 거부한다.
 - 서버는 요청 본문의 `user_id`를 신뢰하지 않는다.
 - 현재 사용자는 인증 컨텍스트에서 확인한다.
 - 사용자에게 전역 교수자·학생 역할을 부여하지 않는다.
@@ -75,7 +76,7 @@ GET /api/v1/auth/google/start?return_to=/courses
 ```
 
 - 서버는 state, nonce와 PKCE 검증 정보를 만들고 10분 만료 임시 `goal_oauth` Cookie를 설정한다.
-- `return_to`는 같은 서비스의 허용된 상대 경로만 받으며 외부 URL은 거부한다.
+- `return_to`는 `/`로 시작하되 `//`, scheme·host, 제어 문자와 `/api` 경로가 없는 Frontend 상대 경로만 받는다. 외부 URL과 Backend API 경로는 `400 INVALID_RETURN_TO`로 거부한다.
 - 성공하면 Google 로그인 화면으로 `302 Redirect`한다.
 
 #### 2.2.2 Google callback
@@ -85,8 +86,11 @@ GET /api/v1/auth/google/callback?code=<code>&state=<state>
 ```
 
 - state, nonce와 PKCE를 검증한 뒤 User를 생성 또는 갱신한다.
+- OAuth transaction은 callback 검증 transaction에서 먼저 `consumed_at`을 기록한다. 같은 state 또는 임시 Cookie의 재사용은 provider 호출 전에 `400 INVALID_OAUTH_TRANSACTION`으로 거부한다.
 - 기존 서버 세션이 있으면 session fixation을 막기 위해 새 session ID로 회전한다.
-- 성공하면 `goal_session` Cookie를 설정하고 검증된 `return_to`로 `302 Redirect`한다.
+- 성공하면 `goal_session` Cookie를 설정하고 설정된 Frontend origin에 검증된 `return_to`를 결합해 `302 Redirect`한다.
+- 사용자가 Google 동의를 취소하면 임시 transaction을 소비한 뒤 Frontend `/login?auth_error=cancelled&return_to=...`로 redirect한다.
+- token 교환·OIDC 검증 provider 장애는 `503 DEPENDENCY_UNAVAILABLE`, state·nonce·PKCE 불일치는 `400 INVALID_OAUTH_TRANSACTION`으로 변환한다.
 - Provider 오류 원문과 token을 응답 또는 로그에 남기지 않는다.
 
 #### 2.2.3 로그아웃
@@ -170,9 +174,9 @@ POST /api/v1/auth/logout
 
 |  HTTP | 의미                       | 주요 코드                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ----: | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `400` | 요청 형식 오류             | `INVALID_REQUEST`, `INVALID_CURSOR`, `INVALID_RETURN_TO`, `INVALID_OAUTH_TRANSACTION`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `401` | 인증 필요                  | `AUTHENTICATION_REQUIRED`, `INVALID_SESSION`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `403` | Course 또는 역할 권한 없음 | `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `403` | Origin·Course·역할 권한 없음 | `ORIGIN_NOT_ALLOWED`, `COURSE_ACCESS_DENIED`, `ROLE_REQUIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `404` | 리소스 없음                | `RESOURCE_NOT_FOUND`, `MATERIAL_NOT_FOUND`, `RECORDING_NOT_FOUND`, `RECORDING_UPLOAD_NOT_FOUND`                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `409` | 상태 전이·중복 충돌        | `SESSION_STATE_CONFLICT`, `ACTIVE_SESSION_EXISTS`, `IDEMPOTENCY_KEY_REUSED`, `MEMBERSHIP_CONFLICT`, `AI_JOB_STATE_CONFLICT`, `AI_JOB_NOT_RETRYABLE`, `AI_JOB_RETRY_SYSTEM_MANAGED`, `MATERIAL_PROCESSING_ACTIVE`, `MATERIAL_LIMIT_EXCEEDED`, `MATERIAL_DELETE_CONFLICT`, `RECORDING_STATE_CONFLICT`, `RECORDING_UPLOAD_CONFLICT`, `UPLOAD_OFFSET_MISMATCH`, `RECORDING_NOT_READY`, `ANSWER_CAPTURE_ACTIVE`, `ANSWER_ALREADY_EXISTS`, `ANSWER_TRANSCRIPT_NOT_READY`, `SUMMARY_TRANSCRIPT_NOT_READY`, `SUMMARY_SOURCE_UNAVAILABLE`, `CHAT_RESPONSE_IN_PROGRESS` |
 | `410` | upload 만료                | `RECORDING_UPLOAD_EXPIRED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
