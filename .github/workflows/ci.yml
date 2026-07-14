@@ -74,7 +74,7 @@ jobs:
 
       - name: Install Chromium for production-route visual checks
         working-directory: frontend
-        run: pnpm exec playwright install --with-deps --no-shell chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Verify production routes at three viewports
         run: make frontend-visual
