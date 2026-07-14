@@ -148,6 +148,9 @@ make dev-api
 
 # 터미널 2: React/Vite
 make dev-web
+
+# 별도 터미널: PDF 전처리 Worker (자료 업로드를 처리하려면 필요)
+cd backend && uv run python -m tbd.jobs.material_worker
 ```
 
 접속 주소:

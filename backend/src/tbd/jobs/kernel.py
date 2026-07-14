@@ -41,6 +41,7 @@ class JobKernel:
         *,
         now: datetime,
         lease_duration: timedelta,
+        job_type: str | None = None,
     ) -> ClaimedJob | None:
         """Claim exactly one generic SHARED Job and record its safe state change."""
 
@@ -48,6 +49,32 @@ class JobKernel:
             session,
             now=now,
             lease_duration=lease_duration,
+            job_type=job_type,
+        )
+        if run is None:
+            return None
+        job = await session.get(AIJob, run.job_id)
+        assert job is not None
+        await self._emit_update(session, job)
+        return run
+
+    async def claim_shared_by_id(
+        self,
+        session: AsyncSession,
+        job_id: UUID,
+        *,
+        now: datetime,
+        lease_duration: timedelta,
+        job_type: str | None = None,
+    ) -> ClaimedJob | None:
+        """Claim a selected shared Job after its owning aggregate is locked."""
+
+        run = await self.jobs.claim_shared_by_id(
+            session,
+            job_id,
+            now=now,
+            lease_duration=lease_duration,
+            job_type=job_type,
         )
         if run is None:
             return None

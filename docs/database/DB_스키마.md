@@ -1708,17 +1708,17 @@ Material 관련 transaction의 잠금 순서는 `Session → Material → AIJob`
 4. 정규화한 `original_filename`과 별도 `display_name`을 만든다. 연결된 이름과 충돌하면 확장자 앞에 ` (1)`, ` (2)` 순 suffix를 붙여 partial UNIQUE를 만족시키며 기존 행의 이름은 바꾸거나 재번호를 매기지 않는다.
 5. `lecture_materials`, `MATERIAL_PROCESSING` Job, queue outbox event와 제공된 멱등성 키의 terminal `202` 응답을 같은 DB transaction에서 만들고 commit한다. 같은 키·요청은 기존 결과를 재사용하지만 키가 없거나 서로 다른 키인 별도 요청은 파일 내용과 `original_filename`이 같아도 새 Material을 만들며 content hash UNIQUE를 두지 않는다.
 
-Worker claim과 결과 transaction은 `detached_at IS NULL`인 대상만 처리한다. 처리 성공은 Job의 `target_material_id`, 현재 attempt, run token, `RUNNING`, Material의 현재 `version`, `detached_at IS NULL`을 모두 확인하고 KnowledgeChunk 삽입, Material `READY`·`processed_by_job_id` 갱신, Job `SUCCEEDED` 전환을 함께 commit한다. 조건이 달라진 늦은 결과는 저장하지 않는다.
+Worker claim과 결과 transaction은 `detached_at IS NULL`인 대상만 처리한다. 처리 성공은 Job의 `target_material_id`, 현재 attempt, run token, `RUNNING`, Material의 현재 `version`, `detached_at IS NULL`을 모두 확인하고 Material `READY`·`processed_by_job_id` 갱신과 Job `SUCCEEDED` 전환을 함께 commit한다. KnowledgeChunk 삽입은 PR-18 RAG Worker의 별도 범위다. 조건이 달라진 늦은 결과는 저장하지 않는다.
 
 Material 연결 해제는 해당 Course의 `PROFESSOR`가 요청할 수 있고 Session이 `READY`, `LIVE`, `COMPLETED`일 때 허용한다. `PROCESSING`에서는 `409 SESSION_STATE_CONFLICT`로 거부한다. transaction은 `Session → Material → AIJob` 순서로 잠근 뒤 다음을 수행한다.
 
 1. `detached_at IS NULL`인 Material을 찾지 못하면 `404 MATERIAL_NOT_FOUND`를 반환한다. 조회 뒤 드문 동시 요청으로 version 조건 갱신이 실패하면 `409 MATERIAL_DELETE_CONFLICT`로 구분한다.
 2. `detached_at = now()`, `version + 1`, `updated_at`을 한 번에 기록한다. `processing_status`에는 새 `DETACHED` 값을 추가하지 않는다.
-3. 아직 결과를 만들지 않은 대상 `MATERIAL_PROCESSING` Job이 `PENDING`, `RUNNING`, `FAILED`이면 같은 transaction에서 삭제한다. Worker는 Job 행과 Material version·tombstone을 모두 확인하므로 실행 중 Job을 삭제해도 늦은 결과를 저장할 수 없다. 성공 결과의 provenance로 참조되는 `SUCCEEDED` Job은 Evidence·Chunk 보관 정책이 확정될 때까지 유지한다.
-4. object 삭제와 Material source KnowledgeChunk 정리를 위한 내부 outbox task, 필수 멱등성 키의 terminal `204` 응답을 같은 transaction에 기록하고 commit한다. `storage_key`는 내부 object 정리 payload에서만 사용한다. 같은 키·요청의 재실행은 tombstone 뒤에도 기존 `204`를 반환한다.
+3. 아직 결과를 만들지 않은 대상 `MATERIAL_PROCESSING` Job이 `PENDING`, `RUNNING`이면 같은 transaction에서 `CANCELLED`로 전이하고, `FAILED`이면 `retryable=false`로 바꾼다. Worker는 Job 행과 Material version·tombstone을 모두 확인하므로 늦은 결과를 저장할 수 없다. 성공 결과의 provenance로 참조되는 `SUCCEEDED` Job은 Evidence·Chunk 보관 정책이 확정될 때까지 유지한다.
+4. object 삭제 요청과 필수 멱등성 키의 terminal `204` 응답을 같은 transaction에 기록하고 commit한다. 현재 outbox payload는 안전한 Material ID만 가지며 cleanup worker가 내부 tombstone에서 storage key를 조회한다. PR-18 이후에는 참조되지 않은 Material source KnowledgeChunk 정리를 같은 task에 추가한다. 같은 키·요청의 재실행은 tombstone 뒤에도 기존 `204`를 반환한다.
 5. commit 직후부터 목록·상세·content 조회와 RAG 검색은 `detached_at IS NULL` 조건으로 해당 Material을 제외한다. 정리 작업 실패가 tombstone을 되돌리지는 않는다.
 
-Outbox consumer는 object가 이미 없어도 성공으로 처리하고 실패 시 멱등 재시도한다. Knowledge 정리는 참조되지 않은 Material source Chunk를 background에서 삭제한다. 연결 해제 Material의 원문 content link는 제공하지 않는다. 기존 Evidence는 생성 시 저장한 안전한 label을 계속 표시하고 공개 link를 `NULL`로 반환한다. 참조 중인 Chunk의 보관 기간, FK를 별도 source snapshot으로 전환할지와 Material·Chunk 최종 hard delete 시점은 미정이므로 현재 deferred `NO ACTION` FK와 Material tombstone을 유지하고 참조 중인 행을 임의로 삭제하지 않는다.
+후속 object cleanup consumer는 object가 이미 없어도 성공으로 처리하고 실패 시 멱등 재시도한다. PR-18의 Knowledge 정리는 참조되지 않은 Material source Chunk를 background에서 삭제한다. 연결 해제 Material의 원문 content link는 제공하지 않는다. 기존 Evidence는 생성 시 저장한 안전한 label을 계속 표시하고 공개 link를 `NULL`로 반환한다. 참조 중인 Chunk의 보관 기간, FK를 별도 source snapshot으로 전환할지와 Material·Chunk 최종 hard delete 시점은 미정이므로 현재 deferred `NO ACTION` FK와 Material tombstone을 유지하고 참조 중인 행을 임의로 삭제하지 않는다.
 
 ### 14.4 Recording publisher claim·upload
 
