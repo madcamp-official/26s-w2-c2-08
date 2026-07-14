@@ -146,7 +146,8 @@ export function FinalQuestionMindmap({ sessionId }: { sessionId: string }) {
             )}
             {selectedCluster?.finalized_at && (
               <p className="input-hint">
-                최종 확정 {new Date(selectedCluster.finalized_at).toLocaleString('ko-KR')}
+                최종 확정{' '}
+                {new Date(selectedCluster.finalized_at).toLocaleString('ko-KR')}
               </p>
             )}
             {selectedCluster && members.isPending && <p>질문을 불러오는 중…</p>}
