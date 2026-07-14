@@ -316,6 +316,145 @@ describe('Course role flows', () => {
     ).toBeInTheDocument()
   })
 
+  it('keeps one idempotency key while retrying a join-code rotation', async () => {
+    authenticate()
+    const keys: string[] = []
+    let attempts = 0
+    server.use(
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(professorCourse),
+      ),
+      http.post(
+        '*/api/v1/courses/:courseId/join-code/rotate',
+        ({ request }) => {
+          keys.push(request.headers.get('Idempotency-Key') ?? '')
+          attempts += 1
+          if (attempts === 1) {
+            return HttpResponse.json(
+              {
+                error: {
+                  code: 'DEPENDENCY_UNAVAILABLE',
+                  message: '잠시 후 다시 시도해 주세요.',
+                  request_id: 'req_rotate_retry',
+                  details: null,
+                },
+              },
+              { status: 503 },
+            )
+          }
+          return HttpResponse.json({ ...professorCourse, join_code: 'NEWCOD' })
+        },
+      ),
+    )
+    renderAt(`/courses/${professorCourse.id}`)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '새 코드로 교체' }),
+    )
+    const dialog = screen.getByRole('dialog', {
+      name: '참여 코드를 새로 만들까요?',
+    })
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '새 코드로 교체' }),
+    )
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      '기존 코드는 유지되었습니다',
+    )
+    expect(screen.getByText('ABCXYZ')).toBeInTheDocument()
+
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: '새 코드로 교체' }),
+    )
+    expect(await screen.findByText('NEWCOD')).toBeInTheDocument()
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe('')
+    expect(keys[1]).toBe(keys[0])
+  })
+
+  it('uses the Course role and status matrix for the active class action', async () => {
+    authenticate()
+    server.use(
+      http.get('*/api/v1/courses/:courseId', ({ params }) => {
+        const student = params.courseId === studentCourse.id
+        return HttpResponse.json({
+          ...(student ? studentCourse : professorCourse),
+          current_session: {
+            id: readySession.id,
+            title: readySession.title,
+            lecture_date: readySession.lecture_date,
+            status: 'READY',
+            started_at: null,
+          },
+        })
+      }),
+    )
+
+    const router = renderAt(`/courses/${professorCourse.id}`)
+    expect(
+      await screen.findByRole('link', { name: 'class 준비 계속하기' }),
+    ).toHaveAttribute('href', `/sessions/${readySession.id}`)
+
+    await router.navigate(`/courses/${studentCourse.id}`)
+    expect(
+      await screen.findByText(
+        '별도 동작 없이 기다려 주세요. 시작되면 입장 동작이 열립니다.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'class 준비 계속하기' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'class 보기' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('clears cached Course data and preserves return_to after session expiry', async () => {
+    let meRequests = 0
+    server.use(
+      http.get('*/api/v1/me', () => {
+        meRequests += 1
+        return meRequests === 1
+          ? HttpResponse.json(user)
+          : HttpResponse.json(
+              {
+                error: {
+                  code: 'AUTHENTICATION_REQUIRED',
+                  message: '로그인이 필요합니다.',
+                  request_id: 'req_course_expired_me',
+                  details: null,
+                },
+              },
+              { status: 401 },
+            )
+      }),
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'AUTHENTICATION_REQUIRED',
+              message: '로그인이 필요합니다.',
+              request_id: 'req_course_expired',
+              details: null,
+            },
+          },
+          { status: 401 },
+        ),
+      ),
+    )
+    const router = renderAt(`/courses/${professorCourse.id}`)
+
+    expect(
+      await screen.findByRole('heading', {
+        name: '강의의 흐름으로 다시 들어오세요.',
+      }),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/login')
+    expect(router.state.location.search).toBe(
+      `?return_to=%2Fcourses%2F${professorCourse.id}`,
+    )
+    expect(screen.queryByText('ABCXYZ')).not.toBeInTheDocument()
+  })
+
   it('deletes a completed-only professor Course after confirmation', async () => {
     authenticate()
     let deleted = false

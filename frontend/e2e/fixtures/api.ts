@@ -1,6 +1,11 @@
 import type { Page, Route } from '@playwright/test'
 
-import { professorCourse, studentCourse, visualUser } from './entities'
+import {
+  completedSession,
+  professorCourse,
+  studentCourse,
+  visualUser,
+} from './entities'
 
 export type VisualAuth = 'signed-in' | 'signed-out'
 
@@ -69,6 +74,43 @@ export async function installApiFixture(
             ? [studentCourse]
             : [professorCourse, studentCourse]
       await fulfillJson(route, { items, next_cursor: null })
+      return
+    }
+
+    const courseDetailMatch = url.pathname.match(
+      /^\/api\/v1\/courses\/([^/]+)$/,
+    )
+    if (request.method() === 'GET' && courseDetailMatch) {
+      await fulfillJson(
+        route,
+        courseDetailMatch[1] === studentCourse.id
+          ? studentCourse
+          : professorCourse,
+      )
+      return
+    }
+
+    const courseSessionsMatch = url.pathname.match(
+      /^\/api\/v1\/courses\/([^/]+)\/sessions$/,
+    )
+    if (request.method() === 'GET' && courseSessionsMatch) {
+      await fulfillJson(route, {
+        items:
+          url.searchParams.get('status') === 'COMPLETED'
+            ? [
+                {
+                  ...completedSession,
+                  course_id: courseSessionsMatch[1],
+                },
+              ]
+            : [
+                {
+                  ...completedSession,
+                  course_id: courseSessionsMatch[1],
+                },
+              ],
+        next_cursor: null,
+      })
       return
     }
 

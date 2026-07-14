@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { installApiFixture, type VisualAuth } from './fixtures/api'
+import { professorCourse } from './fixtures/entities'
 import {
   collectRuntimeErrors,
   settleVisualPage,
@@ -81,6 +82,18 @@ const scenarios: FoundationScenario[] = [
     auth: 'signed-in',
     heading: '참여 코드로 들어가기',
     requiredRequests: ['GET /api/v1/me'],
+  },
+  {
+    screenId: 'COURSE_PAGE_PROF',
+    path: `/courses/${professorCourse.id}`,
+    auth: 'signed-in',
+    heading: '데이터 구조와 알고리즘',
+    checkpoint: { level: 2, name: '수업 운영 개요' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/courses/${professorCourse.id}`,
+      `GET /api/v1/courses/${professorCourse.id}/sessions?status=COMPLETED&limit=20`,
+    ],
   },
 ]
 
@@ -179,6 +192,43 @@ test('MY_INFO_PAGE keeps keyboard focus inside the logout dialog and returns it'
   await expect(dialog).toBeVisible()
   await expect(dialog.locator(':focus')).toHaveCount(1)
 
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+})
+
+test('COURSE_PAGE_PROF keeps the mobile class rail disclosure keyboard-operable', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== '375')
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto(`/courses/${professorCourse.id}`)
+
+  const trigger = page.getByText('class 목록 열기·닫기', { exact: true })
+  await expect(trigger).toBeVisible()
+  await expect(page.getByRole('link', { name: 'class 보기' })).toBeHidden()
+  await trigger.click()
+  await expect(page.getByRole('link', { name: 'class 보기' })).toBeVisible()
+  await trigger.click()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+})
+
+test('COURSE_PAGE_PROF returns focus after cancelling join-code rotation', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== '1440')
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto(`/courses/${professorCourse.id}`)
+
+  const trigger = page.getByRole('button', { name: '새 코드로 교체' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', {
+    name: '참여 코드를 새로 만들까요?',
+  })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator(':focus')).toHaveCount(1)
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
   await expect(trigger).toBeFocused()

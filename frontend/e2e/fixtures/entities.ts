@@ -31,3 +31,18 @@ export const studentCourse = {
   current_session: null,
   created_at: '2026-07-13T00:00:00Z',
 } satisfies components['schemas']['Course']
+
+export const completedSession = {
+  id: '30000000-0000-0000-0000-000000000010',
+  course_id: professorCourse.id,
+  title: '동적 계획법과 최적 부분 구조',
+  lecture_date: '2026-07-14',
+  status: 'COMPLETED',
+  version: 3,
+  canonical_transcript_version_id: '60000000-0000-0000-0000-000000000010',
+  started_at: '2026-07-14T05:00:00Z',
+  ended_at: '2026-07-14T06:10:00Z',
+  completed_at: '2026-07-14T06:16:00Z',
+  created_at: '2026-07-14T04:55:00Z',
+  updated_at: '2026-07-14T06:16:00Z',
+} satisfies components['schemas']['LectureSession']
