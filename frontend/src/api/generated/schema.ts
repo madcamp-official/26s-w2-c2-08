@@ -4671,6 +4671,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createCourseSession: {
@@ -4762,6 +4763,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     deleteSession: {
@@ -4807,6 +4809,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SessionDeleteConflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     updateSessionTitle: {
@@ -4878,6 +4881,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["SessionStartConflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     endSession: {
@@ -4925,6 +4929,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listSessionMaterials: {

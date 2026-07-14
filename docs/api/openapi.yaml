@@ -578,6 +578,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     post:
       tags: [Sessions]
       operationId: createCourseSession
@@ -649,6 +651,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     patch:
       tags: [Sessions]
       operationId: updateSessionTitle
@@ -709,6 +713,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/SessionDeleteConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/start:
     parameters:
@@ -743,6 +749,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/SessionStartConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/end:
     parameters:
@@ -814,6 +822,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/materials:
     parameters:
