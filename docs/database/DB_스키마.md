@@ -19,7 +19,7 @@
 - [OpenAPI](../api/openapi.yaml)
 - [기술명세서](../architecture/기술명세서.md)
 
-이 계약의 관계형 골격은 2026-07-14에 SQLAlchemy 모델과 Alembic migration으로 생성했다. `pgcrypto`, 공통 `updated_at` trigger, 31개 domain table, 확정된 CHECK·partial UNIQUE·조회 index·복합 FK와 Course owner·Material 수량 guard를 포함한다. API·service·worker는 아직 별도 기능 PR에서 구현한다. embedding 차원과 HNSW index는 18절의 미정 사항대로 PR-18에서 추가한다.
+이 계약의 관계형 골격은 2026-07-14에 SQLAlchemy 모델과 Alembic migration으로 생성했다. `pgcrypto`, 공통 `updated_at` trigger, 32개 domain table, 확정된 CHECK·partial UNIQUE·조회 index·복합 FK와 Course owner·Material 수량 guard를 포함한다. API·service·worker는 아직 별도 기능 PR에서 구현한다. embedding 차원과 HNSW index는 18절의 미정 사항대로 PR-18에서 추가한다.
 
 ### 1.1 데이터 계약 우선순위
 
@@ -152,7 +152,7 @@ AIJob 유형은 다음 값을 사용한다.
 
 | 영역          | 테이블                                                                                                                                                                                                           |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 사용자·인증   | `users`, `user_auth_identities`, `auth_sessions`, `oauth_transactions`, `realtime_tickets`                                                                                                                       |
+| 사용자·인증   | `users`, `user_auth_identities`, `user_password_credentials`, `auth_sessions`, `oauth_transactions`, `realtime_tickets`                                                                                          |
 | Course·class  | `courses`, `course_members`, `lecture_sessions`                                                                                                                                                                  |
 | 자료·기록     | `lecture_materials`, `session_recordings`, `recording_uploads`, `transcript_versions`, `transcript_segments`, `transcript_gaps`, `knowledge_chunks`                                                              |
 | 질문·답변     | `question_clustering_states`, `ai_representative_questions`, `question_clusters`, `question_cluster_members`, `questions`, `question_reactions`, `answers`, `answer_transcript_mappings`, `answer_organizations` |
@@ -169,7 +169,7 @@ AIJob 유형은 다음 값을 사용한다.
 | --------------- | ------------- | ---: | ------------------- | ------- | ----------------- |
 | `id`            | `uuid`        |    N | `gen_random_uuid()` | PK      | 사용자 ID         |
 | `display_name`  | `text`        |    N | -                   | -       | 표시 이름         |
-| `primary_email` | `text`        |    Y | `NULL`              | -       | 현재 대표 이메일  |
+| `primary_email` | `text`        |    Y | `NULL`              | partial UNIQUE | 현재 대표·이메일 로그인 식별자 |
 | `avatar_url`    | `text`        |    Y | `NULL`              | -       | 프로필 이미지 URL |
 | `deleted_at`    | `timestamptz` |    Y | `NULL`              | -       | 탈퇴·익명화 시각  |
 | `created_at`    | `timestamptz` |    N | `now()`             | -       | 생성 시각         |
@@ -178,7 +178,8 @@ AIJob 유형은 다음 값을 사용한다.
 인덱스:
 
 - `INDEX users_active_idx (id) WHERE deleted_at IS NULL`
-- 이메일은 로그인 식별자가 아니므로 고유 제약을 두지 않는다. Google의 안정적인 식별자는 `user_auth_identities.provider_subject`다.
+- 활성 User의 `primary_email`은 trim·NFKC·casefold로 정규화하고 `UNIQUE (primary_email) WHERE primary_email IS NOT NULL AND deleted_at IS NULL`로 보호한다. Google의 안정적인 identity 식별자는 계속 `user_auth_identities.provider_subject`다.
+- 같은 이메일의 Google identity와 이메일·비밀번호 credential은 자동으로 연결하지 않는다. 먼저 만들어진 활성 User만 그 이메일을 소유하며, 연결은 별도 인증된 account-linking workflow가 확정될 때까지 제공하지 않는다.
 
 삭제 정책:
 
@@ -207,13 +208,35 @@ Google 계정과 내부 User를 분리한다. 이메일 변경과 향후 인증 
 - `INDEX user_auth_identities_user_idx (user_id)`
 - `user_id ON DELETE CASCADE`
 
-### 5.3 `auth_sessions`
+### 5.3 `user_password_credentials`
+
+이메일·비밀번호 로그인 User당 정확히 하나의 one-way password verifier다. 이메일은 이
+테이블에 중복 저장하지 않고 `users.primary_email`을 유일한 로그인 식별자로 사용한다.
+
+| 컬럼           | 타입          | NULL | 기본값  | 키·제약               | 설명 |
+| -------------- | ------------- | ---: | ------- | --------------------- | ---- |
+| `user_id`      | `uuid`        | N | - | PK, FK → `users.id` | credential 소유 User |
+| `password_hash`| `text`        | N | - | - | versioned scrypt salt hash; 원문·복호화 키 없음 |
+| `created_at`   | `timestamptz` | N | `now()` | - | 가입 또는 credential 생성 시각 |
+| `updated_at`   | `timestamptz` | N | `now()` | trigger | 마지막 비밀번호 변경 시각 |
+
+제약·보안 규칙:
+
+- `user_id`는 PK이므로 User당 credential은 최대 하나다. `user_id ON DELETE CASCADE`다.
+- `password_hash`는 `scrypt$v1$N$r$p$salt$derived-key` 형식이며, 16-byte random salt와
+  32-byte derived key를 사용한다. 비밀번호 원문, salt 이외의 복구 정보와 비밀번호 reset token은 저장하지 않는다.
+- 로그인 조회는 active User의 정규화 `primary_email`과 credential을 함께 읽는다. 미등록 이메일과
+  password 불일치는 같은 `INVALID_CREDENTIALS` 외부 오류로 처리한다.
+- 이메일 소유 확인, 비밀번호 reset, password 변경과 Google/email credential linking은 미구현이다.
+
+### 5.4 `auth_sessions`
 
 `goal_session` Cookie의 원문을 저장하지 않고 hash만 저장한다.
 
-세션 만료는 callback 발급 시점부터 7일인 절대 만료다. 인증 요청은 `last_seen_at`을 최대
-5분 간격으로 갱신하지만 `expires_at`을 연장하지 않는다. 같은 브라우저가 Google callback을
-다시 완료하면 기존 활성 token을 폐기하고 새 token hash를 발급해 session fixation을 막는다.
+세션 만료는 Google callback 또는 이메일 가입·로그인 발급 시점부터 7일인 절대 만료다. 인증
+요청은 `last_seen_at`을 최대 5분 간격으로 갱신하지만 `expires_at`을 연장하지 않는다. 같은
+브라우저가 어느 로그인 방식을 다시 완료해도 기존 활성 token을 폐기하고 새 token hash를 발급해
+session fixation을 막는다.
 
 | 컬럼           | 타입          | NULL | 기본값              | 키·제약         | 설명                    |
 | -------------- | ------------- | ---: | ------------------- | --------------- | ----------------------- |
@@ -233,7 +256,7 @@ Google 계정과 내부 User를 분리한다. 이메일 변경과 향후 인증 
 - `INDEX auth_sessions_expiry_idx (expires_at)`
 - `user_id ON DELETE CASCADE`
 
-### 5.4 `oauth_transactions`
+### 5.5 `oauth_transactions`
 
 Google callback의 state·nonce·PKCE를 10분 동안 보관한다. PKCE verifier는 callback에서 필요하므로 암호화한다.
 

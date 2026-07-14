@@ -22,6 +22,39 @@ export async function logoutCurrentSession() {
   }
 }
 
+export async function loginWithEmailPassword(input: {
+  email: string
+  password: string
+}) {
+  try {
+    const { data, error, response } = await apiClient.POST(
+      '/api/v1/auth/email/login',
+      { body: input },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    return data
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
+export async function registerWithEmailPassword(input: {
+  display_name: string
+  email: string
+  password: string
+}) {
+  try {
+    const { data, error, response } = await apiClient.POST(
+      '/api/v1/auth/email/register',
+      { body: input },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    return data
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
 export function googleLoginUrl(returnTo: string): string {
   const url = new URL(apiUrl('/api/v1/auth/google/start'))
   url.searchParams.set('return_to', returnTo)

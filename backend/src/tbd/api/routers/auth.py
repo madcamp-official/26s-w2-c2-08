@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, Query, Response
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.api.dependencies import (
@@ -15,14 +16,26 @@ from tbd.api.dependencies import (
 )
 from tbd.core.config import Settings
 from tbd.core.errors import ApiError
+from tbd.models.users import User
 from tbd.providers.google_oidc import (
     GoogleOIDCProvider,
     OIDCAuthenticationError,
     OIDCConfigurationError,
     OIDCProviderUnavailable,
 )
+from tbd.schemas.auth import (
+    AuthenticatedUserResponse,
+    EmailPasswordLoginRequest,
+    EmailPasswordRegisterRequest,
+)
 from tbd.schemas.errors import ErrorResponse
-from tbd.services.auth_sessions import AuthSessionService
+from tbd.schemas.users import UserResponse
+from tbd.services.auth_sessions import (
+    AuthSessionService,
+    EmailAlreadyRegisteredError,
+    IdentityEmailConflictError,
+    InvalidCredentialsError,
+)
 from tbd.services.oauth import (
     InvalidOAuthTransactionError,
     InvalidReturnToError,
@@ -205,17 +218,118 @@ async def complete_google_login(
             "로그인 응답이 유효하지 않습니다.",
         )
 
-    established = await AuthSessionService(settings).establish(
-        session,
-        identity=identity,
-        existing_token=goal_session,
-    )
+    try:
+        established = await AuthSessionService(settings).establish(
+            session,
+            identity=identity,
+            existing_token=goal_session,
+        )
+    except IdentityEmailConflictError as exc:
+        raise ApiError(
+            409,
+            "IDENTITY_EMAIL_CONFLICT",
+            "이 이메일은 다른 로그인 방식으로 이미 등록되어 있습니다.",
+        ) from exc
     response = RedirectResponse(
         _frontend_location(settings, consumed.return_to),
         status_code=302,
     )
     response.headers["Cache-Control"] = "no-store"
     _clear_oauth_cookie(response, settings)
+    _set_session_cookie(response, established.token, settings)
+    return response
+
+
+def _authenticated_user_response(user: User) -> AuthenticatedUserResponse:
+    return AuthenticatedUserResponse(
+        user=UserResponse.model_validate(
+            {
+                "id": user.id,
+                "display_name": user.display_name,
+                "email": user.primary_email,
+                "avatar_url": user.avatar_url,
+            }
+        )
+    )
+
+
+@router.post(
+    "/email/register",
+    status_code=201,
+    response_model=AuthenticatedUserResponse,
+    dependencies=[Depends(require_allowed_origin)],
+    responses={
+        403: {"model": ErrorResponse, "headers": REQUEST_ID_RESPONSE_HEADER},
+        409: {"model": ErrorResponse, "headers": REQUEST_ID_RESPONSE_HEADER},
+        422: {"model": ErrorResponse, "headers": REQUEST_ID_RESPONSE_HEADER},
+    },
+)
+async def register_with_email_password(
+    payload: EmailPasswordRegisterRequest,
+    session: DatabaseSession,
+    settings: SettingsDependency,
+    goal_session: Annotated[str | None, Cookie()] = None,
+) -> Response:
+    """Create a local account and establish the same server session as OAuth."""
+
+    try:
+        established = await AuthSessionService(settings).register_with_password(
+            session,
+            display_name=payload.display_name,
+            email=payload.email,
+            password=payload.password,
+            existing_token=goal_session,
+        )
+    except (EmailAlreadyRegisteredError, IntegrityError) as exc:
+        raise ApiError(
+            409,
+            "EMAIL_ALREADY_REGISTERED",
+            "이미 등록된 이메일입니다. 기존 로그인 방식을 사용해 주세요.",
+        ) from exc
+
+    response = Response(
+        content=_authenticated_user_response(established.user).model_dump_json(),
+        status_code=201,
+        media_type="application/json",
+    )
+    _set_session_cookie(response, established.token, settings)
+    return response
+
+
+@router.post(
+    "/email/login",
+    response_model=AuthenticatedUserResponse,
+    dependencies=[Depends(require_allowed_origin)],
+    responses={
+        401: {"model": ErrorResponse, "headers": REQUEST_ID_RESPONSE_HEADER},
+        403: {"model": ErrorResponse, "headers": REQUEST_ID_RESPONSE_HEADER},
+        422: {"model": ErrorResponse, "headers": REQUEST_ID_RESPONSE_HEADER},
+    },
+)
+async def login_with_email_password(
+    payload: EmailPasswordLoginRequest,
+    session: DatabaseSession,
+    settings: SettingsDependency,
+    goal_session: Annotated[str | None, Cookie()] = None,
+) -> Response:
+    """Verify a local credential and rotate the opaque browser session."""
+
+    try:
+        established = await AuthSessionService(settings).authenticate_password(
+            session,
+            email=payload.email,
+            password=payload.password,
+            existing_token=goal_session,
+        )
+    except InvalidCredentialsError as exc:
+        raise ApiError(
+            401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다."
+        ) from exc
+
+    response = Response(
+        content=_authenticated_user_response(established.user).model_dump_json(),
+        media_type="application/json",
+    )
     _set_session_cookie(response, established.token, settings)
     return response
 

@@ -37,7 +37,7 @@ export function AccountPage() {
       <StatePanel
         kind="loading"
         title="내 정보를 불러오는 중"
-        description="서버 Session과 Google 기본 프로필을 확인하고 있습니다."
+        description="서버 Session과 기본 프로필을 확인하고 있습니다."
       />
     )
   }
@@ -74,7 +74,7 @@ export function AccountPage() {
         <div>
           <p className="eyebrow">Account</p>
           <h1 id="account-title">내 정보</h1>
-          <p>Google 기본 정보와 현재 GOAL 로그인 Session을 확인합니다.</p>
+          <p>기본 정보와 현재 GOAL 로그인 Session을 확인합니다.</p>
         </div>
       </header>
 
@@ -89,9 +89,7 @@ export function AccountPage() {
               </span>
             )}
             <div>
-              <span className="status-chip status-chip--success">
-                Google 연결됨
-              </span>
+              <span className="status-chip status-chip--success">인증됨</span>
               <h2>{user.display_name}</h2>
               <p>{user.email ?? '공개된 이메일 없음'}</p>
             </div>
@@ -99,7 +97,7 @@ export function AccountPage() {
           <dl className="account-details">
             <div>
               <dt>로그인 방식</dt>
-              <dd>Google OIDC + GOAL 서버 Session</dd>
+              <dd>GOAL 서버 Session</dd>
             </div>
             <div>
               <dt>계정 역할</dt>
@@ -144,7 +142,7 @@ export function AccountPage() {
           </>
         }
       >
-        <p>다시 이용하려면 Google 로그인이 필요합니다.</p>
+        <p>다시 이용하려면 Google 또는 이메일로 로그인해야 합니다.</p>
       </Dialog>
     </section>
   )

@@ -240,6 +240,61 @@
   line-height: 1.7;
 }
 
+.email-auth-form {
+  gap: var(--space-4);
+}
+
+.form-field {
+  display: grid;
+  gap: 7px;
+}
+
+.form-field label {
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.form-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 13px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.form-field small,
+.auth-switch {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth-switch a {
+  color: var(--color-brand-dark);
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.auth-divider {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--color-line);
+  content: '';
+}
+
 .google-login {
   display: flex;
   gap: var(--space-3);

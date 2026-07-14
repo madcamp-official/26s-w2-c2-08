@@ -3,6 +3,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { AccountPage } from '../features/auth/AccountPage'
 import { LoginPage } from '../features/auth/LoginPage'
+import { SignupPage } from '../features/auth/SignupPage'
 import { AuthenticatedCourseArea } from '../features/courses/auth-guard'
 import { CourseCreatePage } from '../features/courses/CourseCreatePage'
 import { CourseDetailPage } from '../features/courses/CourseDetailPage'
@@ -26,6 +27,10 @@ export const appRoutes: RouteObject[] = [
       {
         path: 'login',
         element: <LoginPage />,
+      },
+      {
+        path: 'signup',
+        element: <SignupPage />,
       },
       {
         path: 'account',

@@ -56,6 +56,45 @@ describe('authentication flow', () => {
     expect(screen.getByText('dohyun@example.test')).toBeInTheDocument()
   })
 
+  it('logs in with email and restores the requested route', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/login', async ({ request }) => {
+        expect(await request.json()).toEqual({
+          email: 'dohyun@example.test',
+          password: 'correct horse battery staple',
+        })
+        return HttpResponse.json({ user })
+      }),
+    )
+    renderAt('/login?return_to=/account')
+
+    const emailInput = await screen.findByLabelText('이메일')
+    fireEvent.change(emailInput, { target: { value: 'dohyun@example.test' } })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'correct horse battery staple' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '이메일로 로그인' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '내 정보' }),
+    ).toBeInTheDocument()
+  })
+
+  it('offers an email account creation screen', async () => {
+    renderAt('/login?return_to=/courses/join')
+
+    fireEvent.click(
+      await screen.findByRole('link', { name: '이메일 계정 만들기' }),
+    )
+
+    expect(
+      await screen.findByRole('heading', {
+        name: '나만의 강의 흐름을 시작하세요.',
+      }),
+    ).toBeInTheDocument()
+    expect(await screen.findByLabelText('표시 이름')).toBeInTheDocument()
+  })
+
   it('navigates only after logout succeeds', async () => {
     let authenticated = true
     server.use(

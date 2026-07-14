@@ -156,18 +156,19 @@ class Settings(BaseSettings):
 
         if self.auth_secret_key.get_secret_value() == DEFAULT_AUTH_SECRET:
             raise ValueError("AUTH_SECRET_KEY must be changed when APP_ENV=production")
-        if not self.google_oidc_client_id or self.google_oidc_client_secret is None:
-            raise ValueError("Google OIDC credentials must be set when APP_ENV=production")
         if not self.auth_cookie_secure:
             raise ValueError("AUTH_COOKIE_SECURE must be true when APP_ENV=production")
 
         for field_name, url in (
             ("FRONTEND_ORIGIN", self.frontend_origin),
-            ("GOOGLE_OIDC_REDIRECT_URI", self.google_oidc_redirect_uri),
             *(("AUTH_ALLOWED_ORIGINS", origin) for origin in self.allowed_origins),
         ):
             if urlsplit(url).scheme != "https":
                 raise ValueError(f"{field_name} must use HTTPS when APP_ENV=production")
+
+        if self.google_oidc_client_id or self.google_oidc_client_secret is not None:
+            if urlsplit(self.google_oidc_redirect_uri).scheme != "https":
+                raise ValueError("GOOGLE_OIDC_REDIRECT_URI must use HTTPS when APP_ENV=production")
 
         return self
 

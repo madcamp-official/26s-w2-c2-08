@@ -8,7 +8,7 @@
 
 ## 1. 범위와 표기
 
-전체 물리 모델은 31개 테이블로 구성된다. 한 그림에 모두 넣으면 핵심 관계가 흐려지므로 인증·Course, 수업 기록, 질문·답변, AI 요약·Chat, 공통 Knowledge의 다섯 도메인으로 나눴다. 같은 테이블이 여러 그림에 반복되며 모두 동일한 실제 테이블을 뜻한다.
+전체 물리 모델은 32개 테이블로 구성된다. 한 그림에 모두 넣으면 핵심 관계가 흐려지므로 인증·Course, 수업 기록, 질문·답변, AI 요약·Chat, 공통 Knowledge의 다섯 도메인으로 나눴다. 같은 테이블이 여러 그림에 반복되며 모두 동일한 실제 테이블을 뜻한다.
 
 - `PK`: Primary Key
 - `FK`: Foreign Key
@@ -39,6 +39,12 @@ erDiagram
         text provider
         text provider_subject
         text email_snapshot
+    }
+
+    userPasswordCredentials["user_password_credentials"] {
+        uuid user_id PK,FK
+        text password_hash
+        timestamptz updated_at
     }
 
     authSessions["auth_sessions"] {
@@ -114,6 +120,7 @@ erDiagram
     }
 
     users ||--o{ userAuthIdentities : has
+    users ||--o| userPasswordCredentials : owns
     users ||--o{ authSessions : owns
     users ||--o{ courses : creates
     users ||--o{ courseMembers : joins
