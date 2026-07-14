@@ -12,7 +12,19 @@ from tbd.realtime.hub import RealtimeHub
 from tbd.repositories.outbox import OutboxRepository
 from tbd.schemas.realtime import RealtimeEvent
 
-PUBLIC_EVENT_TYPES = frozenset({"session.updated", "job.updated"})
+# These are lightweight invalidation hints, not a public event ledger.  Every
+# payload must remain safe for every Course member: in particular, Question
+# events never expose ``author_user_id`` and private AI results are omitted.
+PUBLIC_EVENT_TYPES = frozenset(
+    {
+        "session.updated",
+        "job.updated",
+        "question.created",
+        "question.updated",
+        "reaction.updated",
+        "clustering.updated",
+    }
+)
 
 
 def project_event(
