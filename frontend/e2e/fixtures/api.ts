@@ -4,6 +4,7 @@ import {
   completedSession,
   professorCourse,
   studentCourse,
+  studentWorkspaceCourse,
   visualUser,
 } from './entities'
 
@@ -84,7 +85,7 @@ export async function installApiFixture(
       await fulfillJson(
         route,
         courseDetailMatch[1] === studentCourse.id
-          ? studentCourse
+          ? studentWorkspaceCourse
           : professorCourse,
       )
       return

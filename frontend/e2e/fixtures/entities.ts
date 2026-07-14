@@ -32,6 +32,17 @@ export const studentCourse = {
   created_at: '2026-07-13T00:00:00Z',
 } satisfies components['schemas']['Course']
 
+export const studentWorkspaceCourse = {
+  ...studentCourse,
+  current_session: {
+    id: '30000000-0000-0000-0000-000000000002',
+    title: '프로세스 동기화와 교착 상태',
+    lecture_date: '2026-07-16',
+    status: 'READY',
+    started_at: null,
+  },
+} satisfies components['schemas']['Course']
+
 export const completedSession = {
   id: '30000000-0000-0000-0000-000000000010',
   course_id: professorCourse.id,

@@ -227,6 +227,93 @@
   line-height: 1.6;
 }
 
+.course-student-access {
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  border-radius: var(--radius-sm);
+}
+
+.course-student-access h2,
+.course-student-access p,
+.course-student-archive h2,
+.course-student-archive p {
+  margin: 0;
+}
+
+.course-student-access h2,
+.course-student-archive h2 {
+  margin-top: var(--space-2);
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+
+.course-student-access__list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-student-access__list li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+
+.course-student-access__list li > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--color-brand-dark);
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--color-brand-soft);
+}
+
+.course-student-access__list strong {
+  font-size: 14px;
+}
+
+.course-student-access__list p {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.course-student-archive {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.course-student-archive > div:first-child {
+  max-width: 540px;
+}
+
+.course-student-archive > div:first-child > p:last-child {
+  margin-top: var(--space-2);
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.course-student-archive__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
 .course-current-card__meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -336,6 +423,11 @@
     flex-direction: column;
   }
 
+  .course-student-archive {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .course-overview__role-note {
     width: max-content;
   }
@@ -387,5 +479,9 @@
 
   .course-access-card__code {
     overflow-wrap: anywhere;
+  }
+
+  .course-student-archive__actions {
+    grid-template-columns: 1fr;
   }
 }

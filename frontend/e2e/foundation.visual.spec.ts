@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { installApiFixture, type VisualAuth } from './fixtures/api'
-import { professorCourse } from './fixtures/entities'
+import { professorCourse, studentCourse } from './fixtures/entities'
 import {
   collectRuntimeErrors,
   settleVisualPage,
@@ -93,6 +93,18 @@ const scenarios: FoundationScenario[] = [
       'GET /api/v1/me',
       `GET /api/v1/courses/${professorCourse.id}`,
       `GET /api/v1/courses/${professorCourse.id}/sessions?status=COMPLETED&limit=20`,
+    ],
+  },
+  {
+    screenId: 'COURSE_PAGE_STUD',
+    path: `/courses/${studentCourse.id}`,
+    auth: 'signed-in',
+    heading: '운영체제',
+    checkpoint: { level: 2, name: '학생 학습 공간' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/courses/${studentCourse.id}`,
+      `GET /api/v1/courses/${studentCourse.id}/sessions?status=COMPLETED&limit=20`,
     ],
   },
 ]

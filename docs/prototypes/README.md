@@ -71,6 +71,8 @@ python3 -m http.server 4173 --directory docs/prototypes
 교수자 Course Prototype의 참여자 수·질문 수 같은 미계약 집계는 제거했으며,
 production과 마찬가지로 active class가 있으면 Course 삭제를 비활성화한다. class
 제목 수정과 허용 상태의 삭제는 production에서 class 상세 route로 이어진다.
+학생 Course도 같은 production workspace를 사용하며 READY에서는 입장 링크 없이
+대기하고, 참여자 집계나 브라우저 알림처럼 API에 없는 control을 제공하지 않는다.
 
 참여 코드는 trim·대문자화 뒤 `[A-Z]{6}`이며 자동 만료되지 않는다. READY Material은 active `N/10`, 파일당 100 MB(100,000,000 bytes), 동일 이름 suffix, 권한 확인 원본 열기와 즉시 detach 목 상태를 제공한다. `PROCESSING` Material만 class 시작을 막고 PDF가 없거나 `UPLOADED`, `READY`, `FAILED`만 있으면 시작 가능하다.
 

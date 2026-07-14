@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link, Outlet, useLocation, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
@@ -14,6 +15,12 @@ export function CourseWorkspaceLayout() {
   const { courseId = '' } = useParams()
   const location = useLocation()
   const course = useQuery(courseDetailQueryOptions(courseId))
+  const [classRailOpen, setClassRailOpen] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(min-width: 901px)').matches,
+  )
 
   if (course.isPending) {
     return <StatePanel kind="loading" title="Course를 불러오는 중" />
@@ -70,7 +77,11 @@ export function CourseWorkspaceLayout() {
 
       <div className="course-workspace">
         <CourseSidebar />
-        <details className="course-class-rail-shell">
+        <details
+          className="course-class-rail-shell"
+          open={classRailOpen}
+          onToggle={(event) => setClassRailOpen(event.currentTarget.open)}
+        >
           <summary>class 목록 열기·닫기</summary>
           <CourseClassRail course={course.data} />
         </details>

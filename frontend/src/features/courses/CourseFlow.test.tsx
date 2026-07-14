@@ -284,7 +284,7 @@ describe('Course role flows', () => {
     renderAt(`/courses/${studentCourse.id}`)
 
     expect(
-      await screen.findByRole('heading', { name: '학생 Course' }),
+      await screen.findByRole('heading', { name: '학생 학습 공간' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('SECRET')).not.toBeInTheDocument()
     expect(
@@ -405,6 +405,37 @@ describe('Course role flows', () => {
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'class 보기' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('opens only the student-safe action for a PROCESSING class', async () => {
+    authenticate()
+    server.use(
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json({
+          ...studentCourse,
+          join_code: 'NEVER_RENDER',
+          current_session: {
+            id: readySession.id,
+            title: '운영체제 기록 정리',
+            lecture_date: '2026-07-14',
+            status: 'PROCESSING',
+            started_at: '2026-07-14T06:00:00Z',
+          },
+        }),
+      ),
+    )
+    renderAt(`/courses/${studentCourse.id}`)
+
+    expect(
+      await screen.findByRole('link', { name: '정리 상태 보기' }),
+    ).toHaveAttribute('href', `/sessions/${readySession.id}`)
+    expect(screen.queryByText('NEVER_RENDER')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Course 삭제' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '새 코드로 교체' }),
     ).not.toBeInTheDocument()
   })
 
