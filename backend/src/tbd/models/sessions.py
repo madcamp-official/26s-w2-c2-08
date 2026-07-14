@@ -3,7 +3,16 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +48,14 @@ class LectureSession(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         CheckConstraint(
             "completed_at IS NULL OR completed_at >= ended_at",
             name="lecture_sessions_completed_after_ended_ck",
+        ),
+        ForeignKeyConstraint(
+            ["canonical_transcript_version_id", "id"],
+            ["transcript_versions.id", "transcript_versions.session_id"],
+            name="lecture_sessions_canonical_transcript_fk",
+            ondelete="SET NULL",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         Index(
             "lecture_sessions_one_active_per_course_uq",

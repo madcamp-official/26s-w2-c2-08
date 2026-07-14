@@ -22,15 +22,27 @@ def upgrade() -> None:
 
     op.create_table(
         "auth_sessions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("token_hash", postgresql.BYTEA(), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint("expires_at > created_at", name="auth_sessions_expiry_after_created_ck"),
-        sa.CheckConstraint("octet_length(token_hash) = 32", name="auth_sessions_token_hash_length_ck"),
+        sa.CheckConstraint(
+            "octet_length(token_hash) = 32", name="auth_sessions_token_hash_length_ck"
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("token_hash", name="auth_sessions_token_hash_uq"),
     )
@@ -44,7 +56,12 @@ def upgrade() -> None:
 
     op.create_table(
         "oauth_transactions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("browser_binding_hash", postgresql.BYTEA(), nullable=False),
         sa.Column("state_hash", postgresql.BYTEA(), nullable=False),
         sa.Column("nonce_hash", postgresql.BYTEA(), nullable=False),
@@ -54,24 +71,46 @@ def upgrade() -> None:
         sa.Column("return_to", sa.Text(), nullable=False, server_default=sa.text("'/'")),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.CheckConstraint("return_to LIKE '/%' AND return_to NOT LIKE '//%'", name="oauth_transactions_return_to_path_ck"),
-        sa.CheckConstraint("expires_at > created_at", name="oauth_transactions_expiry_after_created_ck"),
-        sa.CheckConstraint("expires_at <= created_at + interval '10 minutes'", name="oauth_transactions_expiry_window_ck"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.CheckConstraint(
+            "return_to LIKE '/%' AND return_to NOT LIKE '//%'",
+            name="oauth_transactions_return_to_path_ck",
+        ),
+        sa.CheckConstraint(
+            "expires_at > created_at", name="oauth_transactions_expiry_after_created_ck"
+        ),
+        sa.CheckConstraint(
+            "expires_at <= created_at + interval '10 minutes'",
+            name="oauth_transactions_expiry_window_ck",
+        ),
         sa.CheckConstraint(
             "octet_length(state_hash) = 32 AND octet_length(nonce_hash) = 32",
             name="oauth_transactions_state_nonce_length_ck",
         ),
-        sa.CheckConstraint("octet_length(pkce_verifier_nonce) = 12", name="oauth_transactions_pkce_nonce_length_ck"),
+        sa.CheckConstraint(
+            "octet_length(pkce_verifier_nonce) = 12", name="oauth_transactions_pkce_nonce_length_ck"
+        ),
         sa.CheckConstraint("encryption_key_version > 0", name="oauth_transactions_key_version_ck"),
-        sa.UniqueConstraint("browser_binding_hash", name="oauth_transactions_browser_binding_hash_uq"),
+        sa.UniqueConstraint(
+            "browser_binding_hash", name="oauth_transactions_browser_binding_hash_uq"
+        ),
         sa.UniqueConstraint("state_hash", name="oauth_transactions_state_hash_uq"),
     )
     op.create_index("oauth_transactions_expiry_idx", "oauth_transactions", ["expires_at"])
 
     op.create_table(
         "realtime_tickets",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("ticket_hash", postgresql.BYTEA(), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -79,17 +118,26 @@ def upgrade() -> None:
         sa.Column("resume_cursor", sa.Text(), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("used_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint(
             "scope IN ('SESSION_EVENTS_READ', 'SESSION_AUDIO_WRITE')",
             name="realtime_tickets_scope_ck",
         ),
-        sa.CheckConstraint("expires_at > created_at", name="realtime_tickets_expiry_after_created_ck"),
+        sa.CheckConstraint(
+            "expires_at > created_at", name="realtime_tickets_expiry_after_created_ck"
+        ),
         sa.CheckConstraint(
             "expires_at <= created_at + interval '60 seconds'",
             name="realtime_tickets_expiry_window_ck",
         ),
-        sa.CheckConstraint("octet_length(ticket_hash) = 32", name="realtime_tickets_hash_length_ck"),
+        sa.CheckConstraint(
+            "octet_length(ticket_hash) = 32", name="realtime_tickets_hash_length_ck"
+        ),
         sa.CheckConstraint(
             "scope = 'SESSION_EVENTS_READ' OR resume_cursor IS NULL",
             name="realtime_tickets_resume_scope_ck",
@@ -99,7 +147,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("ticket_hash", name="realtime_tickets_ticket_hash_uq"),
     )
     op.create_index("realtime_tickets_expiry_idx", "realtime_tickets", ["expires_at"])
-    op.create_index("realtime_tickets_user_idx", "realtime_tickets", ["user_id", sa.text("created_at DESC")])
+    op.create_index(
+        "realtime_tickets_user_idx", "realtime_tickets", ["user_id", sa.text("created_at DESC")]
+    )
 
 
 def downgrade() -> None:

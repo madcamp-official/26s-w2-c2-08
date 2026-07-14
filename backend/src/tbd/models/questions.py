@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     SmallInteger,
     Text,
@@ -61,6 +62,20 @@ class QuestionClusteringState(TimestampMixin, Base):
         CheckConstraint(
             "last_job_status IS NULL OR last_job_status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED')",
             name="question_clustering_states_last_job_status_ck",
+        ),
+        ForeignKeyConstraint(
+            ["last_job_id", "session_id"],
+            ["ai_jobs.id", "ai_jobs.session_id"],
+            name="clustering_state_last_job_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["retry_job_id", "session_id"],
+            ["ai_jobs.id", "ai_jobs.session_id"],
+            name="clustering_state_retry_job_fk",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 
@@ -289,6 +304,70 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         ),
         CheckConstraint(
             "base_revision IS NULL OR base_revision >= 0", name="ai_jobs_base_revision_ck"
+        ),
+        ForeignKeyConstraint(
+            ["target_material_id", "session_id"],
+            ["lecture_materials.id", "lecture_materials.session_id"],
+            name="ai_jobs_material_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["target_recording_id", "session_id"],
+            ["session_recordings.id", "session_recordings.session_id"],
+            name="ai_jobs_recording_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["target_chat_id", "session_id"],
+            ["chat_sessions.id", "chat_sessions.session_id"],
+            name="ai_jobs_chat_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["target_user_message_id", "target_chat_id", "session_id"],
+            ["chat_messages.id", "chat_messages.chat_id", "chat_messages.session_id"],
+            name="ai_jobs_message_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["target_answer_id", "session_id"],
+            ["answers.id", "answers.session_id"],
+            name="ai_jobs_answer_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["input_transcript_version_id", "session_id"],
+            ["transcript_versions.id", "transcript_versions.session_id"],
+            name="ai_jobs_input_version_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["input_start_segment_id", "input_transcript_version_id", "session_id"],
+            [
+                "transcript_segments.id",
+                "transcript_segments.transcript_version_id",
+                "transcript_segments.session_id",
+            ],
+            name="ai_jobs_input_start_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["input_end_segment_id", "input_transcript_version_id", "session_id"],
+            [
+                "transcript_segments.id",
+                "transcript_segments.transcript_version_id",
+                "transcript_segments.session_id",
+            ],
+            name="ai_jobs_input_end_fk",
+            deferrable=True,
+            initially="DEFERRED",
         ),
     )
 

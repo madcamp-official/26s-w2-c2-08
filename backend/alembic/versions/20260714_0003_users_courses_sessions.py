@@ -19,8 +19,18 @@ depends_on: str | Sequence[str] | None = None
 
 def _timestamps() -> list[sa.Column[object]]:
     return [
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
     ]
 
 
@@ -37,19 +47,31 @@ def upgrade() -> None:
 
     op.create_table(
         "users",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("display_name", sa.Text(), nullable=False),
         sa.Column("primary_email", sa.Text(), nullable=True),
         sa.Column("avatar_url", sa.Text(), nullable=True),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         *_timestamps(),
     )
-    op.create_index("users_active_idx", "users", ["id"], postgresql_where=sa.text("deleted_at IS NULL"))
+    op.create_index(
+        "users_active_idx", "users", ["id"], postgresql_where=sa.text("deleted_at IS NULL")
+    )
     _install_updated_at_trigger("users")
 
     op.create_table(
         "user_auth_identities",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("provider", sa.Text(), nullable=False),
         sa.Column("provider_subject", sa.Text(), nullable=False),
@@ -57,7 +79,9 @@ def upgrade() -> None:
         *_timestamps(),
         sa.CheckConstraint("provider IN ('GOOGLE')", name="user_auth_identities_provider_ck"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint("provider", "provider_subject", name="user_auth_identities_provider_subject_uq"),
+        sa.UniqueConstraint(
+            "provider", "provider_subject", name="user_auth_identities_provider_subject_uq"
+        ),
         sa.UniqueConstraint("user_id", "provider", name="user_auth_identities_user_provider_uq"),
     )
     op.create_index("user_auth_identities_user_idx", "user_auth_identities", ["user_id"])
@@ -65,7 +89,12 @@ def upgrade() -> None:
 
     op.create_table(
         "courses",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("title", sa.Text(), nullable=False),
         sa.Column("semester", sa.Text(), nullable=False),
         sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -78,9 +107,16 @@ def upgrade() -> None:
         *_timestamps(),
         sa.CheckConstraint("length(btrim(title)) > 0", name="courses_title_not_blank_ck"),
         sa.CheckConstraint("length(btrim(semester)) > 0", name="courses_semester_not_blank_ck"),
-        sa.CheckConstraint("octet_length(join_code_lookup_hash) = 32", name="courses_join_code_lookup_hash_length_ck"),
-        sa.CheckConstraint("octet_length(join_code_nonce) = 12", name="courses_join_code_nonce_length_ck"),
-        sa.CheckConstraint("join_code_lookup_key_version > 0", name="courses_lookup_key_version_ck"),
+        sa.CheckConstraint(
+            "octet_length(join_code_lookup_hash) = 32",
+            name="courses_join_code_lookup_hash_length_ck",
+        ),
+        sa.CheckConstraint(
+            "octet_length(join_code_nonce) = 12", name="courses_join_code_nonce_length_ck"
+        ),
+        sa.CheckConstraint(
+            "join_code_lookup_key_version > 0", name="courses_lookup_key_version_ck"
+        ),
         sa.CheckConstraint("join_code_key_version > 0", name="courses_key_version_ck"),
         sa.CheckConstraint("version > 0", name="courses_version_ck"),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
@@ -93,7 +129,9 @@ def upgrade() -> None:
         sa.Column("course_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("role", sa.Text(), nullable=False),
-        sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "joined_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+        ),
         sa.CheckConstraint("role IN ('PROFESSOR', 'STUDENT')", name="course_members_role_ck"),
         sa.ForeignKeyConstraint(["course_id"], ["courses.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="RESTRICT"),
@@ -101,7 +139,12 @@ def upgrade() -> None:
 
     op.create_table(
         "lecture_sessions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("course_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("created_by_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("title", sa.Text(), nullable=False),
@@ -128,8 +171,14 @@ def upgrade() -> None:
             """,
             name="lecture_sessions_lifecycle_timestamps_ck",
         ),
-        sa.CheckConstraint("ended_at IS NULL OR ended_at >= started_at", name="lecture_sessions_ended_after_started_ck"),
-        sa.CheckConstraint("completed_at IS NULL OR completed_at >= ended_at", name="lecture_sessions_completed_after_ended_ck"),
+        sa.CheckConstraint(
+            "ended_at IS NULL OR ended_at >= started_at",
+            name="lecture_sessions_ended_after_started_ck",
+        ),
+        sa.CheckConstraint(
+            "completed_at IS NULL OR completed_at >= ended_at",
+            name="lecture_sessions_completed_after_ended_ck",
+        ),
         sa.ForeignKeyConstraint(["course_id"], ["courses.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.UniqueConstraint("id", "course_id", name="lecture_sessions_id_course_uq"),

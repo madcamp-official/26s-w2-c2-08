@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Text,
     UniqueConstraint,
@@ -58,6 +59,13 @@ class LectureMaterial(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             name="lecture_materials_ready_page_count_ck",
         ),
         CheckConstraint("version > 0", name="lecture_materials_version_ck"),
+        ForeignKeyConstraint(
+            ["processed_by_job_id", "session_id"],
+            ["ai_jobs.id", "ai_jobs.session_id"],
+            name="lecture_materials_processed_job_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
     )
 
     session_id: Mapped[UUID] = mapped_column(
@@ -245,6 +253,20 @@ class TranscriptVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="transcript_versions_empty_failed_sequence_ck",
         ),
         CheckConstraint("last_sequence >= 0", name="transcript_versions_last_sequence_ck"),
+        ForeignKeyConstraint(
+            ["recording_id", "session_id"],
+            ["session_recordings.id", "session_recordings.session_id"],
+            name="transcript_versions_recording_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_job_id", "session_id"],
+            ["ai_jobs.id", "ai_jobs.session_id"],
+            name="transcript_versions_created_job_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
     )
 
     session_id: Mapped[UUID] = mapped_column(
@@ -299,6 +321,19 @@ class TranscriptSegment(UUIDPrimaryKeyMixin, Base):
             "(created_by_job_id IS NULL) = (created_by_job_attempt IS NULL)",
             name="transcript_segments_created_job_pair_ck",
         ),
+        ForeignKeyConstraint(
+            ["transcript_version_id", "session_id"],
+            ["transcript_versions.id", "transcript_versions.session_id"],
+            name="transcript_segments_version_session_fk",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_job_id", "session_id"],
+            ["ai_jobs.id", "ai_jobs.session_id"],
+            name="transcript_segments_created_job_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
     )
 
     session_id: Mapped[UUID] = mapped_column(
@@ -340,6 +375,12 @@ class TranscriptGap(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "reason IN ('SERVER_STATE_LOST', 'SEQUENCE_GAP', 'CLIENT_DISCONNECTED', 'BACKPRESSURE_DROP')",
             name="transcript_gaps_reason_ck",
+        ),
+        ForeignKeyConstraint(
+            ["transcript_version_id", "session_id"],
+            ["transcript_versions.id", "transcript_versions.session_id"],
+            name="transcript_gaps_version_session_fk",
+            ondelete="CASCADE",
         ),
     )
 

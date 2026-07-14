@@ -19,8 +19,18 @@ depends_on: str | Sequence[str] | None = None
 
 def _timestamps() -> list[sa.Column[object]]:
     return [
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
     ]
 
 
@@ -37,7 +47,12 @@ def upgrade() -> None:
 
     op.create_table(
         "knowledge_chunks",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("course_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("material_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -53,27 +68,50 @@ def upgrade() -> None:
         sa.Column("token_count", sa.Integer(), nullable=True),
         sa.Column("created_by_job_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("created_by_job_attempt", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint("chunk_index >= 0", name="knowledge_chunks_chunk_index_ck"),
-        sa.CheckConstraint("page_number IS NULL OR page_number > 0", name="knowledge_chunks_page_number_ck"),
-        sa.CheckConstraint("token_count IS NULL OR token_count >= 0", name="knowledge_chunks_token_count_ck"),
+        sa.CheckConstraint(
+            "page_number IS NULL OR page_number > 0", name="knowledge_chunks_page_number_ck"
+        ),
+        sa.CheckConstraint(
+            "token_count IS NULL OR token_count >= 0", name="knowledge_chunks_token_count_ck"
+        ),
         sa.CheckConstraint("char_length(btrim(content)) > 0", name="knowledge_chunks_content_ck"),
         sa.CheckConstraint("created_by_job_attempt > 0", name="knowledge_chunks_job_attempt_ck"),
-        sa.CheckConstraint("(transcript_start_segment_id IS NULL) = (transcript_end_segment_id IS NULL)", name="knowledge_chunks_transcript_segment_pair_ck"),
-        sa.CheckConstraint("(source_transcript_version_id IS NULL) = (transcript_start_segment_id IS NULL)", name="knowledge_chunks_transcript_source_pair_ck"),
+        sa.CheckConstraint(
+            "(transcript_start_segment_id IS NULL) = (transcript_end_segment_id IS NULL)",
+            name="knowledge_chunks_transcript_segment_pair_ck",
+        ),
+        sa.CheckConstraint(
+            "(source_transcript_version_id IS NULL) = (transcript_start_segment_id IS NULL)",
+            name="knowledge_chunks_transcript_source_pair_ck",
+        ),
         sa.CheckConstraint(
             "num_nonnulls(material_id, source_transcript_version_id, question_id, "
             "representative_question_id, answer_id) = 1",
             name="knowledge_chunks_source_cardinality_ck",
         ),
-        sa.CheckConstraint("page_number IS NULL OR material_id IS NOT NULL", name="knowledge_chunks_page_material_ck"),
+        sa.CheckConstraint(
+            "page_number IS NULL OR material_id IS NOT NULL",
+            name="knowledge_chunks_page_material_ck",
+        ),
         sa.ForeignKeyConstraint(["session_id"], ["lecture_sessions.id"], ondelete="CASCADE"),
         sa.UniqueConstraint("id", "session_id", name="knowledge_chunks_id_session_uq"),
     )
 
     op.create_table(
         "lecture_summaries",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("requester_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("created_by_job_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -86,10 +124,18 @@ def upgrade() -> None:
         sa.Column("source_end_segment_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("model_name", sa.Text(), nullable=True),
         sa.Column("prompt_version", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint("created_by_job_attempt > 0", name="lecture_summaries_job_attempt_ck"),
         sa.CheckConstraint("summary_type IN ('LIVE', 'FINAL')", name="lecture_summaries_type_ck"),
-        sa.CheckConstraint("visibility IN ('REQUESTER_ONLY', 'COURSE_MEMBERS')", name="lecture_summaries_visibility_ck"),
+        sa.CheckConstraint(
+            "visibility IN ('REQUESTER_ONLY', 'COURSE_MEMBERS')",
+            name="lecture_summaries_visibility_ck",
+        ),
         sa.CheckConstraint("char_length(btrim(content)) > 0", name="lecture_summaries_content_ck"),
         sa.CheckConstraint(
             "(summary_type = 'LIVE' AND visibility = 'REQUESTER_ONLY' AND requester_user_id IS NOT NULL) "
@@ -103,7 +149,12 @@ def upgrade() -> None:
 
     op.create_table(
         "chat_sessions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("owner_user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("mode", sa.Text(), nullable=False),
@@ -119,7 +170,12 @@ def upgrade() -> None:
 
     op.create_table(
         "chat_messages",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("chat_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("session_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sequence", sa.BigInteger(), nullable=False),
@@ -129,7 +185,12 @@ def upgrade() -> None:
         sa.Column("created_by_job_attempt", sa.Integer(), nullable=True),
         sa.Column("model_name", sa.Text(), nullable=True),
         sa.Column("prompt_version", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint("sequence > 0", name="chat_messages_sequence_ck"),
         sa.CheckConstraint("role IN ('USER', 'ASSISTANT')", name="chat_messages_role_ck"),
         sa.CheckConstraint(
@@ -138,7 +199,10 @@ def upgrade() -> None:
             "(role = 'ASSISTANT' AND char_length(btrim(content)) > 0)",
             name="chat_messages_content_ck",
         ),
-        sa.CheckConstraint("created_by_job_attempt IS NULL OR created_by_job_attempt > 0", name="chat_messages_job_attempt_ck"),
+        sa.CheckConstraint(
+            "created_by_job_attempt IS NULL OR created_by_job_attempt > 0",
+            name="chat_messages_job_attempt_ck",
+        ),
         sa.CheckConstraint(
             "(role = 'USER' AND created_by_job_id IS NULL AND created_by_job_attempt IS NULL "
             "AND model_name IS NULL AND prompt_version IS NULL) "
@@ -158,10 +222,19 @@ def upgrade() -> None:
         sa.Column("rank", sa.Integer(), primary_key=True),
         sa.Column("relevance_score", sa.Double(), nullable=True),
         sa.Column("label_snapshot", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint("rank > 0", name="chat_message_evidence_rank_ck"),
-        sa.CheckConstraint("char_length(btrim(label_snapshot)) > 0", name="chat_message_evidence_label_ck"),
-        sa.UniqueConstraint("chat_message_id", "knowledge_chunk_id", name="chat_message_evidence_message_chunk_uq"),
+        sa.CheckConstraint(
+            "char_length(btrim(label_snapshot)) > 0", name="chat_message_evidence_label_ck"
+        ),
+        sa.UniqueConstraint(
+            "chat_message_id", "knowledge_chunk_id", name="chat_message_evidence_message_chunk_uq"
+        ),
     )
 
 
