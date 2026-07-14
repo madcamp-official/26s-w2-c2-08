@@ -6,8 +6,11 @@ export type CourseMaterialArchiveItem =
   components['schemas']['CourseMaterialArchiveItem']
 export type CourseTranscriptArchiveItem =
   components['schemas']['CourseTranscriptArchiveItem']
+export type CourseQnaArchiveItem = components['schemas']['CourseQnaArchiveItem']
 type CourseTranscriptArchiveResponse =
   components['schemas']['CourseTranscriptArchiveResponse']
+type CourseQnaArchiveResponse =
+  components['schemas']['CourseQnaArchiveResponse']
 export type CourseSummaryArchiveItem =
   components['schemas']['CourseSummaryArchiveItem']
 type CourseSummaryArchiveResponse =
@@ -57,6 +60,29 @@ export async function listCourseTranscriptArchive(
     // narrowly than the named component even though both represent the same
     // wire schema. Normalize that generator artifact at the API boundary.
     return data as CourseTranscriptArchiveResponse
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
+export async function listCourseQnaArchive(
+  courseId: string,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<CourseQnaArchiveResponse> {
+  try {
+    const { data, error, response } = await apiClient.GET(
+      '/api/v1/courses/{course_id}/qna',
+      {
+        params: {
+          path: { course_id: courseId },
+          query: { cursor, limit: 20 },
+        },
+        signal,
+      },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+    return data as CourseQnaArchiveResponse
   } catch (error) {
     throw normalizeApiError(error)
   }

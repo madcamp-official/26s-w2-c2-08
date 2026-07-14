@@ -189,6 +189,77 @@ def test_course_material_archive_and_download_disposition_match_contract(
         assert "Content-Disposition" in success["headers"]
 
 
+def test_course_qna_archive_runtime_shape_matches_contract(
+    app: FastAPI,
+    canonical_openapi: dict[str, Any],
+) -> None:
+    """The runtime exposes the bounded anonymous Q&A archive contract."""
+
+    path = "/api/v1/courses/{course_id}/qna"
+    canonical_operation = canonical_openapi["paths"][path]["get"]
+    runtime_openapi = app.openapi()
+    runtime_operation = runtime_openapi["paths"][path]["get"]
+    for operation, document in (
+        (canonical_operation, canonical_openapi),
+        (runtime_operation, runtime_openapi),
+    ):
+        assert operation["operationId"] == "listCourseQnaArchive"
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in _resolve_local_refs(operation["parameters"], document)
+        }
+        assert {"cursor", "limit"} <= parameters.keys()
+        assert parameters["limit"]["schema"]["minimum"] == 1
+        assert parameters["limit"]["schema"]["maximum"] == 100
+        assert parameters["limit"]["schema"]["default"] == 20
+        assert {"400", "401", "403", "404", "422"} <= operation["responses"].keys()
+
+    for operation, document in (
+        (canonical_operation, canonical_openapi),
+        (runtime_operation, runtime_openapi),
+    ):
+        response = _resolve_local_refs(operation["responses"]["200"], document)
+        schema = response["content"]["application/json"]["schema"]
+        assert set(schema["required"]) == {"items", "next_cursor"}
+        variants = schema["properties"]["items"]["items"]["oneOf"]
+        required_sets = {frozenset(variant["required"]) for variant in variants}
+        assert any("question" in required for required in required_sets)
+        assert any("representative_question_id" in required for required in required_sets)
+        assert all("author_user_id" not in required for required in required_sets)
+        assert all("professor_user_id" not in required for required in required_sets)
+        representative = next(
+            variant for variant in variants if "representative_question_id" in variant["required"]
+        )
+        answer = representative["properties"]["answer"]
+        assert set(answer["required"]) == {
+            "id",
+            "answer_type",
+            "status",
+            "text_content",
+            "organization",
+            "completed_at",
+        }
+        assert set(answer["properties"]) == {
+            "id",
+            "answer_type",
+            "status",
+            "text_content",
+            "organization",
+            "completed_at",
+        }
+        assert answer["properties"]["status"]["const"] == "COMPLETED"
+        assert len(answer["oneOf"]) == 2
+        organization_union = answer["properties"]["organization"]
+        organization = next(
+            branch
+            for branch in organization_union.get("oneOf", organization_union.get("anyOf", []))
+            if branch.get("type") != "null"
+        )
+        assert set(organization["required"]) == {"content"}
+        assert set(organization["properties"]) == {"content"}
+        assert representative["properties"]["record_url"]["pattern"] == (r"^/sessions/[^/?#]+$")
+
+
 def test_course_summary_archive_matches_public_final_contract(
     app: FastAPI,
     canonical_openapi: dict[str, Any],

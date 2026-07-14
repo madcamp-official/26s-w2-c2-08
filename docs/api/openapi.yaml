@@ -4818,17 +4818,56 @@ components:
           type: [string, "null"]
           description: Course ID, summary archive와 마지막 Session 정렬 위치에 묶인 cursor
 
+    CourseArchiveAnswerOrganization:
+      type: object
+      additionalProperties: false
+      description: Job·모델·prompt·Transcript provenance를 제거한 공개 AI 음성 답변 정리문
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+
     CourseArchiveCompletedAnswer:
-      description: Q&A archive에 공개하는 terminal Answer. 취소는 hard delete되며 CAPTURING은 제외
-      allOf:
-        - $ref: "#/components/schemas/Answer"
-        - type: object
+      type: object
+      additionalProperties: false
+      description: Q&A archive 표시용 terminal Answer. 내부 Job·Transcript·mutation 상태는 제외
+      required: [id, answer_type, status, text_content, organization, completed_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/ResourceId"
+        answer_type:
+          $ref: "#/components/schemas/AnswerType"
+        status:
+          type: string
+          const: COMPLETED
+        text_content:
+          type: [string, "null"]
+          minLength: 1
+          maxLength: 2000
+          description: 교수자가 작성한 TEXT Answer 또는 음성 Answer의 추가 설명
+        organization:
+          oneOf:
+            - $ref: "#/components/schemas/CourseArchiveAnswerOrganization"
+            - type: "null"
+        completed_at:
+          type: string
+          format: date-time
+      oneOf:
+        - title: 완료 TEXT Answer
           properties:
-            status:
-              const: COMPLETED
-            completed_at:
+            answer_type:
+              const: TEXT
+            text_content:
               type: string
-              format: date-time
+              minLength: 1
+              maxLength: 2000
+            organization:
+              type: "null"
+        - title: 완료 VOICE Answer
+          properties:
+            answer_type:
+              const: VOICE
 
     CourseStudentQuestionArchiveItem:
       type: object

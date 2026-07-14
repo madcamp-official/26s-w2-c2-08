@@ -27,6 +27,9 @@ export const handlers = [
   http.get('*/api/v1/courses/:courseId/transcripts', () =>
     HttpResponse.json({ items: [], next_cursor: null }),
   ),
+  http.get('*/api/v1/courses/:courseId/qna', () =>
+    HttpResponse.json({ items: [], next_cursor: null }),
+  ),
   http.get('*/api/v1/courses/:courseId/summaries', () =>
     HttpResponse.json({ items: [], next_cursor: null }),
   ),

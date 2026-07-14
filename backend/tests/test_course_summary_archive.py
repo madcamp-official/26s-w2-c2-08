@@ -354,6 +354,26 @@ async def _complete_session(database_url: str, session_id: UUID) -> None:
         await database.dispose()
 
 
+async def _stabilize_started_at(database_url: str, session_id: UUID) -> None:
+    """Keep the start/end transition deterministic if the host clock steps backward."""
+
+    database = create_database(_settings(database_url))
+    try:
+        async with database.engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    UPDATE lecture_sessions
+                    SET started_at = now() - interval '1 second'
+                    WHERE id = :session_id
+                    """
+                ),
+                {"session_id": session_id},
+            )
+    finally:
+        await database.dispose()
+
+
 async def _delete_course(database_url: str, course_id: UUID) -> None:
     database = create_database(_settings(database_url))
     try:
@@ -397,6 +417,7 @@ def test_course_summary_archive_is_stable_private_and_state_complete(
                 ).status_code
                 == 200
             )
+            asyncio.run(_stabilize_started_at(migrated_database_url, processing_id))
             ended = client.post(
                 f"/api/v1/sessions/{processing_id}/end",
                 headers={**TRUSTED_ORIGIN, "Idempotency-Key": "summary-archive-end"},

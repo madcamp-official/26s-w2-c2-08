@@ -34,6 +34,7 @@ from tbd.schemas.clustering import (
     QuestionClusterMemberListResponse,
     RepresentativeQuestionResponse,
 )
+from tbd.schemas.course_qna import CourseQnaArchiveResponse
 from tbd.schemas.errors import ErrorResponse
 from tbd.schemas.questions import (
     QuestionCreateRequest,
@@ -44,6 +45,11 @@ from tbd.schemas.questions import (
     QuestionReactionState,
     QuestionResponse,
 )
+from tbd.services.course_qna import (
+    CourseQnaArchiveService,
+    InvalidCourseQnaCursorError,
+)
+from tbd.services.courses import CourseAccessDeniedError, CourseNotFoundError
 from tbd.services.question_clusters import (
     InvalidClusterCursorError,
     QuestionClusterService,
@@ -92,11 +98,23 @@ def _draft_service(provider: LLMProvider) -> QuestionDraftService:
     return QuestionDraftService(provider=provider)
 
 
+def _course_qna_service(settings: Settings) -> CourseQnaArchiveService:
+    return CourseQnaArchiveService(auth_secret=settings.auth_secret_key.get_secret_value())
+
+
 def _project(question: object, *, reacted_by_me: bool) -> QuestionResponse:
     return QuestionService.project_question(question, reacted_by_me=reacted_by_me)
 
 
 def _raise_error(error: Exception, *, hide_access: bool = False) -> None:
+    if isinstance(error, CourseNotFoundError):
+        raise ApiError(404, "RESOURCE_NOT_FOUND", "요청한 Course를 찾을 수 없습니다.") from error
+    if isinstance(error, CourseAccessDeniedError):
+        raise ApiError(
+            403, "COURSE_ACCESS_DENIED", "이 Course에 접근할 권한이 없습니다."
+        ) from error
+    if isinstance(error, InvalidCourseQnaCursorError):
+        raise ApiError(400, "INVALID_CURSOR", "Q&A archive cursor를 다시 확인해 주세요.") from error
     if isinstance(error, QuestionNotFoundError) or (
         hide_access and isinstance(error, QuestionAccessDeniedError)
     ):
@@ -150,6 +168,41 @@ def _raise_error(error: Exception, *, hide_access: bool = False) -> None:
             "AI 질문 작성 도움을 지금 사용할 수 없습니다.",
         ) from error
     raise error
+
+
+@router.get(
+    "/courses/{course_id}/qna",
+    operation_id="listCourseQnaArchive",
+    response_model=CourseQnaArchiveResponse,
+    responses={
+        400: {"model": ErrorResponse},
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+    },
+)
+async def list_course_qna_archive(
+    course_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=2048)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> CourseQnaArchiveResponse:
+    """Return the Course's anonymous student questions and answered AI targets."""
+
+    try:
+        result = await _course_qna_service(settings).list_for_member(
+            session,
+            course_id=course_id,
+            user_id=user_id,
+            cursor=cursor,
+            limit=limit,
+        )
+    except Exception as exc:
+        _raise_error(exc)
+    return CourseQnaArchiveResponse(items=result.items, next_cursor=result.next_cursor)
 
 
 @router.get(

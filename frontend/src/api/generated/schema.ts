@@ -2278,13 +2278,30 @@ export interface components {
             /** @description Course ID, summary archive와 마지막 Session 정렬 위치에 묶인 cursor */
             next_cursor: string | null;
         };
-        /** @description Q&A archive에 공개하는 terminal Answer. 취소는 hard delete되며 CAPTURING은 제외 */
-        CourseArchiveCompletedAnswer: components["schemas"]["Answer"] & {
-            /** @constant */
-            status?: "COMPLETED";
-            /** Format: date-time */
-            completed_at?: string;
+        /** @description Job·모델·prompt·Transcript provenance를 제거한 공개 AI 음성 답변 정리문 */
+        CourseArchiveAnswerOrganization: {
+            content: string;
         };
+        /** @description Q&A archive 표시용 terminal Answer. 내부 Job·Transcript·mutation 상태는 제외 */
+        CourseArchiveCompletedAnswer: {
+            id: components["schemas"]["ResourceId"];
+            answer_type: components["schemas"]["AnswerType"];
+            /** @constant */
+            status: "COMPLETED";
+            /** @description 교수자가 작성한 TEXT Answer 또는 음성 Answer의 추가 설명 */
+            text_content: string | null;
+            organization: components["schemas"]["CourseArchiveAnswerOrganization"] | null;
+            /** Format: date-time */
+            completed_at: string;
+        } & ({
+            /** @constant */
+            answer_type?: "TEXT";
+            text_content?: string;
+            organization?: null;
+        } | {
+            /** @constant */
+            answer_type?: "VOICE";
+        });
         CourseStudentQuestionArchiveItem: {
             /**
              * @description discriminator enum property added by openapi-typescript
