@@ -241,3 +241,42 @@ def test_sequence_gap_is_recorded_without_fabricating_transcript_text(
     assert gaps[0].reason == "SEQUENCE_GAP"
     assert gaps[0].start_ms == 500
     assert gaps[0].end_ms == 1_000
+
+
+def test_session_end_fences_live_pcm_and_hands_the_logical_recording_to_upload(
+    migrated_database_url: str,
+) -> None:
+    user_id, session_id = asyncio.run(_seed_live_session(migrated_database_url))
+    settings = _settings(migrated_database_url)
+    app = create_app(
+        settings=settings,
+        database=create_database(settings),
+        streaming_stt_provider=DeterministicStreamingSTTProvider(),
+    )
+    app.dependency_overrides[get_current_user_id] = lambda: user_id
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/api/v1/ws/sessions/{session_id}/audio?ticket={_audio_ticket(client, session_id)}"
+        ) as websocket:
+            websocket.send_json(_start("ending-publisher"))
+            websocket.receive_json()
+            websocket.send_bytes(_frame(0, 0))
+            websocket.receive_json()
+
+            ended = client.post(
+                f"/api/v1/sessions/{session_id}/end",
+                headers={**TRUSTED_ORIGIN, "Idempotency-Key": "end-live-audio"},
+            )
+            assert ended.status_code == 202
+            websocket.send_bytes(_frame(1, 500))
+            rejected = websocket.receive_json()
+            assert rejected == {"type": "audio.resume_rejected", "reason": "SESSION_CLOSING"}
+            with pytest.raises(WebSocketDisconnect) as closed:
+                websocket.receive_json()
+            assert closed.value.code == 4409
+
+    recording, _, _ = asyncio.run(_audio_rows(migrated_database_url, session_id))
+    assert recording.status == "UPLOAD_PENDING"
+    assert recording.capture_ended_at is not None
+    assert recording.live_audio_lease_expires_at is None
