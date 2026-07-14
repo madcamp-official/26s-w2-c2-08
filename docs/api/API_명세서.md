@@ -965,11 +965,21 @@ PATCH /api/v1/answers/{answer_id}
 
 ```json
 {
-  "text_content": "복습용으로 추가한 텍스트 설명입니다."
+  "text_content": "복습용으로 추가한 텍스트 설명입니다.",
+  "expected_version": 3
 }
 ```
 
-- Session `COMPLETED`의 기존 `COMPLETED` Answer만 수정하고 `version`을 증가시킨다. 학생 질문 target의 기존 완료 Answer와, 완료된 Answer target이기 때문에 `PRESERVED`로 보존된 AI 대표질문의 기존 완료 Answer에 `text_content`를 추가·교체할 수 있다. target·snapshot·원본 음성 범위는 바꾸지 않는다. 이 필드는 교수자 작성 text이므로 AI 정리 Job의 성공·재시도·늦은 결과가 덮어쓰지 않는다. 텍스트 최대 길이, 삭제·빈 문자열 처리와 KnowledgeChunk 재생성 세부 범위는 TBD이다.
+- Session `COMPLETED`의 기존 `COMPLETED` Answer만 수정하고 `version`을 증가시킨다. 학생 질문 target의 기존 완료 Answer와, 완료된 Answer target이기 때문에 `PRESERVED`로 보존된 AI 대표질문의 기존 완료 Answer에 `text_content`를 추가·교체할 수 있다. target·snapshot·원본 음성 범위는 바꾸지 않는다. 이 필드는 교수자 작성 text이므로 AI 정리 Job의 성공·재시도·늦은 결과가 덮어쓰지 않는다.
+- `text_content`는 trim·Unicode NFC 정규화 뒤 1~2,000자여야 한다. `expected_version`이 현재 값과 다르면 `409 ANSWER_VERSION_CONFLICT`이며 `details.current_version`, `details.current_text_content`를 반환한다. 서버는 사용자의 로컬 초안을 덮어쓰지 않으므로 UI는 충돌 메시지와 함께 작성 중 내용을 유지한다.
+- 철회는 빈 문자열 PATCH가 아니라 다음 endpoint를 사용한다. text-only Answer는 hard delete하고 학생 질문 target을 `OPEN`으로 되돌린다. voice-backed Answer는 `text_content`만 `null`로 지우고 target·snapshot·음성 범위는 유지한다.
+
+```http
+DELETE /api/v1/answers/{answer_id}/text
+Idempotency-Key: <key>
+```
+
+- 철회 후 공개 취소 이력은 남기지 않는다. 같은 멱등 키의 재요청은 24시간 동안 같은 `204 No Content`를 반환한다.
 
 ### 11.5 음성 Answer AI 정리
 

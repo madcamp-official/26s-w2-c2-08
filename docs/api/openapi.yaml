@@ -1665,6 +1665,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     post:
       tags: [Answers]
       operationId: createSessionAnswer
@@ -1801,6 +1803,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     patch:
       tags: [Answers]
       operationId: updateCompletedAnswerText
@@ -1810,8 +1814,10 @@ paths:
         추가하거나 교체한다. 학생 질문 target의 기존 완료 Answer와 Answer 때문에
         PRESERVED된 AI 대표질문 target의 기존 완료 Answer만 허용한다. target·snapshot·
         음성 Answer의 Transcript 범위는 유지한다.
-        텍스트 최대 길이, 빈 문자열로 삭제하는 정책과 KnowledgeChunk 재생성
-        세부 범위는 TBD이다.
+        text_content는 trim·Unicode NFC 정규화 후 1~2,000자여야 하며, 수정 시
+        현재 version을 함께 보내야 한다. version이 다르면 409
+        ANSWER_VERSION_CONFLICT와 현재 version·text_content를 반환하고 서버는
+        작성 중인 클라이언트 초안을 덮어쓰지 않는다.
       requestBody:
         required: true
         content:
@@ -1828,6 +1834,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Answer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
+  /api/v1/answers/{answer_id}/text:
+    parameters:
+      - $ref: "#/components/parameters/AnswerId"
+      - $ref: "#/components/parameters/RequestId"
+    delete:
+      tags: [Answers]
+      operationId: withdrawCompletedAnswerText
+      summary: 완료 Answer의 교수자 text 철회
+      description: |
+        Course PROFESSOR가 COMPLETED Session의 COMPLETED Answer text를 철회한다.
+        text-only Answer는 행을 hard delete하고 학생 질문 target을 OPEN으로 복귀시킨다.
+        voice-backed Answer는 음성 범위·target·snapshot을 유지한 채 text_content만 null로
+        지운다. 두 경우 모두 취소 이력은 공개하지 않는다.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: text가 철회되었거나 text-only Answer가 삭제됨
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1872,6 +1910,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/summaries:
     parameters:
@@ -5344,7 +5384,8 @@ components:
         text_content:
           type: string
           minLength: 1
-          description: 정확한 최대 길이는 TBD이며 서버는 빈 값을 새 Answer로 저장하지 않음
+          maxLength: 2000
+          description: trim·Unicode NFC 정규화 후 1~2,000자여야 함
 
     AnswerCreateRequest:
       oneOf:
@@ -5359,14 +5400,17 @@ components:
     AnswerTextUpdateRequest:
       type: object
       additionalProperties: false
-      required: [text_content]
+      required: [text_content, expected_version]
       properties:
         text_content:
           type: string
-          description: |
-            텍스트 최대 길이와 빈 문자열·삭제 정책은 TBD이므로
-            이 PATCH schema는 길이 제약을 선결정하지 않는다.
-          x-empty-string-policy: TBD
+          minLength: 1
+          maxLength: 2000
+          description: trim·Unicode NFC 정규화 후 1~2,000자여야 함
+        expected_version:
+          type: integer
+          minimum: 1
+          description: 마지막으로 읽은 Answer version. 다르면 409 ANSWER_VERSION_CONFLICT
 
     AnswerCompleteRequest:
       type: object

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from tbd.api.routers.answers import router as answers_router
 from tbd.api.routers.auth import router as auth_router
 from tbd.api.routers.courses import router as courses_router
 from tbd.api.routers.health import router as health_router
@@ -19,6 +20,7 @@ api_router.include_router(health_router)
 # Feature PRs add business routers to this versioned boundary.
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(auth_router)
+v1_router.include_router(answers_router)
 v1_router.include_router(courses_router)
 v1_router.include_router(jobs_router)
 v1_router.include_router(materials_router)
