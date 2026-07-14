@@ -14,6 +14,20 @@ class QuestionCreateRequest(BaseModel):
     content: str
 
 
+class QuestionDraftRequest(BaseModel):
+    """Raw draft text; service-owned normalization defines its public boundary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    draft: str
+
+
+class QuestionDraftResponse(BaseModel):
+    """Ephemeral AI suggestions that have not become public Questions."""
+
+    suggestions: list[str]
+
+
 class QuestionResponse(BaseModel):
     """A member-visible Question; author fields intentionally do not exist here."""
 
