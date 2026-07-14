@@ -16,6 +16,7 @@ from tbd.providers.google_oidc import GoogleOIDCProvider
 from tbd.repositories.courses import CourseRepository, CourseView
 from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.services.auth_sessions import AuthSessionService, InvalidSessionError
+from tbd.storage import Storage
 
 
 def get_database(request: Request) -> Database:
@@ -28,6 +29,12 @@ def get_settings(request: Request) -> Settings:
     """Return immutable process settings owned by the application."""
 
     return request.app.state.settings
+
+
+def get_storage(request: Request) -> Storage:
+    """Return the private object storage owned by the current application."""
+
+    return request.app.state.storage
 
 
 def get_google_oidc_provider(request: Request) -> GoogleOIDCProvider:

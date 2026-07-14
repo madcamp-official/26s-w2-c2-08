@@ -74,11 +74,14 @@ class SessionRepository:
 
     async def processing_material_count(self, session: AsyncSession, session_id: UUID) -> int:
         rows = await session.scalars(
-            select(LectureMaterial.id).where(
+            select(LectureMaterial.id)
+            .where(
                 LectureMaterial.session_id == session_id,
                 LectureMaterial.detached_at.is_(None),
                 LectureMaterial.processing_status == "PROCESSING",
             )
+            .order_by(LectureMaterial.id)
+            .with_for_update()
         )
         return len(list(rows))
 

@@ -942,6 +942,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     post:
       tags: [Materials]
       operationId: uploadSessionMaterial
@@ -997,6 +999,8 @@ paths:
           $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
         "422":
           $ref: "#/components/responses/ValidationFailed"
 
@@ -1026,6 +1030,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/MaterialNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
     delete:
       tags: [Materials]
       operationId: detachMaterial
@@ -1052,6 +1058,10 @@ paths:
           $ref: "#/components/responses/MaterialNotFound"
         "409":
           $ref: "#/components/responses/MaterialDetachConflict"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/materials/{material_id}/content:
     parameters:
@@ -1086,6 +1096,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/MaterialNotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/transcript:
     parameters:
@@ -2856,6 +2870,21 @@ components:
             error:
               code: AUTHENTICATION_REQUIRED
               message: 로그인이 필요합니다.
+              request_id: req_01HXYZ
+              details: null
+    DependencyUnavailable:
+      description: 외부 저장소 또는 필수 의존성을 일시적으로 사용할 수 없음
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: STORAGE_UNAVAILABLE
+              message: 파일 저장소를 일시적으로 사용할 수 없습니다.
               request_id: req_01HXYZ
               details: null
     Forbidden:

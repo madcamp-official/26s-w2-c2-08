@@ -634,6 +634,7 @@ Content-Type: multipart/form-data
 - 서버는 업로드 파일명을 안전한 초기 `display_name`으로 정규화한다. 같은 Session의 연결된 자료와 충돌하면 확장자 앞에 ` (1)`, ` (2)` 순서로 사용 가능한 번호를 붙인다. 할당한 `display_name`은 업로드 시 저장하고 조회할 때 다시 계산하지 않는다.
 - 성공: `202 Accepted`. Material을 `processing_status=UPLOADED`로 저장하고 `MATERIAL_PROCESSING` AIJob을 생성한다. 이 Job은 `visibility=SHARED`, `blocks_session_completion=false`이며, `COMPLETED` Session에 업로드해도 Session 상태는 바뀌지 않는다.
 - 전처리 중에는 `PROCESSING`, 성공하면 `READY`, 실패하면 `FAILED`로 갱신한다. `READY` 자료만 새 AI 검색과 근거 생성에 사용할 수 있고 `UPLOADED`, `PROCESSING`, `FAILED` 자료는 제외한다.
+- 저장소 또는 멱등성 응답 암호화 설정을 사용할 수 없으면 `503`을 반환하며, 파일 경로·storage key·provider 원문 오류는 응답하지 않는다.
 
 ### 8.2 자료 목록과 메타데이터
 
@@ -645,7 +646,7 @@ GET /api/v1/materials/{material_id}
 - 권한: Course 멤버
 - 외부에서 연결된 자료만 반환한다. 응답은 업로드 시 확정한 `display_name`, MIME, 크기, 페이지 수와 처리 상태를 포함한다.
 - 목록은 `created_at ASC, id ASC`로 안정적으로 정렬하고 `items`, `next_cursor`를 반환한다.
-- 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 분리되거나 존재하지 않는 자료는 모두 `404 MATERIAL_NOT_FOUND`로 응답해 존재를 숨긴다.
+- 인증되지 않은 요청은 `401`을 반환한다. 목록에서 비멤버는 `403 COURSE_ACCESS_DENIED`, 존재하지 않는 Session은 `404`를 반환한다. 단건 조회에서는 비멤버·권한 밖 요청, 분리되거나 존재하지 않는 자료를 모두 `404 MATERIAL_NOT_FOUND`로 응답해 존재를 숨긴다.
 - 내부 파일 경로, 스토리지 키와 `detached_at`은 응답하지 않는다.
 
 ### 8.3 PDF 열람
@@ -659,6 +660,7 @@ GET /api/v1/materials/{material_id}/content
 - 연결되고 `processing_status`가 `UPLOADED`, `PROCESSING`, `READY`인 Material만 본문을 반환한다. `FAILED`는 사용할 수 없는 자료이므로 원본을 반환하지 않는다.
 - `Content-Disposition` 파일명에는 저장된 `display_name`을 안전하게 인코딩해 사용한다.
 - 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, `FAILED`, 분리되거나 존재하지 않는 자료는 모두 `404 MATERIAL_NOT_FOUND`로 응답해 존재를 숨긴다.
+- 저장소가 일시적으로 읽히지 않으면 `503 STORAGE_UNAVAILABLE`을 반환한다.
 - 추후 객체 스토리지를 사용하면 짧은 만료 시간의 서명 URL 응답으로 변경할 수 있다.
 
 ### 8.4 자료 분리
@@ -675,6 +677,7 @@ Idempotency-Key: <key>
 - 성공: `204 No Content`. 응답 전에 외부 연결을 즉시 끊어 목록·단건·본문·수업 기록에서 제외하고 새 AI 검색과 근거 생성에도 사용하지 않는다.
 - 동일한 멱등성 키와 요청의 재시도는 최초 `204`를 반환한다. 분리 완료 후 새 요청으로 접근하면 `404 MATERIAL_NOT_FOUND`를 반환한다.
 - 파일 객체와 파생 chunk는 background cleanup으로 정리한다. 스토리지 키와 `detached_at`은 외부 API에 노출하지 않는다.
+- 멱등성 응답 암호화 설정을 사용할 수 없으면 `503 DEPENDENCY_UNAVAILABLE`을 반환한다. 이미 commit된 분리는 파일 삭제 재시도 실패와 무관하게 `204`를 유지한다.
 - 이미 저장된 Assistant 근거를 보존하는 경우 안전한 `label` snapshot은 남길 수 있지만 자료 `link`는 `null`로 반환한다. 근거의 정확한 보관 기간·FK 정책과 `410 Gone` 도입 여부는 미정이다.
 
 ## 9. Transcript API

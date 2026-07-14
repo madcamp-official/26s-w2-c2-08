@@ -12,6 +12,7 @@ from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
 from tbd.providers.google_oidc import GoogleOIDCClient, GoogleOIDCProvider
 from tbd.repositories.idempotency import IdempotencyRepository
+from tbd.storage import FilesystemStorage, Storage
 
 
 @asynccontextmanager
@@ -26,12 +27,14 @@ def create_app(
     settings: Settings | None = None,
     database: Database | None = None,
     google_oidc_provider: GoogleOIDCProvider | None = None,
+    storage: Storage | None = None,
 ) -> FastAPI:
     """Create the HTTP application and mount its public routers."""
 
     runtime_settings = settings or get_settings()
     runtime_database = database or create_database(runtime_settings)
     runtime_google_oidc_provider = google_oidc_provider or GoogleOIDCClient(runtime_settings)
+    runtime_storage = storage or FilesystemStorage(runtime_settings.storage_root)
     app = FastAPI(
         title=runtime_settings.app_name,
         version="0.1.0",
@@ -40,6 +43,7 @@ def create_app(
     app.state.settings = runtime_settings
     app.state.database = runtime_database
     app.state.google_oidc_provider = runtime_google_oidc_provider
+    app.state.storage = runtime_storage
     cipher = runtime_settings.idempotency_response_cipher
     app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None
     app.state.course_join_code_codec = runtime_settings.course_join_code_codec

@@ -31,23 +31,64 @@ class JobRepository:
         *,
         now: datetime | None = None,
         lease_duration: timedelta,
+        job_type: str | None = None,
     ) -> ClaimedJob | None:
         """Claim one due SHARED Job with PostgreSQL SKIP LOCKED semantics."""
 
         timestamp = now or datetime.now(UTC)
+        conditions = self._pending_shared_conditions(timestamp)
+        if job_type is not None:
+            conditions.append(AIJob.job_type == job_type)
         job = await session.scalar(
             select(AIJob)
-            .where(
-                AIJob.status == AIJobStatus.PENDING,
-                AIJob.visibility == AIJobVisibility.SHARED,
-                AIJob.available_at <= timestamp,
-            )
+            .where(*conditions)
             .order_by(AIJob.available_at, AIJob.created_at, AIJob.id)
             .with_for_update(skip_locked=True)
             .limit(1)
         )
         if job is None:
             return None
+
+        return await self._claim_locked(session, job, timestamp, lease_duration)
+
+    async def claim_shared_by_id(
+        self,
+        session: AsyncSession,
+        job_id: UUID,
+        *,
+        now: datetime | None = None,
+        lease_duration: timedelta,
+        job_type: str | None = None,
+    ) -> ClaimedJob | None:
+        """Claim one already-selected Job after its domain rows are locked."""
+
+        timestamp = now or datetime.now(UTC)
+        conditions = [AIJob.id == job_id, *self._pending_shared_conditions(timestamp)]
+        if job_type is not None:
+            conditions.append(AIJob.job_type == job_type)
+        job = await session.scalar(
+            select(AIJob).where(*conditions).with_for_update(skip_locked=True)
+        )
+        if job is None:
+            return None
+        return await self._claim_locked(session, job, timestamp, lease_duration)
+
+    @staticmethod
+    def _pending_shared_conditions(timestamp: datetime) -> list[object]:
+        return [
+            AIJob.status == AIJobStatus.PENDING,
+            AIJob.visibility == AIJobVisibility.SHARED,
+            AIJob.available_at <= timestamp,
+        ]
+
+    @staticmethod
+    async def _claim_locked(
+        session: AsyncSession,
+        job: AIJob,
+        timestamp: datetime,
+        lease_duration: timedelta,
+    ) -> ClaimedJob:
+        """Move a row already protected by ``FOR UPDATE`` into the running state."""
 
         token = uuid4()
         job.status = AIJobStatus.RUNNING
