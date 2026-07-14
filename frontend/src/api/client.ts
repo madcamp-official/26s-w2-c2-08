@@ -2,13 +2,15 @@ import createClient from 'openapi-fetch'
 
 import type { paths } from './generated/schema'
 
-const apiBaseUrl = (
-  import.meta.env.VITE_API_BASE_URL || window.location.origin
-).replace(/\/$/, '')
+function resolveApiOrigin(configuredBaseUrl?: string): string {
+  const baseUrl = configuredBaseUrl?.trim() || window.location.origin
+  return new URL(baseUrl, window.location.origin).origin
+}
+
+const apiBaseUrl = resolveApiOrigin(import.meta.env.VITE_API_BASE_URL)
 
 export function apiUrl(path: string): string {
-  const base = new URL(apiBaseUrl || '/', window.location.origin)
-  return new URL(path, base).toString()
+  return new URL(path, apiBaseUrl).toString()
 }
 
 export const apiClient = createClient<paths>({
