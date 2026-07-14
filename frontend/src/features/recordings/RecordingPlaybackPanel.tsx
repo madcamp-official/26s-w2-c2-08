@@ -1,11 +1,24 @@
-import { useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiUrl } from '../../api/client'
+import { ApiError } from '../../api/errors'
+import { useToast } from '../../components/feedback/toast-context'
+import { Button } from '../../components/ui/Button'
+import { Dialog } from '../../components/ui/Dialog'
 import { getLiveTranscript } from '../live/api'
-import { getSessionRecording } from './api'
+import { deleteSessionRecording, getSessionRecording } from './api'
 
-export function RecordingPlaybackPanel({ sessionId }: { sessionId: string }) {
+export function RecordingPlaybackPanel({
+  sessionId,
+  professor,
+}: {
+  sessionId: string
+  professor: boolean
+}) {
   const player = useRef<HTMLAudioElement | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const { showToast } = useToast()
   const recording = useQuery({
     queryKey: ['recordings', sessionId],
     queryFn: ({ signal }) => getSessionRecording(sessionId, signal),
@@ -13,6 +26,25 @@ export function RecordingPlaybackPanel({ sessionId }: { sessionId: string }) {
   const transcript = useQuery({
     queryKey: ['recordings', sessionId, 'timeline'],
     queryFn: ({ signal }) => getLiveTranscript(sessionId, signal),
+  })
+  const remove = useMutation({
+    mutationFn: () => deleteSessionRecording(sessionId, crypto.randomUUID()),
+    onSuccess: () => {
+      setDeleteOpen(false)
+      void queryClient.invalidateQueries({
+        queryKey: ['recordings', sessionId],
+      })
+      showToast({ tone: 'success', message: '수업 녹음을 삭제했습니다.' })
+    },
+    onError: (error) => {
+      showToast({
+        tone: 'error',
+        message:
+          error instanceof ApiError && error.status === 409
+            ? '완료된 수업의 업로드 완료 녹음만 삭제할 수 있습니다.'
+            : '수업 녹음을 삭제하지 못했습니다.',
+      })
+    },
   })
   if (recording.isPending)
     return (
@@ -71,6 +103,48 @@ export function RecordingPlaybackPanel({ sessionId }: { sessionId: string }) {
           )
         })}
       </ol>
+      {professor && (
+        <div className="recording-playback__danger">
+          <p className="input-hint">
+            녹음을 삭제하면 재생할 수 없고, Transcript와 질문·Answer 기록은
+            유지됩니다.
+          </p>
+          <Button variant="ghost" onClick={() => setDeleteOpen(true)}>
+            녹음 삭제
+          </Button>
+        </div>
+      )}
+      {professor && (
+        <Dialog
+          open={deleteOpen}
+          title="수업 녹음을 삭제할까요?"
+          description="원본 녹음은 복구할 수 없으며, Transcript와 다른 수업 기록은 유지됩니다."
+          onOpenChange={setDeleteOpen}
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                disabled={remove.isPending}
+                onClick={() => setDeleteOpen(false)}
+              >
+                취소
+              </Button>
+              <Button
+                variant="danger"
+                disabled={remove.isPending}
+                onClick={() => remove.mutate()}
+              >
+                {remove.isPending ? '삭제 중…' : '녹음 삭제'}
+              </Button>
+            </>
+          }
+        >
+          <p>
+            삭제 요청이 확정되면 metadata와 playback은 즉시 숨기고, private
+            파일은 별도 worker가 재시도하며 정리합니다.
+          </p>
+        </Dialog>
+      )}
     </section>
   )
 }

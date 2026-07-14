@@ -48,6 +48,12 @@ from tbd.services.courses import (
     JoinCodeGenerationError,
     MembershipConflictError,
 )
+from tbd.services.lifecycle import (
+    CourseDeletionBlockedError,
+    LifecycleAccessDeniedError,
+    LifecycleResourceNotFoundError,
+    LifecycleService,
+)
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -405,3 +411,86 @@ async def rotate_course_join_code(
     except JoinCodeGenerationError as exc:
         raise ApiError(503, "DEPENDENCY_UNAVAILABLE", "참여 코드를 발급하지 못했습니다.") from exc
     return result
+
+
+@router.delete(
+    "/{course_id}",
+    status_code=204,
+    dependencies=[Depends(require_allowed_origin)],
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def delete_course(
+    course_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    idempotency: RequiredIdempotency,
+    idempotency_key: RequiredIdempotencyHeader,
+) -> Response:
+    """Make a completed-only Course inaccessible and queue private-object cleanup."""
+
+    now = datetime.now(UTC)
+    try:
+        key_hash = idempotency_key_hash(idempotency_key)
+    except ValueError as exc:
+        raise ApiError(422, "VALIDATION_ERROR", "Idempotency-Key를 확인해 주세요.") from exc
+    request = IdempotencyRequest(
+        user_id=user_id,
+        method="DELETE",
+        route_key="/api/v1/courses/{course_id}",
+        key_hash=key_hash,
+        request_hash=canonical_request_hash("DELETE", "/api/v1/courses/{course_id}", {}),
+    )
+    try:
+        async with transaction(session):
+            acquired = await idempotency.acquire(
+                session,
+                request,
+                now=now,
+                processing_lease=PROCESSING_LEASE,
+            )
+            if isinstance(acquired, ReplayIdempotencyRecord):
+                return Response(status_code=acquired.status_code)
+            if isinstance(acquired, ProcessingIdempotencyRecord):
+                _raise_idempotency_in_progress()
+            assert isinstance(acquired, AcquiredIdempotencyRecord)
+            await LifecycleService().delete_course(
+                session,
+                course_id=course_id,
+                user_id=user_id,
+                now=now,
+            )
+            await idempotency.complete(
+                session,
+                record_id=acquired.record_id,
+                status_code=204,
+                body={},
+                now=now,
+            )
+    except IdempotencyKeyReusedError as exc:
+        raise ApiError(
+            409, "IDEMPOTENCY_KEY_REUSED", "같은 멱등 키가 다른 요청에 사용되었습니다."
+        ) from exc
+    except LifecycleResourceNotFoundError as exc:
+        raise ApiError(404, "RESOURCE_NOT_FOUND", "요청한 Course를 찾을 수 없습니다.") from exc
+    except LifecycleAccessDeniedError as exc:
+        raise ApiError(
+            403,
+            "ROLE_REQUIRED",
+            "Course를 처음 생성한 교수자만 Course를 삭제할 수 있습니다.",
+            details={"required_role": "COURSE_CREATOR_PROFESSOR"},
+        ) from exc
+    except CourseDeletionBlockedError as exc:
+        raise ApiError(
+            409,
+            "COURSE_HAS_ACTIVE_SESSION",
+            "READY, LIVE 또는 PROCESSING class가 남아 있어 Course를 삭제할 수 없습니다.",
+            details={"blocking_session_statuses": ["READY", "LIVE", "PROCESSING"]},
+        ) from exc
+    return Response(status_code=204)

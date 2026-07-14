@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -106,6 +112,9 @@ describe('Course role flows', () => {
     expect(
       screen.queryByRole('button', { name: '새 코드로 교체' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Course 삭제' }),
+    ).not.toBeInTheDocument()
   })
 
   it('renders join-code controls only for a professor Course', async () => {
@@ -124,6 +133,34 @@ describe('Course role flows', () => {
     expect(
       screen.getByRole('button', { name: '새 코드로 교체' }),
     ).toBeInTheDocument()
+  })
+
+  it('deletes a completed-only professor Course after confirmation', async () => {
+    authenticate()
+    let deleted = false
+    server.use(
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(professorCourse),
+      ),
+      http.delete('*/api/v1/courses/:courseId', ({ request }) => {
+        deleted = request.headers.has('Idempotency-Key')
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.get('*/api/v1/courses', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+    const router = renderAt(`/courses/${professorCourse.id}`)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Course 삭제' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Course 삭제',
+      }),
+    )
+
+    await waitFor(() => expect(deleted).toBe(true))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
   })
 
   it('creates a professor Course and joins another Course as a student', async () => {

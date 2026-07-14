@@ -164,6 +164,9 @@ cd backend && uv run python -m tbd.jobs.recording_transcription_worker
 
 # 별도 터미널: 종료 후처리 Worker (Answer 정리·FINAL Summary·완료 전환)
 cd backend && uv run python -m tbd.jobs.postprocessing_worker
+
+# 별도 터미널: 비공개 PDF·녹음 삭제 Worker (보관 만료·조기 삭제 retry)
+cd backend && uv run python -m tbd.jobs.lifecycle_worker
 ```
 
 접속 주소:

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     Text,
@@ -143,3 +144,64 @@ class OutboxEvent(UUIDPrimaryKeyMixin, Base):
     publish_attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     last_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
+
+
+class StorageDeletionLedger(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Durable, retryable removal of a private storage object.
+
+    The row is intentionally separate from a Course lifecycle state.  Domain
+    resources become inaccessible in the transaction that schedules this
+    work; a worker can then retry the idempotent storage deletion safely.
+    """
+
+    __tablename__ = "storage_deletion_ledgers"
+    __table_args__ = (
+        CheckConstraint(
+            "resource_type IN ('MATERIAL', 'RECORDING')",
+            name="storage_deletion_ledgers_resource_type_ck",
+        ),
+        CheckConstraint("byte_size > 0", name="storage_deletion_ledgers_byte_size_ck"),
+        CheckConstraint("attempt >= 0", name="storage_deletion_ledgers_attempt_ck"),
+        CheckConstraint(
+            "state IN ('PENDING', 'RUNNING', 'SUCCEEDED')",
+            name="storage_deletion_ledgers_state_ck",
+        ),
+        CheckConstraint(
+            "(state = 'SUCCEEDED') = (succeeded_at IS NOT NULL)",
+            name="storage_deletion_ledgers_terminal_state_ck",
+        ),
+        CheckConstraint(
+            "lease_expires_at IS NULL OR state = 'RUNNING'",
+            name="storage_deletion_ledgers_lease_state_ck",
+        ),
+        UniqueConstraint("storage_key", name="storage_deletion_ledgers_storage_key_uq"),
+        Index(
+            "storage_deletion_ledgers_claim_idx",
+            "state",
+            "next_attempt_at",
+            "id",
+            postgresql_where=text("state IN ('PENDING', 'RUNNING')"),
+        ),
+        Index(
+            "storage_deletion_ledgers_course_idx",
+            "course_id",
+            "state",
+            "id",
+        ),
+    )
+
+    course_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resource_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    resource_type: Mapped[str] = mapped_column(Text, nullable=False)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    state: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'PENDING'"))
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    next_attempt_at: Mapped[datetime] = mapped_column(nullable=False, server_default=text("now()"))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    succeeded_at: Mapped[datetime | None] = mapped_column(nullable=True)

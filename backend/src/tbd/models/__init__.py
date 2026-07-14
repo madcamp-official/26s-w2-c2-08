@@ -11,7 +11,7 @@ from tbd.models.clustering import (
     QuestionClusterMember,
 )
 from tbd.models.common import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
-from tbd.models.consistency import IdempotencyRecord, OutboxEvent
+from tbd.models.consistency import IdempotencyRecord, OutboxEvent, StorageDeletionLedger
 from tbd.models.courses import Course, CourseMember
 from tbd.models.knowledge import (
     ChatMessage,
@@ -60,6 +60,7 @@ __all__ = [
     "RealtimeTicket",
     "RecordingUpload",
     "SessionRecording",
+    "StorageDeletionLedger",
     "TimestampMixin",
     "UUIDPrimaryKeyMixin",
     "User",

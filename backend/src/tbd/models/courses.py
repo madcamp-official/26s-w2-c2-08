@@ -30,6 +30,11 @@ class Course(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         CheckConstraint("join_code_lookup_key_version > 0", name="courses_lookup_key_version_ck"),
         CheckConstraint("join_code_key_version > 0", name="courses_key_version_ck"),
         CheckConstraint("version > 0", name="courses_version_ck"),
+        Index(
+            "courses_active_idx",
+            "id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
     title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -44,6 +49,7 @@ class Course(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
     join_code_ciphertext: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
     join_code_nonce: Mapped[bytes] = mapped_column(BYTEA, nullable=False)
     join_code_key_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
 
 class CourseMember(Base):
