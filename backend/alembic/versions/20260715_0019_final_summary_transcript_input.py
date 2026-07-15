@@ -28,6 +28,10 @@ _LEGACY_INPUT = (
 
 
 def upgrade() -> None:
+    # The legacy checks require every FINAL_SUMMARY input column to remain
+    # NULL. Remove them before backfilling the newly supported version input.
+    op.drop_constraint("ai_jobs_answer_input_ck", "ai_jobs", type_="check")
+    op.drop_constraint("ai_jobs_input_version_segment_ck", "ai_jobs", type_="check")
     op.execute(
         "UPDATE ai_jobs AS job "
         "SET input_transcript_version_id = COALESCE("
@@ -38,8 +42,9 @@ def upgrade() -> None:
         "WHERE job.session_id = session.id AND job.job_type = 'FINAL_SUMMARY' "
         "AND job.input_transcript_version_id IS NULL"
     )
-    op.drop_constraint("ai_jobs_answer_input_ck", "ai_jobs", type_="check")
-    op.drop_constraint("ai_jobs_input_version_segment_ck", "ai_jobs", type_="check")
+    # The backfill touches a column covered by deferred composite foreign
+    # keys. Flush their trigger events before altering this table again.
+    op.execute("SET CONSTRAINTS ALL IMMEDIATE")
     op.create_check_constraint("ai_jobs_answer_input_ck", "ai_jobs", _FINAL_SUMMARY_INPUT)
     op.create_check_constraint(
         "ai_jobs_input_version_segment_ck",

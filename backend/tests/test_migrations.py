@@ -203,3 +203,125 @@ def test_embeddinggemma_migration_discards_old_vectors_and_queues_reindex(
         job.id != old_job_id and job.job_type == "KNOWLEDGE_INDEXING" and job.status == "PENDING"
         for job in jobs
     )
+
+
+def test_final_summary_input_migration_backfills_legacy_success(
+    temporary_database_url: str,
+    alembic_runner: Callable[..., None],
+    tmp_path: Path,
+) -> None:
+    """A legacy successful FINAL_SUMMARY can be backfilled under the old checks."""
+
+    alembic_runner(temporary_database_url, "upgrade", "20260715_0018")
+    settings = Settings(
+        _env_file=None,
+        app_env=AppEnvironment.TEST,
+        database_url=temporary_database_url,
+        storage_root=tmp_path / "uploads",
+        idempotency_response_encryption_key=base64.b64encode(b"i" * 32).decode(),
+        course_join_code_encryption_key=base64.b64encode(b"e" * 32).decode(),
+        course_join_code_lookup_key=base64.b64encode(b"h" * 32).decode(),
+    )
+    database = create_database(settings)
+    try:
+
+        async def seed_legacy_summary() -> tuple[object, object]:
+            codec = settings.course_join_code_codec
+            assert codec is not None
+            async with database.session_factory() as session:
+                async with session.begin():
+                    professor_id = uuid4()
+                    session.add(
+                        User(
+                            id=professor_id,
+                            display_name="summary migration professor",
+                            primary_email=f"summary-migration-{uuid4().hex[:12]}@example.test",
+                        )
+                    )
+                    course, _ = await CourseService(codec).create(
+                        session,
+                        user_id=professor_id,
+                        title="요약 migration",
+                        semester="2026 여름학기",
+                    )
+                    lecture_session = await SessionService().create(
+                        session,
+                        course_id=course.course.id,
+                        user_id=professor_id,
+                        title="기존 최종 요약 수업",
+                        lecture_date=date(2026, 7, 15),
+                    )
+                    transcript_id = uuid4()
+                    segment_id = uuid4()
+                    job_id = uuid4()
+                    parameters = {
+                        "transcript_id": transcript_id,
+                        "segment_id": segment_id,
+                        "job_id": job_id,
+                        "summary_id": uuid4(),
+                        "session_id": lecture_session.id,
+                    }
+                    statements = (
+                        """
+                            INSERT INTO transcript_versions (
+                                id, session_id, version, source, status, last_sequence,
+                                finalized_at
+                            ) VALUES (
+                                :transcript_id, :session_id, 1, 'LIVE', 'FINALIZED', 1, now()
+                            )
+                        """,
+                        """
+                            INSERT INTO transcript_segments (
+                                id, session_id, transcript_version_id, sequence,
+                                start_ms, end_ms, text
+                            ) VALUES (
+                                :segment_id, :session_id, :transcript_id, 1,
+                                0, 1000, '기존 최종 요약의 Transcript'
+                            )
+                        """,
+                        """
+                            UPDATE lecture_sessions
+                            SET canonical_transcript_version_id = :transcript_id
+                            WHERE id = :session_id
+                        """,
+                        """
+                            INSERT INTO ai_jobs (
+                                id, session_id, job_type, visibility, status, attempt,
+                                version, blocks_session_completion, retryable,
+                                started_at, finished_at
+                            ) VALUES (
+                                :job_id, :session_id, 'FINAL_SUMMARY', 'SHARED', 'SUCCEEDED',
+                                2, 6, true, true, now(), now()
+                            )
+                        """,
+                        """
+                            INSERT INTO lecture_summaries (
+                                id, session_id, created_by_job_id, created_by_job_attempt,
+                                summary_type, visibility, content,
+                                source_transcript_version_id, source_start_segment_id,
+                                source_end_segment_id
+                            ) VALUES (
+                                :summary_id, :session_id, :job_id, 2, 'FINAL',
+                                'COURSE_MEMBERS', '기존 최종 요약', :transcript_id,
+                                :segment_id, :segment_id
+                            )
+                        """,
+                    )
+                    for statement in statements:
+                        await session.execute(text(statement), parameters)
+                    return job_id, transcript_id
+
+        job_id, transcript_id = asyncio.run(seed_legacy_summary())
+    finally:
+        asyncio.run(database.dispose())
+
+    alembic_runner(temporary_database_url, "upgrade", "head")
+
+    with psycopg.connect(_sync_dsn(temporary_database_url)) as connection:
+        row = connection.execute(
+            "SELECT input_transcript_version_id, input_start_segment_id, "
+            "input_end_segment_id FROM ai_jobs WHERE id = %s",
+            (job_id,),
+        ).fetchone()
+
+    assert row == (transcript_id, None, None)
