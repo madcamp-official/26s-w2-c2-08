@@ -28,7 +28,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['vite.config.ts', '**/*.{test,spec}.{ts,tsx}', 'src/test/**/*'],
+    files: [
+      'vite.config.ts',
+      'playwright.config.ts',
+      '**/*.{test,spec}.{ts,tsx}',
+      'src/test/**/*',
+    ],
     languageOptions: {
       globals: {
         ...globals.browser,

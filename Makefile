@@ -4,7 +4,7 @@ SHELL := /bin/bash
 	skills-sync skills-check docs-check backend-lint backend-format frontend-lint \
 	frontend-format lint frontend-typecheck typecheck backend-unit backend-contract \
 	backend-integration migration-check frontend-test test frontend-contract-check \
-	frontend-build build check
+	frontend-build frontend-visual build check
 
 setup:
 	cd backend && uv sync --dev
@@ -83,6 +83,9 @@ frontend-contract-check:
 
 frontend-build:
 	cd frontend && pnpm build
+
+frontend-visual:
+	cd frontend && pnpm visual:foundation
 
 build: frontend-build
 
