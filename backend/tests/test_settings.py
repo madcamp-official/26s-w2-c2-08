@@ -174,6 +174,19 @@ def test_personal_ai_provider_timeout_is_bounded_and_configurable() -> None:
         Settings(_env_file=None, personal_ai_provider_timeout_seconds=0)
 
 
+def test_knowledge_embedding_timeout_is_bounded_and_configurable() -> None:
+    """Embedding cold starts need their own finite operator-controlled deadline."""
+
+    assert (
+        Settings(
+            _env_file=None, knowledge_embedding_timeout_seconds=75
+        ).knowledge_embedding_timeout_seconds
+        == 75
+    )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, knowledge_embedding_timeout_seconds=301)
+
+
 def test_ai_provider_factory_selects_ollama_models_from_settings() -> None:
     """API and standalone workers receive one selected Ollama provider profile."""
 

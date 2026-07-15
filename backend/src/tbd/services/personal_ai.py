@@ -54,6 +54,7 @@ from tbd.schemas.personal_ai import (
     SummaryRange,
 )
 from tbd.services.knowledge import (
+    KNOWLEDGE_EMBEDDING_TIMEOUT,
     KnowledgeRetrievalService,
     KnowledgeSearchResult,
     project_evidence,
@@ -787,12 +788,18 @@ class PersonalAIWorker:
         *,
         jobs: JobRepository | None = None,
         provider_timeout: timedelta = PERSONAL_AI_PROVIDER_TIMEOUT,
+        embedding_timeout: timedelta = KNOWLEDGE_EMBEDDING_TIMEOUT,
     ) -> None:
         if provider_timeout.total_seconds() <= 0:
             raise ValueError("provider_timeout must be positive")
+        if embedding_timeout.total_seconds() <= 0:
+            raise ValueError("embedding_timeout must be positive")
         self.session_factory = session_factory
         self.llm_provider = llm_provider
-        self.retrieval = KnowledgeRetrievalService(embedding_provider)
+        self.retrieval = KnowledgeRetrievalService(
+            embedding_provider,
+            embedding_timeout=embedding_timeout,
+        )
         self.jobs = jobs or JobRepository()
         self.provider_timeout = provider_timeout
 
