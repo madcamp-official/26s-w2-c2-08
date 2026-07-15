@@ -397,6 +397,7 @@ describe('SessionRecordPage', () => {
   it('keeps student processing record areas available without professor jobs, a recording, or REVIEW Chat', async () => {
     let questionRequests = 0
     let jobRequests = 0
+    let createdQuestion = ''
     server.use(
       http.get('*/api/v1/sessions/:id/record', () =>
         HttpResponse.json(record('PROCESSING')),
@@ -421,6 +422,15 @@ describe('SessionRecordPage', () => {
         jobRequests += 1
         return HttpResponse.json({ items: [], next_cursor: null })
       }),
+      http.post('*/api/v1/sessions/:id/questions', async ({ request }) => {
+        createdQuestion = String(
+          ((await request.json()) as { content: string }).content,
+        )
+        return HttpResponse.json(
+          { question: {}, clustering_state: {} },
+          { status: 201 },
+        )
+      }),
     )
 
     renderPage()
@@ -439,6 +449,13 @@ describe('SessionRecordPage', () => {
     expect(screen.queryByText('수업 후처리 작업')).not.toBeInTheDocument()
     expect(jobRequests).toBe(0)
     expect(screen.queryByText('복습 AI')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('수업 후 질문 작성'), {
+      target: { value: '복습하다 궁금한 점입니다.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '익명 질문 등록' }))
+    await waitFor(() =>
+      expect(createdQuestion).toBe('복습하다 궁금한 점입니다.'),
+    )
     await waitFor(() => expect(questionRequests).toBeGreaterThan(1), {
       timeout: 4_000,
     })

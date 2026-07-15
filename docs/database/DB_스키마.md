@@ -771,7 +771,7 @@ Session별 클러스터링 요청 watermark, 적용 watermark와 최신 결과 f
 | 컬럼                 | 타입          | NULL | 기본값  | 키·제약                        | 설명                                              |
 | -------------------- | ------------- | ---: | ------- | ------------------------------ | ------------------------------------------------- |
 | `session_id`         | `uuid`        |    N | -       | PK, FK → `lecture_sessions.id` | 소속 class                                        |
-| `requested_sequence` | `bigint`      |    N | `0`     | CHECK `>= 0`                   | 등록되어 클러스터링이 필요한 마지막 질문 sequence |
+| `requested_sequence` | `bigint`      |    N | `0`     | CHECK `>= 0`                   | LIVE에 등록되어 클러스터링이 필요한 마지막 질문 sequence |
 | `applied_sequence`   | `bigint`      |    N | `0`     | CHECK `>= 0`                   | 현재 결과에 적용된 마지막 질문 sequence           |
 | `current_revision`   | `bigint`      |    N | `0`     | CHECK `>= 0`                   | 결과 commit마다 증가하는 late-result fence        |
 | `current_generation` | `bigint`      |    Y | `NULL`  | CHECK `> 0`                    | 현재 노출하는 generation                          |

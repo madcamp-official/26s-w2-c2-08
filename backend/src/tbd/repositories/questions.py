@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.models.courses import CourseMember
@@ -67,6 +67,16 @@ class QuestionRepository:
             )
             .order_by(AIJob.created_at.desc(), AIJob.id.desc())
             .with_for_update()
+        )
+
+    async def latest_sequence(self, session: AsyncSession, session_id: UUID) -> int:
+        return int(
+            await session.scalar(
+                select(func.coalesce(func.max(Question.clustering_sequence), 0)).where(
+                    Question.session_id == session_id
+                )
+            )
+            or 0
         )
 
     async def list_questions(
