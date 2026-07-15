@@ -92,7 +92,7 @@ export async function uploadLocalRecording(
     sessionId: string,
   ) => Promise<(() => void) | null> = acquireRecordingUploadLease,
 ) {
-  let meta = null as Awaited<ReturnType<typeof getRecordingMeta>>
+  let meta: Awaited<ReturnType<typeof getRecordingMeta>>
   let releaseLease: (() => void) | null = null
   try {
     releaseLease = await acquireLease(sessionId)
