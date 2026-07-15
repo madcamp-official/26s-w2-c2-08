@@ -64,7 +64,7 @@ class FakeEmbeddingProvider:
     def __init__(
         self,
         *,
-        dimension: int = 8,
+        dimension: int = 768,
         behavior: FakeProviderBehavior | None = None,
     ) -> None:
         if dimension <= 0:

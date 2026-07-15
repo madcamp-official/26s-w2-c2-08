@@ -21,15 +21,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from tbd.models.base import Base
 from tbd.models.common import TimestampMixin, UUIDPrimaryKeyMixin, VersionMixin
 
-KNOWLEDGE_EMBEDDING_DIMENSION = 8
+KNOWLEDGE_EMBEDDING_DIMENSION = 768
 
 
 class KnowledgeChunk(UUIDPrimaryKeyMixin, Base):
     """A scoped RAG source with one typed source reference.
 
-    Development and CI use the fixed eight-dimensional deterministic profile.  A
-    production provider with a different dimension requires a dedicated migration
-    and complete reindex, rather than mixing vectors in this table.
+    All environments use one fixed 768-dimensional retrieval profile.  Changing
+    that dimension requires a dedicated migration and complete reindex, rather
+    than mixing vectors in this table.
     """
 
     __tablename__ = "knowledge_chunks"
