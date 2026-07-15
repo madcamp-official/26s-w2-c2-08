@@ -1,8 +1,10 @@
 """Unit tests for the provider-neutral LLM and embedding boundaries."""
 
 import asyncio
+import json
 from datetime import timedelta
 
+import httpx
 import pytest
 
 from tbd.providers.ai import (
@@ -13,6 +15,8 @@ from tbd.providers.ai import (
     FakeProviderBehavior,
     LLMGenerationRequest,
     LLMMessage,
+    OllamaEmbeddingProvider,
+    OllamaLLMProvider,
     ProviderErrorCode,
     ProviderInvalidResponseError,
     ProviderRateLimitedError,
@@ -149,3 +153,148 @@ def test_invalid_provider_result_contract_is_non_retryable() -> None:
     error = ProviderInvalidResponseError()
     assert error.code is ProviderErrorCode.INVALID_RESPONSE
     assert error.retryable is False
+
+
+def test_ollama_llm_returns_one_completed_chat_response() -> None:
+    """The adapter sends one non-streaming request and projects only safe output."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/chat"
+        assert json.loads(request.content) == {
+            "model": "mistral-small3.2:24b",
+            "messages": [{"role": "user", "content": "질문 초안"}],
+            "stream": False,
+        }
+        return httpx.Response(
+            200,
+            json={
+                "model": "mistral-small3.2:24b",
+                "done": True,
+                "message": {"role": "assistant", "content": "정리된 질문입니다."},
+            },
+        )
+
+    async def exercise() -> None:
+        provider = OllamaLLMProvider(
+            base_url="http://ollama.local:11434/",
+            model="mistral-small3.2:24b",
+            transport=httpx.MockTransport(handler),
+        )
+        result = await provider.generate(_generation_request(), timeout=timedelta(seconds=1))
+
+        assert result.content == "정리된 질문입니다."
+        assert result.model_name == "mistral-small3.2:24b"
+
+    asyncio.run(exercise())
+
+
+def test_ollama_embedding_preserves_input_order() -> None:
+    """The adapter returns vectors in exactly the order accepted by the contract."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/embed"
+        assert json.loads(request.content) == {
+            "model": "embeddinggemma",
+            "input": ["첫 번째", "두 번째"],
+        }
+        return httpx.Response(
+            200,
+            json={
+                "model": "embeddinggemma:300m",
+                "embeddings": [[0.1, -0.2], [0.3, 0.4]],
+            },
+        )
+
+    async def exercise() -> None:
+        provider = OllamaEmbeddingProvider(
+            base_url="http://ollama.local:11434",
+            model="embeddinggemma",
+            transport=httpx.MockTransport(handler),
+        )
+        result = await provider.embed(
+            EmbeddingRequest(purpose="knowledge-indexing-v1", texts=("첫 번째", "두 번째")),
+            timeout=timedelta(seconds=1),
+        )
+
+        assert result.vectors == ((0.1, -0.2), (0.3, 0.4))
+        assert result.model_name == "embeddinggemma:300m"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_type", "error_code"),
+    [
+        (429, ProviderRateLimitedError, ProviderErrorCode.RATE_LIMITED),
+        (503, ProviderUnavailableError, ProviderErrorCode.UNAVAILABLE),
+        (400, ProviderInvalidResponseError, ProviderErrorCode.INVALID_RESPONSE),
+    ],
+)
+def test_ollama_http_failures_are_safe_and_classified(
+    status_code: int,
+    error_type: type[Exception],
+    error_code: ProviderErrorCode,
+) -> None:
+    """HTTP status bodies never escape the provider boundary."""
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code, text="provider says private details")
+
+    async def exercise() -> None:
+        provider = OllamaLLMProvider(
+            base_url="http://ollama.local:11434",
+            model="mistral-small3.2:24b",
+            transport=httpx.MockTransport(handler),
+        )
+        with pytest.raises(error_type) as raised:
+            await provider.generate(_generation_request(), timeout=timedelta(seconds=1))
+
+        assert isinstance(
+            raised.value,
+            (ProviderRateLimitedError, ProviderUnavailableError, ProviderInvalidResponseError),
+        )
+        assert raised.value.code is error_code
+        assert "private details" not in str(raised.value)
+
+    asyncio.run(exercise())
+
+
+def test_ollama_transport_timeout_and_malformed_payloads_are_safe() -> None:
+    """Connection failure, deadline expiry, and invalid JSON become contract errors."""
+
+    async def connection_handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("private connection failure", request=request)
+
+    async def timeout_handler(_: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("private timeout")
+
+    async def malformed_handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"done": True, "message": {"content": ""}})
+
+    async def exercise() -> None:
+        connection_provider = OllamaLLMProvider(
+            base_url="http://ollama.local:11434",
+            model="mistral-small3.2:24b",
+            transport=httpx.MockTransport(connection_handler),
+        )
+        with pytest.raises(ProviderUnavailableError) as connection_raised:
+            await connection_provider.generate(_generation_request(), timeout=timedelta(seconds=1))
+        assert "private connection failure" not in str(connection_raised.value)
+
+        timeout_provider = OllamaLLMProvider(
+            base_url="http://ollama.local:11434",
+            model="mistral-small3.2:24b",
+            transport=httpx.MockTransport(timeout_handler),
+        )
+        with pytest.raises(ProviderTimeoutError):
+            await timeout_provider.generate(_generation_request(), timeout=timedelta(seconds=1))
+
+        malformed_provider = OllamaLLMProvider(
+            base_url="http://ollama.local:11434",
+            model="mistral-small3.2:24b",
+            transport=httpx.MockTransport(malformed_handler),
+        )
+        with pytest.raises(ProviderInvalidResponseError):
+            await malformed_provider.generate(_generation_request(), timeout=timedelta(seconds=1))
+
+    asyncio.run(exercise())
