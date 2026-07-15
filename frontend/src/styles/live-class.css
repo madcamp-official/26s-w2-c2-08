@@ -290,7 +290,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.live-workspace > .live-transcript {
+.live-workspace--professor > .live-transcript {
   position: sticky;
   top: calc(var(--header-height) + var(--space-5));
   scroll-margin-top: calc(var(--header-height) + var(--space-5));

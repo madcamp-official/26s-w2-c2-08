@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ToastProvider } from '../../components/feedback/ToastProvider'
 import { server } from '../../test/server'
+import { seekRecordingPlayback } from './playback'
 import { SessionRecordPage } from './SessionRecordPage'
 
 const sessionId = '10000000-0000-0000-0000-000000000001'
@@ -188,6 +189,22 @@ function renderPage(professor = false) {
 }
 
 describe('SessionRecordPage', () => {
+  it('waits for recording metadata before seeking to the Transcript position', async () => {
+    const audio = document.createElement('audio')
+    Object.defineProperty(audio, 'readyState', {
+      configurable: true,
+      value: HTMLMediaElement.HAVE_NOTHING,
+    })
+
+    const seeking = seekRecordingPlayback(audio, 7_100)
+    expect(audio.currentTime).toBe(0)
+
+    fireEvent.loadedMetadata(audio)
+    await seeking
+
+    expect(audio.currentTime).toBe(7.1)
+  })
+
   it('clears the record shell and redirects when the manifest reports an expired login', async () => {
     server.use(
       http.get('*/api/v1/sessions/:id/record', () =>
