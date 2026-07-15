@@ -177,24 +177,26 @@ def test_personal_ai_provider_timeout_is_bounded_and_configurable() -> None:
 def test_postprocessing_ai_provider_timeout_is_bounded_and_configurable() -> None:
     """Final shared AI work needs a realistic operator-controlled deadline."""
 
+    assert Settings(_env_file=None).postprocessing_ai_provider_timeout_seconds == 1800
     assert (
         Settings(
-            _env_file=None, postprocessing_ai_provider_timeout_seconds=90
+            _env_file=None, postprocessing_ai_provider_timeout_seconds=2400
         ).postprocessing_ai_provider_timeout_seconds
-        == 90
+        == 2400
     )
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, postprocessing_ai_provider_timeout_seconds=301)
+        Settings(_env_file=None, postprocessing_ai_provider_timeout_seconds=3601)
 
 
 def test_question_clustering_timeout_is_bounded_and_configurable() -> None:
     """Whole-class clustering needs an operator-controlled local-model deadline."""
 
+    assert Settings(_env_file=None).question_clustering_provider_timeout_seconds == 1800
     assert (
         Settings(
-            _env_file=None, question_clustering_provider_timeout_seconds=150
+            _env_file=None, question_clustering_provider_timeout_seconds=2400
         ).question_clustering_provider_timeout_seconds
-        == 150
+        == 2400
     )
     with pytest.raises(ValidationError):
         Settings(_env_file=None, question_clustering_provider_timeout_seconds=0)
