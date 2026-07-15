@@ -205,6 +205,23 @@ def test_live_questions_are_anonymous_normalized_and_reaction_safe(
             == 204
         )
 
+        current_user["id"] = professor_id
+        ended = client.post(
+            f"/api/v1/sessions/{session_id}/end",
+            headers={**TRUSTED_ORIGIN, "Idempotency-Key": "end-question-session"},
+        )
+        assert ended.status_code == 202
+
+        current_user["id"] = first_student_id
+        post_class = client.post(
+            f"/api/v1/sessions/{session_id}/questions",
+            headers={**TRUSTED_ORIGIN, "Idempotency-Key": "question-create-after-class"},
+            json={"content": "수업 후 복습하다가 생긴 질문입니다."},
+        )
+        assert post_class.status_code == 201
+        assert post_class.json()["question"]["clustering_sequence"] == 3
+        assert post_class.json()["clustering_state"]["requested_through_sequence"] == 2
+
         current_user["id"] = outsider_id
         assert client.get(f"/api/v1/questions/{first_question['id']}").status_code == 404
 

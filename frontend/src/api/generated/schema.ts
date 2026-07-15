@@ -879,8 +879,10 @@ export interface paths {
         put?: never;
         /**
          * 익명 질문 생성
-         * @description 해당 Course의 STUDENT가 LIVE Session에서만 요청할 수 있다. 질문은 즉시 저장하고
-         *     Session 내 clustering sequence·requested watermark를 함께 commit한다. active
+         * @description 해당 Course의 STUDENT가 LIVE·PROCESSING·COMPLETED Session에서 요청할 수 있다.
+         *     질문은 즉시 저장한다. LIVE에서는 Session 내 clustering sequence·requested watermark를
+         *     함께 commit하지만, 종료 후 질문은 종료 시점 FINAL watermark 뒤 sequence를 받고
+         *     기존 FINAL generation을 소급 변경하지 않는다. LIVE active
          *     QUESTION_CLUSTERING active Job과 backlog을 소유한 retryable FAILED Job이 모두
          *     없으면 시스템이 자동 생성하고, 둘 중 하나라도 있으면 새 Job 없이 pending
          *     watermark만 올린다. 응답은 Question과 현재 clustering_state다.

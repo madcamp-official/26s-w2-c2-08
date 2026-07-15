@@ -129,7 +129,9 @@ def _raise_error(error: Exception, *, hide_access: bool = False) -> None:
         ) from error
     if isinstance(error, QuestionSessionStateError):
         raise ApiError(
-            409, "SESSION_STATE_CONFLICT", "LIVE class에서만 질문과 반응을 변경할 수 있습니다."
+            409,
+            "SESSION_STATE_CONFLICT",
+            "질문은 진행 중이거나 종료된 class에서 등록하고, 반응은 LIVE class에서만 변경할 수 있습니다.",
         ) from error
     if isinstance(error, SelfReactionError):
         raise ApiError(409, "SELF_REACTION_FORBIDDEN", "내 질문에는 반응할 수 없습니다.") from error

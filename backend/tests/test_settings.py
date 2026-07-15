@@ -174,6 +174,19 @@ def test_personal_ai_provider_timeout_is_bounded_and_configurable() -> None:
         Settings(_env_file=None, personal_ai_provider_timeout_seconds=0)
 
 
+def test_postprocessing_ai_provider_timeout_is_bounded_and_configurable() -> None:
+    """Final shared AI work needs a realistic operator-controlled deadline."""
+
+    assert (
+        Settings(
+            _env_file=None, postprocessing_ai_provider_timeout_seconds=90
+        ).postprocessing_ai_provider_timeout_seconds
+        == 90
+    )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, postprocessing_ai_provider_timeout_seconds=301)
+
+
 def test_knowledge_embedding_timeout_is_bounded_and_configurable() -> None:
     """Embedding cold starts need their own finite operator-controlled deadline."""
 

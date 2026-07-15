@@ -347,7 +347,7 @@ READY → LIVE → PROCESSING → COMPLETED
 - 다른 상태에서의 전이는 `409 SESSION_STATE_CONFLICT`로 거부한다.
 - 한 Course에는 `READY`, `LIVE`, `PROCESSING` 중 하나인 active Session이 합계 최대 1개만 존재한다.
 - active Session이 이미 있을 때 class 생성은 `409 ACTIVE_SESSION_EXISTS`로 거부한다.
-- `PROCESSING`과 `COMPLETED`에서는 새 음성, 질문과 반응을 받지 않는다.
+- `PROCESSING`과 `COMPLETED`에서는 새 음성과 반응을 받지 않지만 Course `STUDENT`의 새 익명 질문은 허용한다. 이 질문은 종료 시점 FINAL clustering watermark 밖에 순서를 받아 기존 FINAL 마인드맵을 소급 변경하지 않는다.
 - Session 종료 transaction은 `SESSION_POSTPROCESSING`을 `PENDING`, `visibility=SHARED`, `blocks_session_completion=true`인 coordinator Job으로 먼저 생성한다. Recording이 있으면 upload·HQ source가 terminal이 될 때까지, 없으면 LIVE Transcript drain이 terminal이 될 때까지 worker가 이 Job을 claim하지 않는다.
 - 첫 `audio.start`로 Recording이 생긴 Session은 Recording이 `UPLOAD_PENDING` 또는 `UPLOADING`인 동안 `PROCESSING`을 유지한다. upload complete는 `RECORDING_TRANSCRIPTION` Job과 `source=RECORDING`, `status=FINALIZING`인 Transcript version을 함께 만든다.
 - `RECORDING_TRANSCRIPTION`은 `visibility=SHARED`, `blocks_session_completion=true`이다. 이 Job은 Segment·Gap과 Segment의 녹음 시간 mapping을 저장하고 정상 HQ version의 canonical 전환을 먼저 commit한다. 그 뒤 `SESSION_POSTPROCESSING`이 Answer mapping과 Knowledge 연결을 수행한다.
@@ -846,9 +846,9 @@ Idempotency-Key: <key>
 }
 ```
 
-- 권한: Course `STUDENT`. Session이 `LIVE`일 때만 허용한다.
+- 권한: Course `STUDENT`. Session이 `LIVE`, `PROCESSING`, `COMPLETED`일 때 허용한다.
 - 서버는 3.1.1절에 따라 앞뒤 공백 제거·Unicode NFC 정규화 후 `1..300` code point를 검증한다. 초과·빈 결과는 잘라 저장하지 않고 안정적인 `422 VALIDATION_ERROR` details를 반환하며, Question `content`에는 정규화 결과를 저장한다.
-- Question 행과 Session 내 증가 `clustering_sequence`, `requested_through_sequence` 갱신을 먼저 commit하고 `question.created`를 전파한다.
+- Question 행과 Session 내 증가 `clustering_sequence`를 commit하고 `question.created`를 전파한다. `LIVE`에서만 `requested_through_sequence`를 같이 올린다. `PROCESSING`·`COMPLETED`에서 생성한 질문은 종료 시점에 고정된 watermark 뒤 sequence를 받고 기존 FINAL generation을 바꾸지 않는다.
 - active clustering Job과 현재 backlog을 소유한 retryable `FAILED` Job이 모두 없으면 시스템이 `LIVE_INCREMENTAL` Job을 즉시 하나 생성한다. `PENDING|RUNNING` Job이나 `retry_job_id`가 있으면 새 Job을 만들지 않고 pending watermark만 남긴다. retry Job은 기존 captured watermark로 `attempt + 1`을 수행하고, 성공 후에도 requested가 applied보다 크면 추가 질문을 위한 새 Job을 만든다.
 - 성공은 클러스터링 성공과 무관하게 `201 Created`이다. 응답은 `question`과 현재 `clustering_state`를 반환하며 active Job이 없으면 `active_job_id=null`일 수 있다.
 

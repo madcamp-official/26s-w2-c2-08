@@ -38,7 +38,7 @@ class QuestionRoleRequiredError(Exception):
 
 
 class QuestionSessionStateError(Exception):
-    """Question mutation is limited to a LIVE Session."""
+    """Question creation or reaction is not allowed in the current Session."""
 
 
 class SelfReactionError(Exception):
@@ -213,20 +213,26 @@ class QuestionService:
         lecture_session = await self.repository.lock_session(session, session_id)
         if lecture_session is None:
             raise QuestionNotFoundError
-        self._require_live_student(
-            role=await self.repository.member_role(
-                session, course_id=lecture_session.course_id, user_id=user_id
-            ),
-            status=lecture_session.status,
+        role = await self.repository.member_role(
+            session, course_id=lecture_session.course_id, user_id=user_id
         )
+        self._require_question_author(role=role, status=lecture_session.status)
         state = await self.repository.lock_clustering_state(session, session_id)
         if state is None:
             raise QuestionNotFoundError
-        state.requested_sequence += 1
+        live = lecture_session.status == "LIVE"
+        if live:
+            state.requested_sequence += 1
+            sequence = state.requested_sequence
+        else:
+            # The Session lock serializes post-class inserts. Their sequence stays
+            # beyond the frozen FINAL clustering watermark, so the final mindmap
+            # remains an immutable snapshot of questions asked during LIVE.
+            sequence = await self.repository.latest_sequence(session, session_id) + 1
         question = Question(
             session_id=session_id,
             author_user_id=user_id,
-            clustering_sequence=state.requested_sequence,
+            clustering_sequence=sequence,
             content=normalized,
             status="OPEN",
             reaction_count=0,
@@ -237,8 +243,8 @@ class QuestionService:
         session.add(question)
         await session.flush()
 
-        active = await self.repository.active_clustering_job(session, session_id)
-        if active is None and state.retry_job_id is None:
+        active = await self.repository.active_clustering_job(session, session_id) if live else None
+        if live and active is None and state.retry_job_id is None:
             active = AIJob(
                 session_id=session_id,
                 job_type=AIJobType.QUESTION_CLUSTERING,
@@ -433,4 +439,13 @@ class QuestionService:
         if role != "STUDENT":
             raise QuestionRoleRequiredError
         if status != "LIVE":
+            raise QuestionSessionStateError
+
+    @staticmethod
+    def _require_question_author(*, role: str | None, status: str) -> None:
+        if role is None:
+            raise QuestionAccessDeniedError
+        if role != "STUDENT":
+            raise QuestionRoleRequiredError
+        if status not in {"LIVE", "PROCESSING", "COMPLETED"}:
             raise QuestionSessionStateError

@@ -1072,6 +1072,7 @@ export function SessionRecordPage({
         <FinalSummaryPanel record={data} />
         {transcriptPanel}
         <RecordQuestionPanel
+          student={!professor}
           sessionId={data.session.id}
           sessionStatus={status}
         />
