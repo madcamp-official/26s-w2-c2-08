@@ -6,9 +6,14 @@ import {
   failedMaterialJob,
   professorCourse,
   professorDraftCourse,
+  liveProfessorSession,
+  liveQuestions,
+  liveStudentSession,
+  liveTimeline,
   readyMaterial,
   readySession,
   studentCourse,
+  studentLiveCourse,
   studentWorkspaceCourse,
   visualUser,
 } from './entities'
@@ -99,10 +104,14 @@ export async function installApiFixture(
       request.method() === 'POST' &&
       url.pathname === '/api/v1/realtime-tickets'
     ) {
+      const body = request.postDataJSON() as {
+        session_id: string
+        scope: 'SESSION_EVENTS_READ' | 'SESSION_AUDIO_WRITE'
+      }
       await fulfillJson(route, {
         ticket: 'visual-session-events-ticket',
-        session_id: readySession.id,
-        scope: 'SESSION_EVENTS_READ',
+        session_id: body.session_id,
+        scope: body.scope,
         expires_at: '2026-07-15T07:01:00Z',
       })
       return
@@ -128,9 +137,11 @@ export async function installApiFixture(
         route,
         courseDetailMatch[1] === studentCourse.id
           ? studentWorkspaceCourse
-          : courseDetailMatch[1] === professorDraftCourse.id
-            ? professorDraftCourse
-            : professorCourse,
+          : courseDetailMatch[1] === studentLiveCourse.id
+            ? studentLiveCourse
+            : courseDetailMatch[1] === professorDraftCourse.id
+              ? professorDraftCourse
+              : professorCourse,
       )
       return
     }
@@ -172,7 +183,98 @@ export async function installApiFixture(
       /^\/api\/v1\/sessions\/([^/]+)$/,
     )
     if (request.method() === 'GET' && sessionDetailMatch) {
-      await fulfillJson(route, readySession)
+      const sessionId = sessionDetailMatch[1]
+      await fulfillJson(
+        route,
+        sessionId === liveProfessorSession.id
+          ? liveProfessorSession
+          : sessionId === liveStudentSession.id
+            ? liveStudentSession
+            : readySession,
+      )
+      return
+    }
+
+    const transcriptMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/transcript$/,
+    )
+    if (request.method() === 'GET' && transcriptMatch) {
+      const sessionId = transcriptMatch[1]
+      const session =
+        sessionId === liveProfessorSession.id
+          ? liveProfessorSession
+          : liveStudentSession
+      await fulfillJson(
+        route,
+        liveTimeline(
+          session.id,
+          session.canonical_transcript_version_id ?? 'missing-version',
+        ),
+      )
+      return
+    }
+
+    const sessionQuestionsMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/questions$/,
+    )
+    if (request.method() === 'GET' && sessionQuestionsMatch) {
+      await fulfillJson(route, {
+        items: liveQuestions(sessionQuestionsMatch[1] ?? ''),
+        next_cursor: null,
+      })
+      return
+    }
+
+    const sessionClustersMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/question-clusters$/,
+    )
+    if (request.method() === 'GET' && sessionClustersMatch) {
+      await fulfillJson(route, {
+        scope: 'CURRENT',
+        generation: null,
+        clustering_state: {
+          pending: true,
+          requested_through_sequence: 3,
+          applied_through_sequence: 0,
+          current_revision: 0,
+          current_generation: null,
+          final_generation: null,
+          active_job_id: null,
+          retry_job_id: null,
+          last_job: null,
+        },
+        items: [],
+        next_cursor: null,
+      })
+      return
+    }
+
+    const sessionAnswersMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/answers$/,
+    )
+    if (request.method() === 'GET' && sessionAnswersMatch) {
+      await fulfillJson(route, { items: [], next_cursor: null })
+      return
+    }
+
+    const sessionSummariesMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/summaries$/,
+    )
+    if (request.method() === 'GET' && sessionSummariesMatch) {
+      await fulfillJson(route, {
+        summary_status: 'NOT_STARTED',
+        summary_reason: null,
+        items: [],
+        next_cursor: null,
+      })
+      return
+    }
+
+    const sessionChatsMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/chats$/,
+    )
+    if (request.method() === 'GET' && sessionChatsMatch) {
+      await fulfillJson(route, { items: [], next_cursor: null })
       return
     }
 
@@ -181,7 +283,10 @@ export async function installApiFixture(
     )
     if (request.method() === 'GET' && sessionMaterialsMatch) {
       await fulfillJson(route, {
-        items: [readyMaterial, failedMaterial],
+        items:
+          sessionMaterialsMatch[1] === readySession.id
+            ? [readyMaterial, failedMaterial]
+            : [],
         next_cursor: null,
       })
       return
@@ -192,7 +297,8 @@ export async function installApiFixture(
     )
     if (request.method() === 'GET' && sessionJobsMatch) {
       await fulfillJson(route, {
-        items: [failedMaterialJob],
+        items:
+          sessionJobsMatch[1] === readySession.id ? [failedMaterialJob] : [],
         next_cursor: null,
       })
       return
