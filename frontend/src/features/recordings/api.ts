@@ -34,6 +34,18 @@ export function getSessionRecording(sessionId: string, signal?: AbortSignal) {
   )
 }
 
+export async function abandonRecordingUpload(sessionId: string) {
+  try {
+    const { error, response } = await apiClient.POST(
+      '/api/v1/sessions/{session_id}/recording/abandon-upload',
+      { params: { path: { session_id: sessionId } } },
+    )
+    if (error) throw apiErrorFromResponse(response, error)
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
 export async function verifyRecordingPlayback(
   playbackUrl: string,
   signal?: AbortSignal,

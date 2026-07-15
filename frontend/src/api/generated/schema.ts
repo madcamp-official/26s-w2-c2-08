@@ -1682,6 +1682,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/recording/abandon-upload": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 LectureSession ID */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 로컬 녹음 원본 없음 확정
+         * @description 최초 audio publisher인 PROFESSOR의 브라우저에 업로드할 수 있는 로컬 원본이 없을 때
+         *     PROCESSING/UPLOAD_PENDING Recording을 FAILED terminal 상태로 전환한다. active upload가
+         *     있으면 거부하며, 후처리는 finalized LIVE Transcript를 fallback 입력으로 즉시 계속한다.
+         */
+        post: operations["abandonSessionRecordingUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/recording/uploads": {
         parameters: {
             query?: never;
@@ -7322,6 +7350,38 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    abandonSessionRecordingUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 LectureSession ID */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 원본 없음이 확정된 Session 녹음 메타데이터 */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRecording"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["RecordingNotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createRecordingUpload: {

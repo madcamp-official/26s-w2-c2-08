@@ -293,6 +293,38 @@ async def get_session_recording(
     return recording_response(recording)
 
 
+@router.post(
+    "/sessions/{session_id}/recording/abandon-upload",
+    response_model=SessionRecordingResponse,
+    dependencies=[Depends(require_allowed_origin)],
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+    },
+)
+async def abandon_session_recording_upload(
+    session_id: UUID,
+    session: DatabaseSession,
+    user_id: CurrentUserId,
+    settings: SettingsDependency,
+) -> SessionRecordingResponse:
+    """Use the finalized LIVE transcript when this browser has no HQ recording to upload."""
+
+    try:
+        async with transaction(session):
+            recording = await _service(settings).abandon_local_upload(
+                session,
+                session_id=session_id,
+                user_id=user_id,
+                now=datetime.now(UTC),
+            )
+    except Exception as exc:
+        _raise_recording_error(exc)
+    return recording_response(recording)
+
+
 @router.delete(
     "/sessions/{session_id}/recording",
     status_code=204,
