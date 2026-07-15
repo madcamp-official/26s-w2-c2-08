@@ -20,6 +20,7 @@ import {
   type LocalRecordingRecoveryResult,
 } from './local-recorder'
 import { getRecordingMeta } from './local-db'
+import { abandonRecordingUpload } from './api'
 import { uploadLocalRecording } from './uploader'
 
 interface Props {
@@ -288,7 +289,24 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
           retry = setTimeout(() => void begin(), 500)
           return
         }
-        if (reflectRecovery(result)) void resumeUpload()
+        if (reflectRecovery(result)) {
+          void resumeUpload()
+          return
+        }
+        if (result.status === 'missing' || result.status === 'failed') {
+          try {
+            await abandonRecordingUpload(sessionId)
+          } catch (reason) {
+            if (!cancelled) {
+              setState('upload-failed')
+              setError(
+                reason instanceof ApiError
+                  ? reason.message
+                  : '녹음 원본 없음 상태를 서버에 반영하지 못했습니다.',
+              )
+            }
+          }
+        }
       }
       void begin()
       return () => {
