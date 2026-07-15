@@ -35,6 +35,7 @@ import {
 } from './RecordAnswerPanel'
 import { RecordJobsPanel } from './RecordJobsPanel'
 import { RecordQuestionPanel } from './RecordQuestionPanel'
+import { seekRecordingPlayback } from './playback'
 import { recordKeys, recordManifestQueryOptions } from './queries'
 
 interface SessionRecordPageProps {
@@ -276,9 +277,10 @@ function RecordRecordingPanel({
         setPlaybackState('seek-error')
         return
       }
-      audio.currentTime = seekRequest.offset / 1000
-      allowNextPlay.current = true
       try {
+        await seekRecordingPlayback(audio, seekRequest.offset)
+        if (cancelled) return
+        allowNextPlay.current = true
         await audio.play()
         if (!cancelled) setPlaybackState('active')
       } catch {
