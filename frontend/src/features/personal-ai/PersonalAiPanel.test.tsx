@@ -156,6 +156,107 @@ describe('PersonalAiPanel', () => {
     ).toHaveAttribute('aria-disabled', 'true')
   })
 
+  it('accepts consecutive REVIEW questions in the same chat', async () => {
+    const submitted: string[] = []
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId/chats', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: chatId,
+              session_id: sessionId,
+              mode: 'REVIEW',
+              created_at: '2026-07-14T00:00:00Z',
+              updated_at: '2026-07-14T00:00:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/chats/:chatId/messages', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.post('*/api/v1/chats/:chatId/messages', async ({ request }) => {
+        const body = (await request.json()) as { content: string }
+        submitted.push(body.content)
+        const turn = submitted.length
+        return HttpResponse.json({
+          user_message: {
+            id: `message-user-${turn}`,
+            chat_id: chatId,
+            job_id: null,
+            response_job_id: `job-${turn}`,
+            sequence: turn * 2 - 1,
+            role: 'USER',
+            content: body.content,
+            evidence: [],
+            model_name: null,
+            prompt_version: null,
+            created_at: `2026-07-14T00:00:0${turn}Z`,
+          },
+          job: {
+            id: `job-${turn}`,
+            session_id: sessionId,
+            job_type: 'CHAT_RESPONSE',
+            visibility: 'REQUESTER_ONLY',
+            status: 'PENDING',
+            attempt: 1,
+            version: 1,
+            progress: null,
+            retryable: false,
+            blocks_session_completion: false,
+            clustering: null,
+            error: null,
+            target: null,
+            result: null,
+            result_unavailable_reason: null,
+            created_at: `2026-07-14T00:00:0${turn}Z`,
+            updated_at: `2026-07-14T00:00:0${turn}Z`,
+            started_at: null,
+            finished_at: null,
+          },
+        })
+      }),
+      http.get('*/api/v1/jobs/:jobId', ({ params }) =>
+        HttpResponse.json({
+          id: params.jobId,
+          session_id: sessionId,
+          job_type: 'CHAT_RESPONSE',
+          visibility: 'REQUESTER_ONLY',
+          status: 'SUCCEEDED',
+          attempt: 1,
+          version: 2,
+          progress: null,
+          retryable: false,
+          blocks_session_completion: false,
+          clustering: null,
+          error: null,
+          target: null,
+          result: null,
+          result_unavailable_reason: null,
+          created_at: '2026-07-14T00:00:01Z',
+          updated_at: '2026-07-14T00:00:02Z',
+          started_at: '2026-07-14T00:00:01Z',
+          finished_at: '2026-07-14T00:00:02Z',
+        }),
+      ),
+    )
+    renderPanel('REVIEW')
+    const input = await screen.findByLabelText('AI에게 물어보기')
+
+    fireEvent.change(input, { target: { value: '첫 번째 질문' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+    await waitFor(() => expect(input).toHaveValue(''))
+
+    fireEvent.change(input, { target: { value: '두 번째 질문' } })
+    fireEvent.click(screen.getByRole('button', { name: '질문 보내기' }))
+
+    await waitFor(() =>
+      expect(submitted).toEqual(['첫 번째 질문', '두 번째 질문']),
+    )
+    expect(input).toHaveValue('')
+  })
+
   it('refreshes a succeeded Chat job only once while its USER message remains', async () => {
     let messageRequests = 0
     server.use(

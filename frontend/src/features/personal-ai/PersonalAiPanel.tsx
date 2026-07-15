@@ -459,6 +459,7 @@ export function PersonalAiPanel({ sessionId, mode }: Props) {
             ))}
             {messages.isSuccess && (
               <form
+                className="personal-ai__composer"
                 onSubmit={(event) => {
                   event.preventDefault()
                   if (
