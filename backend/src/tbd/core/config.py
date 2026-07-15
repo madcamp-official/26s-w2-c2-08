@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_llm_model: str = "mistral-small3.2:24b"
     ollama_embedding_model: str = "embeddinggemma"
+    personal_ai_provider_timeout_seconds: int = Field(default=60, ge=1, le=300)
     frontend_origin: str = "http://localhost:5173"
     auth_allowed_origins: str = "http://localhost:5173"
     auth_secret_key: SecretStr = SecretStr(DEFAULT_AUTH_SECRET)
