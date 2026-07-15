@@ -45,6 +45,46 @@ def test_pgvector_migration_is_applied(migrated_database_url: str) -> None:
     assert version is not None
 
 
+def test_knowledge_embedding_schema_uses_embeddinggemma_dimension(
+    migrated_database_url: str,
+) -> None:
+    """The database must not silently accept the obsolete eight-dimensional profile."""
+
+    async def read_profile() -> tuple[str | None, str | None]:
+        database = create_database(
+            Settings(
+                _env_file=None,
+                app_env=AppEnvironment.TEST,
+                database_url=migrated_database_url,
+            )
+        )
+        try:
+            async with database.engine.connect() as connection:
+                dimension = await connection.scalar(
+                    text(
+                        "SELECT format_type(attribute.atttypid, attribute.atttypmod) "
+                        "FROM pg_attribute AS attribute "
+                        "JOIN pg_class AS relation ON relation.oid = attribute.attrelid "
+                        "WHERE relation.relname = 'knowledge_chunks' "
+                        "AND attribute.attname = 'embedding' "
+                        "AND NOT attribute.attisdropped"
+                    )
+                )
+                index = await connection.scalar(
+                    text("SELECT pg_get_indexdef('knowledge_chunks_embedding_hnsw_idx'::regclass)")
+                )
+                return dimension, index
+        finally:
+            await database.dispose()
+
+    dimension, index = asyncio.run(read_profile())
+
+    assert dimension == "vector(768)"
+    assert index is not None
+    assert "USING hnsw" in index
+    assert "vector_cosine_ops" in index
+
+
 def test_pgcrypto_and_updated_at_trigger_function_are_applied(
     migrated_database_url: str,
 ) -> None:

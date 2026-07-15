@@ -5,7 +5,15 @@ import base64
 import pytest
 from pydantic import ValidationError
 
-from tbd.core.config import REPOSITORY_ROOT, AppEnvironment, Settings
+from tbd.core.config import REPOSITORY_ROOT, AIProviderRuntime, AppEnvironment, Settings
+from tbd.providers.ai import (
+    FakeEmbeddingProvider,
+    FakeLLMProvider,
+    OllamaEmbeddingProvider,
+    OllamaLLMProvider,
+    OllamaQuestionClusteringProvider,
+    create_ai_providers,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -142,3 +150,48 @@ def test_auth_origin_rejects_paths() -> None:
 
     with pytest.raises(ValidationError, match="exact scheme"):
         Settings(_env_file=None, auth_allowed_origins="http://localhost:5173/path")
+
+
+def test_ai_provider_factory_defaults_to_deterministic_fakes() -> None:
+    """Development and CI remain network-free until Ollama is explicitly selected."""
+
+    providers = create_ai_providers(Settings(_env_file=None, app_env=AppEnvironment.TEST))
+
+    assert isinstance(providers.llm, FakeLLMProvider)
+    assert isinstance(providers.embedding, FakeEmbeddingProvider)
+
+
+def test_ai_provider_factory_selects_ollama_models_from_settings() -> None:
+    """API and standalone workers receive one selected Ollama provider profile."""
+
+    settings = Settings(
+        _env_file=None,
+        app_env=AppEnvironment.TEST,
+        ai_provider=AIProviderRuntime.OLLAMA,
+        ollama_base_url="http://127.0.0.1:11434",
+        ollama_llm_model="mistral-small3.2:24b",
+        ollama_embedding_model="embeddinggemma",
+    )
+
+    providers = create_ai_providers(settings)
+
+    assert isinstance(providers.llm, OllamaLLMProvider)
+    assert isinstance(providers.embedding, OllamaEmbeddingProvider)
+    assert isinstance(providers.question_clustering, OllamaQuestionClusteringProvider)
+
+
+def test_ollama_selection_rejects_unsafe_origin_and_blank_model() -> None:
+    """Ollama requests never accept a credential-bearing URL or blank model tag."""
+
+    with pytest.raises(ValidationError, match="OLLAMA_BASE_URL"):
+        Settings(
+            _env_file=None,
+            ai_provider=AIProviderRuntime.OLLAMA,
+            ollama_base_url="http://user:password@127.0.0.1:11434",
+        )
+    with pytest.raises(ValidationError, match="OLLAMA_LLM_MODEL"):
+        Settings(
+            _env_file=None,
+            ai_provider=AIProviderRuntime.OLLAMA,
+            ollama_llm_model="   ",
+        )

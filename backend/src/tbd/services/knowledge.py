@@ -31,6 +31,9 @@ from tbd.storage import Storage, StorageError, StorageKey
 KNOWLEDGE_CHUNK_MAX_CHARS = 1000
 KNOWLEDGE_EMBEDDING_TIMEOUT = timedelta(seconds=5)
 KNOWLEDGE_INDEXING_LEASE = timedelta(minutes=2)
+EMBEDDINGGEMMA_DOCUMENT_PURPOSE = "embeddinggemma-retrieval-document-v1"
+EMBEDDINGGEMMA_QUERY_PURPOSE = "embeddinggemma-retrieval-query-v1"
+EMBEDDINGGEMMA_PROMPT_VERSION = "embeddinggemma-retrieval-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +61,7 @@ class _IndexCandidate:
     session_id: UUID
     content: str
     chunk_index: int
+    title: str | None = None
     material_id: UUID | None = None
     page_number: int | None = None
     source_transcript_version_id: UUID | None = None
@@ -68,6 +72,12 @@ class _IndexCandidate:
     @property
     def token_count(self) -> int:
         return len(self.content.split())
+
+    @property
+    def embedding_text(self) -> str:
+        """Return the EmbeddingGemma document form without changing stored content."""
+
+        return format_embeddinggemma_document(title=self.title, content=self.content)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +117,30 @@ def split_knowledge_text(
     if remaining:
         chunks.append(remaining)
     return tuple(chunks)
+
+
+def format_embeddinggemma_document(*, title: str | None, content: str) -> str:
+    """Apply EmbeddingGemma's retrieval-document prefix to a durable Chunk.
+
+    The formatted provider input is deliberately not persisted in
+    ``knowledge_chunks.content``.  That column remains the exact source excerpt
+    that later Evidence and Chat projections can safely explain to a user.
+    """
+
+    normalized_title = " ".join((title or "").split()) or "none"
+    normalized_content = " ".join(content.split())
+    if not normalized_content:
+        raise ValueError("embedding document content must be non-empty")
+    return f"title: {normalized_title} | text: {normalized_content}"
+
+
+def format_embeddinggemma_query(query: str) -> str:
+    """Apply EmbeddingGemma's retrieval-query prefix to a user search query."""
+
+    normalized_query = " ".join(query.split())
+    if not normalized_query:
+        raise ValueError("embedding query must be non-empty")
+    return f"task: search result | query: {normalized_query}"
 
 
 async def enqueue_knowledge_indexing(
@@ -176,8 +210,8 @@ class KnowledgeIndexingWorker:
             if candidates:
                 result = await self.provider.embed(
                     EmbeddingRequest(
-                        purpose="knowledge-indexing-v1",
-                        texts=tuple(candidate.content for candidate in candidates),
+                        purpose=EMBEDDINGGEMMA_DOCUMENT_PURPOSE,
+                        texts=tuple(candidate.embedding_text for candidate in candidates),
                     ),
                     timeout=KNOWLEDGE_EMBEDDING_TIMEOUT,
                 )
@@ -301,6 +335,7 @@ class KnowledgeIndexingWorker:
                                 session_id=lecture_session.id,
                                 material_id=material.id,
                                 page_number=page_number,
+                                title=material.display_name,
                                 content=chunk,
                                 chunk_index=chunk_index,
                             )
@@ -341,6 +376,7 @@ class KnowledgeIndexingWorker:
                 source_transcript_version_id=lecture_session.canonical_transcript_version_id,
                 transcript_start_segment_id=segment.id,
                 transcript_end_segment_id=segment.id,
+                title=f"{lecture_session.title} 강의 Transcript",
                 content=segment.text,
                 chunk_index=0,
             )
@@ -376,6 +412,7 @@ class KnowledgeIndexingWorker:
                 course_id=lecture_session.course_id,
                 session_id=lecture_session.id,
                 answer_id=answer.id,
+                title=f"{lecture_session.title} 교수 답변",
                 content=content,
                 chunk_index=index,
             )
@@ -531,7 +568,10 @@ class KnowledgeRetrievalService:
         if not query.strip() or not 1 <= limit <= 100:
             raise ValueError("query and limit must be valid")
         embedded = await self.provider.embed(
-            EmbeddingRequest(purpose="knowledge-retrieval-v1", texts=(query.strip(),)),
+            EmbeddingRequest(
+                purpose=EMBEDDINGGEMMA_QUERY_PURPOSE,
+                texts=(format_embeddinggemma_query(query),),
+            ),
             timeout=KNOWLEDGE_EMBEDDING_TIMEOUT,
         )
         if embedded.dimension != KNOWLEDGE_EMBEDDING_DIMENSION:

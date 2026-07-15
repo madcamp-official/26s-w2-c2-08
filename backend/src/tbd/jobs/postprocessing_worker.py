@@ -7,7 +7,7 @@ import asyncio
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
-from tbd.providers.ai import FakeLLMProvider
+from tbd.providers.ai import create_ai_providers
 from tbd.services.postprocessing import SessionPostprocessingWorker
 
 DEFAULT_IDLE_POLL_SECONDS = 1.0
@@ -18,7 +18,8 @@ async def run(*, once: bool = False, idle_poll_seconds: float = DEFAULT_IDLE_POL
 
     settings = get_settings()
     database = create_database(settings)
-    worker = SessionPostprocessingWorker(database.session_factory, FakeLLMProvider())
+    providers = create_ai_providers(settings)
+    worker = SessionPostprocessingWorker(database.session_factory, providers.llm)
     try:
         while True:
             processed = await worker.run_once()

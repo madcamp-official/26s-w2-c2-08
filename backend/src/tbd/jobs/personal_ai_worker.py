@@ -7,7 +7,7 @@ import asyncio
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
-from tbd.providers.ai import FakeEmbeddingProvider, FakeLLMProvider
+from tbd.providers.ai import create_ai_providers
 from tbd.services.personal_ai import PersonalAIWorker
 
 DEFAULT_IDLE_POLL_SECONDS = 1.0
@@ -22,10 +22,11 @@ async def run(
 
     settings = get_settings()
     database = create_database(settings)
+    providers = create_ai_providers(settings)
     worker = PersonalAIWorker(
         database.session_factory,
-        FakeLLMProvider(),
-        FakeEmbeddingProvider(),
+        providers.llm,
+        providers.embedding,
     )
     try:
         while True:
