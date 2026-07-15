@@ -2472,6 +2472,21 @@
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
 }
 
+.answer-text-composer,
+.answer-text-composer select,
+.answer-text-composer textarea,
+.answer-list,
+.answer-list li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.answer-text-composer select,
+.answer-text-composer textarea {
+  width: 100%;
+  min-height: 44px;
+}
+
 .answer-text-composer label {
   font-weight: 700;
 }
@@ -2494,6 +2509,7 @@
 
 .answer-list p {
   margin: 0;
+  overflow-wrap: anywhere;
   line-height: 1.6;
 }
 

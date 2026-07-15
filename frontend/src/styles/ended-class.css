@@ -281,10 +281,17 @@
 
   .ended-class-toc {
     top: 64px;
-    margin-inline: calc(var(--space-4) * -1);
-    border-right: 0;
-    border-left: 0;
-    border-radius: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-inline: 0;
+    overflow: visible;
+  }
+
+  .ended-class-toc a {
+    min-width: 0;
+    justify-content: center;
+    padding-inline: 6px;
+    text-align: center;
   }
 
   .record-page--ended .record-processing--completed {
