@@ -394,8 +394,9 @@ describe('SessionRecordPage', () => {
     expect(requestedVersions).toContain(sourceVersionId)
   })
 
-  it('keeps processing record areas available without a recording or REVIEW Chat', async () => {
+  it('keeps student processing record areas available without professor jobs, a recording, or REVIEW Chat', async () => {
     let questionRequests = 0
+    let jobRequests = 0
     server.use(
       http.get('*/api/v1/sessions/:id/record', () =>
         HttpResponse.json(record('PROCESSING')),
@@ -416,9 +417,10 @@ describe('SessionRecordPage', () => {
       http.get('*/api/v1/sessions/:id/answers', () =>
         HttpResponse.json({ items: [], next_cursor: null }),
       ),
-      http.get('*/api/v1/sessions/:id/jobs', () =>
-        HttpResponse.json({ items: [], next_cursor: null }),
-      ),
+      http.get('*/api/v1/sessions/:id/jobs', () => {
+        jobRequests += 1
+        return HttpResponse.json({ items: [], next_cursor: null })
+      }),
     )
 
     renderPage()
@@ -434,7 +436,8 @@ describe('SessionRecordPage', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('수업 질문')).toBeInTheDocument()
     expect(screen.getByText('교수자 답변')).toBeInTheDocument()
-    expect(screen.getByText('수업 후처리 작업')).toBeInTheDocument()
+    expect(screen.queryByText('수업 후처리 작업')).not.toBeInTheDocument()
+    expect(jobRequests).toBe(0)
     expect(screen.queryByText('복습 AI')).not.toBeInTheDocument()
     await waitFor(() => expect(questionRequests).toBeGreaterThan(1), {
       timeout: 4_000,
