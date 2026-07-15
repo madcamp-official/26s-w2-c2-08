@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tbd.models.clustering import AIRepresentativeQuestion, Answer, AnswerOrganization
 from tbd.models.courses import CourseMember
-from tbd.models.enums import AIJobType, LectureSessionStatus
+from tbd.models.enums import AIJobStatus, AIJobType, LectureSessionStatus
 from tbd.models.materials import TranscriptSegment
 from tbd.models.questions import AIJob, Question
 from tbd.models.sessions import LectureSession
@@ -25,6 +25,7 @@ from tbd.schemas.answers import (
     AnswerCompleteRequest,
     AnswerCreateRequest,
     AnswerListResponse,
+    AnswerOrganizationResponse,
     AnswerOrganizationStateResponse,
     AnswerResponse,
     AnswerTarget,
@@ -87,6 +88,14 @@ class AnswerTextValidationError(Exception):
 class AnswerVersionConflictError(Exception):
     current_version: int
     current_text_content: str | None
+
+
+@dataclass(frozen=True)
+class _AnswerProjectionContext:
+    lecture_session: LectureSession
+    segments: dict[UUID, TranscriptSegment]
+    organizations: dict[UUID, AnswerOrganization]
+    organization_jobs: dict[UUID, AIJob]
 
 
 class AnswerCursorCodec:
@@ -172,8 +181,11 @@ class AnswerService:
                 session_id=lecture_session.id,
                 position=AnswerCursorPosition(started_at=last.started_at, answer_id=last.id),
             )
+        context = await self._projection_context(
+            session, lecture_session=lecture_session, answers=page
+        )
         return AnswerListResponse(
-            items=[await self.project(session, answer) for answer in page],
+            items=[await self.project(session, answer, context=context) for answer in page],
             next_cursor=next_cursor,
         )
 
@@ -409,7 +421,105 @@ class AnswerService:
             },
         )
 
-    async def project(self, session: AsyncSession, answer: Answer) -> AnswerResponse:
+    async def _projection_context(
+        self,
+        session: AsyncSession,
+        *,
+        lecture_session: LectureSession,
+        answers: list[Answer],
+    ) -> _AnswerProjectionContext:
+        answer_ids = [answer.id for answer in answers]
+        organizations = (
+            list(
+                await session.scalars(
+                    select(AnswerOrganization).where(AnswerOrganization.answer_id.in_(answer_ids))
+                )
+            )
+            if answer_ids
+            else []
+        )
+        jobs = (
+            list(
+                await session.scalars(
+                    select(AIJob)
+                    .where(
+                        AIJob.job_type == AIJobType.ANSWER_ORGANIZATION,
+                        AIJob.target_answer_id.in_(answer_ids),
+                    )
+                    .order_by(AIJob.created_at.desc(), AIJob.id.desc())
+                )
+            )
+            if answer_ids
+            else []
+        )
+        segment_ids = {
+            segment_id
+            for answer in answers
+            for segment_id in (answer.start_segment_id, answer.end_segment_id)
+            if segment_id is not None
+        }
+        segment_ids.update(
+            segment_id
+            for organization in organizations
+            for segment_id in (
+                organization.source_start_segment_id,
+                organization.source_end_segment_id,
+            )
+        )
+        segments = (
+            list(
+                await session.scalars(
+                    select(TranscriptSegment).where(TranscriptSegment.id.in_(segment_ids))
+                )
+            )
+            if segment_ids
+            else []
+        )
+        organizations_by_answer = {
+            organization.answer_id: organization for organization in organizations
+        }
+        jobs_by_id = {job.id: job for job in jobs}
+        latest_jobs_by_answer: dict[UUID, AIJob] = {}
+        for job in jobs:
+            if job.target_answer_id is not None:
+                latest_jobs_by_answer.setdefault(job.target_answer_id, job)
+        jobs_by_answer: dict[UUID, AIJob] = {}
+        for answer in answers:
+            organization = organizations_by_answer.get(answer.id)
+            job = (
+                jobs_by_id.get(organization.created_by_job_id)
+                if organization is not None
+                else latest_jobs_by_answer.get(answer.id)
+            )
+            if job is not None:
+                jobs_by_answer[answer.id] = job
+        return _AnswerProjectionContext(
+            lecture_session=lecture_session,
+            segments={segment.id: segment for segment in segments},
+            organizations=organizations_by_answer,
+            organization_jobs=jobs_by_answer,
+        )
+
+    @staticmethod
+    def _organization_job_is_consistent(
+        answer: Answer, organization: AnswerOrganization, job: AIJob | None
+    ) -> bool:
+        return bool(
+            job is not None
+            and job.id == organization.created_by_job_id
+            and job.attempt == organization.created_by_job_attempt
+            and job.job_type == AIJobType.ANSWER_ORGANIZATION
+            and job.target_answer_id == answer.id
+            and job.status == AIJobStatus.SUCCEEDED
+        )
+
+    async def project(
+        self,
+        session: AsyncSession,
+        answer: Answer,
+        *,
+        context: _AnswerProjectionContext | None = None,
+    ) -> AnswerResponse:
         answer_type = "VOICE" if answer.source_transcript_version_id is not None else "TEXT"
         target: AnswerTarget
         if answer.target_question_id is not None:
@@ -424,11 +534,19 @@ class AnswerService:
             )
         start_sequence = end_sequence = None
         if answer.start_segment_id is not None:
-            start = await session.get(TranscriptSegment, answer.start_segment_id)
-            end = await session.get(TranscriptSegment, answer.end_segment_id)
+            if context is None:
+                start = await session.get(TranscriptSegment, answer.start_segment_id)
+                end = await session.get(TranscriptSegment, answer.end_segment_id)
+            else:
+                start = context.segments.get(answer.start_segment_id)
+                end = context.segments.get(answer.end_segment_id)
             start_sequence = start.sequence if start is not None else None
             end_sequence = end.sequence if end is not None else None
-        lecture_session = await session.get(LectureSession, answer.session_id)
+        lecture_session = (
+            context.lecture_session
+            if context is not None
+            else await session.get(LectureSession, answer.session_id)
+        )
         mapping = await self.repository.canonical_mapping(
             session,
             answer_id=answer.id,
@@ -447,21 +565,72 @@ class AnswerService:
         )
         organization_state = AnswerOrganizationStateResponse(status="NOT_APPLICABLE")
         if answer_type == "VOICE":
-            organization_job = await session.scalar(
-                select(AIJob).where(
-                    AIJob.job_type == AIJobType.ANSWER_ORGANIZATION,
-                    AIJob.target_answer_id == answer.id,
+            if context is None:
+                organization = await session.scalar(
+                    select(AnswerOrganization).where(AnswerOrganization.answer_id == answer.id)
                 )
-            )
-            organization = await session.scalar(
-                select(AnswerOrganization).where(AnswerOrganization.answer_id == answer.id)
-            )
+                organization_job = (
+                    await session.get(AIJob, organization.created_by_job_id)
+                    if organization is not None
+                    else await session.scalar(
+                        select(AIJob)
+                        .where(
+                            AIJob.job_type == AIJobType.ANSWER_ORGANIZATION,
+                            AIJob.target_answer_id == answer.id,
+                        )
+                        .order_by(AIJob.created_at.desc(), AIJob.id.desc())
+                    )
+                )
+            else:
+                organization_job = context.organization_jobs.get(answer.id)
+                organization = context.organizations.get(answer.id)
             if organization is not None:
-                organization_state = AnswerOrganizationStateResponse(
-                    status="SUCCEEDED",
-                    job_id=organization.created_by_job_id,
-                    attempt=organization.created_by_job_attempt,
+                job_is_consistent = self._organization_job_is_consistent(
+                    answer, organization, organization_job
                 )
+                if not job_is_consistent:
+                    organization_state = AnswerOrganizationStateResponse(
+                        status="DATA_INTEGRITY_ERROR",
+                        job_id=(organization_job.id if organization_job is not None else None),
+                        attempt=(
+                            organization_job.attempt if organization_job is not None else None
+                        ),
+                    )
+                elif context is None:
+                    organization_start = await session.get(
+                        TranscriptSegment, organization.source_start_segment_id
+                    )
+                    organization_end = await session.get(
+                        TranscriptSegment, organization.source_end_segment_id
+                    )
+                else:
+                    organization_start = context.segments.get(organization.source_start_segment_id)
+                    organization_end = context.segments.get(organization.source_end_segment_id)
+                if job_is_consistent and (organization_start is None or organization_end is None):
+                    organization_state = AnswerOrganizationStateResponse(
+                        status="DATA_INTEGRITY_ERROR",
+                        job_id=organization_job.id,
+                        attempt=organization_job.attempt,
+                    )
+                elif job_is_consistent:
+                    organization_state = AnswerOrganizationStateResponse(
+                        status="SUCCEEDED",
+                        job_id=organization_job.id,
+                        attempt=organization_job.attempt,
+                        organization=AnswerOrganizationResponse(
+                            content=organization.content,
+                            source_transcript_version_id=(
+                                organization.source_transcript_version_id
+                            ),
+                            start_sequence=organization_start.sequence,
+                            end_sequence=organization_end.sequence,
+                            created_by_job_id=organization.created_by_job_id,
+                            created_by_job_attempt=(organization.created_by_job_attempt),
+                            model_name=organization.model_name,
+                            prompt_version=organization.prompt_version,
+                            created_at=organization.created_at,
+                        ),
+                    )
             elif organization_job is not None:
                 status = str(organization_job.status)
                 if status == "SUCCEEDED":
@@ -472,7 +641,7 @@ class AnswerService:
                     status=status,
                     job_id=organization_job.id,
                     attempt=organization_job.attempt,
-                    retryable=organization_job.retryable,
+                    retryable=(organization_job.retryable if status == "FAILED" else False),
                 )
             elif answer.status != "COMPLETED":
                 organization_state = AnswerOrganizationStateResponse(status="NOT_STARTED")

@@ -11,13 +11,20 @@ function questionStatusLabel(status: 'OPEN' | 'SELECTED' | 'ANSWERED') {
   return '미답변'
 }
 
-export function RecordQuestionPanel({ sessionId }: { sessionId: string }) {
+export function RecordQuestionPanel({
+  sessionId,
+  sessionStatus,
+}: {
+  sessionId: string
+  sessionStatus: 'PROCESSING' | 'COMPLETED'
+}) {
   const questions = useInfiniteQuery({
     queryKey: recordKeys.questions(sessionId),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam, signal }) =>
       listRecordQuestions(sessionId, pageParam, signal),
     getNextPageParam: (page) => page.next_cursor,
+    refetchInterval: sessionStatus === 'PROCESSING' ? 3_000 : false,
   })
   const items = questions.data?.pages.flatMap((page) => page.items) ?? []
 

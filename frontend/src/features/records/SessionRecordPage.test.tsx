@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { delay, http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { ToastProvider } from '../../components/feedback/ToastProvider'
@@ -122,6 +122,38 @@ function record(status: 'PROCESSING' | 'COMPLETED') {
   }
 }
 
+function failedSharedJob(
+  id: string,
+  jobType: string,
+  clustering: unknown = null,
+) {
+  return {
+    id,
+    session_id: sessionId,
+    job_type: jobType,
+    visibility: 'SHARED',
+    status: 'FAILED',
+    attempt: 1,
+    version: 1,
+    progress: null,
+    retryable: true,
+    blocks_session_completion: true,
+    clustering,
+    error: { code: 'PROVIDER_UNAVAILABLE', message: '처리하지 못했습니다.' },
+    target: {
+      resource_type: 'SESSION',
+      resource_id: sessionId,
+      resource_url: null,
+    },
+    result: null,
+    result_unavailable_reason: null,
+    created_at: '2026-07-14T02:00:00Z',
+    updated_at: '2026-07-14T02:00:00Z',
+    started_at: '2026-07-14T02:00:00Z',
+    finished_at: '2026-07-14T02:01:00Z',
+  }
+}
+
 function renderPage(professor = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -137,9 +169,29 @@ function renderPage(professor = false) {
 
 describe('SessionRecordPage', () => {
   it('keeps processing record areas available without a recording or REVIEW Chat', async () => {
+    let questionRequests = 0
     server.use(
       http.get('*/api/v1/sessions/:id/record', () =>
         HttpResponse.json(record('PROCESSING')),
+      ),
+      http.get('*/api/v1/sessions/:id/questions', () => {
+        questionRequests += 1
+        return HttpResponse.json({ items: [], next_cursor: null })
+      }),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: record('PROCESSING').question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/jobs', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
       ),
     )
 
@@ -149,14 +201,18 @@ describe('SessionRecordPage', () => {
       await screen.findByText('수업 기록을 정리하고 있습니다'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(
-        '이 수업에는 저장된 녹음이 없습니다. Transcript와 다른 기록은 계속 확인할 수 있습니다.',
-      ),
+      screen.getByText('원본 녹음 저장 상태를 확인하는 중'),
     ).toBeInTheDocument()
     expect(
       screen.getByText('최종 Transcript를 기준으로 요약을 준비하고 있습니다.'),
     ).toBeInTheDocument()
+    expect(screen.getByText('수업 질문')).toBeInTheDocument()
+    expect(screen.getByText('교수자 답변')).toBeInTheDocument()
+    expect(screen.getByText('수업 후처리 작업')).toBeInTheDocument()
     expect(screen.queryByText('복습 AI')).not.toBeInTheDocument()
+    await waitFor(() => expect(questionRequests).toBeGreaterThan(1), {
+      timeout: 4_000,
+    })
   })
 
   it('loads completed summary and merges transcript Segment and Gap independently', async () => {
@@ -359,40 +415,21 @@ describe('SessionRecordPage', () => {
       screen.queryByText('미답변 학생 질문에 텍스트 답변'),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: '다시 시도' }),
+      screen.queryByRole('button', { name: /다시 시도$/ }),
     ).not.toBeInTheDocument()
   })
 
-  it('shows only allowed shared-job retries to a professor', async () => {
-    const failedJob = (
-      id: string,
-      jobType: string,
-      clustering: unknown = null,
-    ) => ({
-      id,
-      session_id: sessionId,
-      job_type: jobType,
-      visibility: 'SHARED',
-      status: 'FAILED',
-      attempt: 1,
-      version: 1,
-      progress: null,
-      retryable: true,
-      blocks_session_completion: true,
-      clustering,
-      error: { code: 'PROVIDER_UNAVAILABLE', message: '처리하지 못했습니다.' },
-      target: {
-        resource_type: 'SESSION',
-        resource_id: sessionId,
-        resource_url: null,
-      },
-      result: null,
-      result_unavailable_reason: null,
-      created_at: '2026-07-14T02:00:00Z',
-      updated_at: '2026-07-14T02:00:00Z',
-      started_at: '2026-07-14T02:00:00Z',
-      finished_at: '2026-07-14T02:01:00Z',
-    })
+  it('shows every server-allowed shared-job retry to a professor', async () => {
+    const retryableJobs = [
+      failedSharedJob('final-clustering', 'QUESTION_CLUSTERING', {
+        mode: 'FINAL',
+        input_through_sequence: 1,
+        base_revision: 1,
+        final_answered_through_at: '2026-07-14T02:00:00Z',
+      }),
+      failedSharedJob('answer-organization', 'ANSWER_ORGANIZATION'),
+      failedSharedJob('hq-stt', 'RECORDING_TRANSCRIPTION'),
+    ]
     server.use(
       http.get('*/api/v1/sessions/:id/record', () =>
         HttpResponse.json(record('COMPLETED')),
@@ -431,19 +468,29 @@ describe('SessionRecordPage', () => {
       ),
       http.get('*/api/v1/sessions/:id/jobs', () =>
         HttpResponse.json({
-          items: [
-            failedJob('final-clustering', 'QUESTION_CLUSTERING', {
-              mode: 'FINAL',
-              input_through_sequence: 1,
-              base_revision: 1,
-              final_answered_through_at: '2026-07-14T02:00:00Z',
-            }),
-            failedJob('answer-organization', 'ANSWER_ORGANIZATION'),
-            failedJob('hq-stt', 'RECORDING_TRANSCRIPTION'),
-          ],
+          items: retryableJobs,
           next_cursor: null,
         }),
       ),
+      http.post('*/api/v1/jobs/:id/retry', async ({ params }) => {
+        await delay(150)
+        const job = retryableJobs.find((item) => item.id === params.id)
+        return HttpResponse.json(
+          {
+            job: {
+              ...job,
+              status: 'PENDING',
+              attempt: 2,
+              version: 2,
+              retryable: false,
+              error: null,
+              started_at: null,
+              finished_at: null,
+            },
+          },
+          { status: 202 },
+        )
+      }),
       http.get('*/api/v1/sessions/:id/chats', () =>
         HttpResponse.json({ items: [], next_cursor: null }),
       ),
@@ -452,14 +499,147 @@ describe('SessionRecordPage', () => {
     renderPage(true)
 
     expect(await screen.findByText('수업 후처리 작업')).toBeInTheDocument()
-    expect(
-      await screen.findAllByRole('button', { name: '다시 시도' }),
-    ).toHaveLength(2)
-    expect(screen.getByText('고품질 Transcript')).toBeInTheDocument()
+    const clusteringRetry = await screen.findByRole('button', {
+      name: '최종 질문 분류 다시 시도',
+    })
+    const organizationRetry = screen.getByRole('button', {
+      name: 'AI 답변 정리 다시 시도',
+    })
+    const transcriptRetry = screen.getByRole('button', {
+      name: '고품질 Transcript 다시 시도',
+    })
+    expect(screen.getAllByText('고품질 Transcript')).toHaveLength(2)
     expect(
       screen.getByText(
-        /고품질 Transcript는 수업 기록의 신뢰성을 위해 여기서 재시도하지 않습니다/,
+        /실패했고 서버가 재시도를 허용한 공용 작업만 다시 시작할 수 있습니다/,
       ),
     ).toBeInTheDocument()
+
+    fireEvent.click(organizationRetry)
+    expect(
+      await screen.findByRole('button', {
+        name: 'AI 답변 정리 재시도 요청 중',
+      }),
+    ).toBeDisabled()
+    expect(clusteringRetry).toBeDisabled()
+    expect(transcriptRetry).toBeDisabled()
+    expect(
+      screen.queryByRole('button', {
+        name: '고품질 Transcript 재시도 요청 중',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('공용 작업을 다시 시작했습니다.'),
+    ).toBeInTheDocument()
+  })
+
+  it('reuses an idempotency key after an ambiguous retry failure and rotates it after success', async () => {
+    const job = failedSharedJob('postprocessing', 'SESSION_POSTPROCESSING')
+    const retryKeys: string[] = []
+    let retryRequests = 0
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json(record('COMPLETED')),
+      ),
+      http.get('*/api/v1/sessions/:id/summaries', () =>
+        HttpResponse.json({
+          summary_status: 'AVAILABLE',
+          summary_reason: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/transcript', () =>
+        HttpResponse.json({
+          transcript: record('COMPLETED').transcript.state,
+          selected_version: {},
+          segments: [],
+          gaps: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/questions', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: record('COMPLETED').question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/jobs', () =>
+        HttpResponse.json({ items: [job], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.post('*/api/v1/jobs/:id/retry', ({ request }) => {
+        retryRequests += 1
+        retryKeys.push(request.headers.get('Idempotency-Key') ?? '')
+        if (retryRequests === 1) {
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'SERVICE_UNAVAILABLE',
+                message: '재시도 결과를 확인하지 못했습니다.',
+                request_id: 'req-retry-1',
+                details: null,
+              },
+            },
+            { status: 503 },
+          )
+        }
+        return HttpResponse.json(
+          {
+            job: {
+              ...job,
+              status: 'PENDING',
+              attempt: 2,
+              version: 2,
+              error: null,
+              started_at: null,
+              finished_at: null,
+            },
+          },
+          { status: 202 },
+        )
+      }),
+    )
+
+    renderPage(true)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '수업 후처리 다시 시도' }),
+    )
+    expect(
+      await screen.findByText('재시도 결과를 확인하지 못했습니다.'),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(retryKeys).toHaveLength(1))
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '수업 후처리 다시 시도' }),
+    )
+    expect(
+      await screen.findByText('공용 작업을 다시 시작했습니다.'),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(retryKeys).toHaveLength(2))
+    expect(retryKeys[1]).toBe(retryKeys[0])
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '수업 후처리 다시 시도' }),
+      ).toBeEnabled(),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: '수업 후처리 다시 시도' }),
+    )
+    await waitFor(() => expect(retryKeys).toHaveLength(3))
+    expect(retryKeys[2]).not.toBe(retryKeys[1])
   })
 })

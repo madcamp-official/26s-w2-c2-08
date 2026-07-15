@@ -3,8 +3,10 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
+import { useRef } from 'react'
 
 import { ApiError } from '../../api/errors'
+import { JobStatusBadge } from '../../components/domain/LmsStatus'
 import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
@@ -31,12 +33,15 @@ function jobStatusLabel(status: AIJob['status']) {
   return '대체됨'
 }
 
-function canRetryFromRecord(job: AIJob, professor: boolean) {
+function canRetryFromRecord(
+  job: AIJob,
+  professor: boolean,
+  sessionStatus: 'PROCESSING' | 'COMPLETED',
+) {
   if (!professor || job.status !== 'FAILED' || !job.retryable) return false
-  if (job.job_type === 'ANSWER_ORGANIZATION') return true
-  return (
-    job.job_type === 'QUESTION_CLUSTERING' && job.clustering?.mode === 'FINAL'
-  )
+  if (job.job_type !== 'QUESTION_CLUSTERING') return true
+  if (job.clustering?.mode !== 'FINAL') return false
+  return sessionStatus === 'COMPLETED'
 }
 
 function jobErrorMessage(error: unknown) {
@@ -44,15 +49,30 @@ function jobErrorMessage(error: unknown) {
   return '작업을 다시 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.'
 }
 
+function retryStateChanged(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    (error.status === 404 ||
+      error.code === 'AI_JOB_STATE_CONFLICT' ||
+      error.code === 'AI_JOB_NOT_RETRYABLE' ||
+      error.code === 'AI_JOB_RETRY_SYSTEM_MANAGED')
+  )
+}
+
 export function RecordJobsPanel({
   sessionId,
   professor,
+  sessionStatus,
 }: {
   sessionId: string
   professor: boolean
+  sessionStatus: 'PROCESSING' | 'COMPLETED'
 }) {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
+  const retryKeys = useRef<
+    Record<string, { attempt: number; key: string; version: number }>
+  >({})
   const jobs = useInfiniteQuery({
     queryKey: recordKeys.jobs(sessionId),
     initialPageParam: null as string | null,
@@ -60,6 +80,7 @@ export function RecordJobsPanel({
       listRecordJobs(sessionId, pageParam, signal),
     getNextPageParam: (page) => page.next_cursor,
     refetchInterval: (query) => {
+      if (sessionStatus === 'PROCESSING') return 3_000
       const hasActive = query.state.data?.pages
         .flatMap((page) => page.items)
         .some((job) => job.status === 'PENDING' || job.status === 'RUNNING')
@@ -68,8 +89,21 @@ export function RecordJobsPanel({
   })
   const items = jobs.data?.pages.flatMap((page) => page.items) ?? []
   const retry = useMutation({
-    mutationFn: (jobId: string) => retryRecordJob(jobId, crypto.randomUUID()),
-    onSuccess: () => {
+    mutationFn: (job: AIJob) => {
+      const existing = retryKeys.current[job.id]
+      const identity =
+        existing?.attempt === job.attempt && existing.version === job.version
+          ? existing
+          : {
+              attempt: job.attempt,
+              key: crypto.randomUUID(),
+              version: job.version,
+            }
+      retryKeys.current[job.id] = identity
+      return retryRecordJob(job.id, identity.key)
+    },
+    onSuccess: (_accepted, job) => {
+      delete retryKeys.current[job.id]
       void queryClient.invalidateQueries({
         queryKey: recordKeys.jobs(sessionId),
       })
@@ -84,7 +118,22 @@ export function RecordJobsPanel({
       })
       showToast({ tone: 'success', message: '공용 작업을 다시 시작했습니다.' })
     },
-    onError: (error) => {
+    onError: (error, job) => {
+      if (retryStateChanged(error)) {
+        delete retryKeys.current[job.id]
+        void queryClient.invalidateQueries({
+          queryKey: recordKeys.jobs(sessionId),
+        })
+        void queryClient.invalidateQueries({
+          queryKey: recordKeys.manifest(sessionId),
+        })
+        showToast({
+          tone: 'error',
+          message:
+            '작업 상태가 이미 변경되었습니다. 최신 후처리 상태를 다시 불러왔습니다.',
+        })
+        return
+      }
       showToast({ tone: 'error', message: jobErrorMessage(error) })
     },
   })
@@ -119,26 +168,38 @@ export function RecordJobsPanel({
       {items.length > 0 && (
         <ol className="record-job-list" aria-label="수업 후처리 작업 목록">
           {items.map((job) => {
-            const retryable = canRetryFromRecord(job, professor)
+            const retryable = canRetryFromRecord(job, professor, sessionStatus)
+            const retryPending =
+              retry.isPending && retry.variables?.id === job.id
+            const retryLabel = `${jobLabel(job)} ${
+              retryPending ? '재시도 요청 중' : '다시 시도'
+            }`
             return (
               <li key={job.id}>
                 <div>
-                  <strong>{jobLabel(job)}</strong>
+                  <div className="record-job-list__title">
+                    <strong>{jobLabel(job)}</strong>
+                    <JobStatusBadge status={job.status} />
+                  </div>
                   <p className="input-hint">
                     {jobStatusLabel(job.status)} · {job.attempt}번째 시도
                     {job.blocks_session_completion ? ' · 완료 판정 작업' : ''}
                   </p>
                   {job.status === 'FAILED' && job.error?.message && (
-                    <p className="form-error">{job.error.message}</p>
+                    <p className="form-error" role="alert">
+                      {job.error.message}
+                    </p>
                   )}
                 </div>
                 {retryable && (
                   <Button
                     variant="secondary"
                     disabled={retry.isPending}
-                    onClick={() => retry.mutate(job.id)}
+                    aria-busy={retryPending || undefined}
+                    aria-label={retryLabel}
+                    onClick={() => retry.mutate(job)}
                   >
-                    {retry.isPending ? '재시도 요청 중…' : '다시 시도'}
+                    {retryPending ? '재시도 요청 중…' : '다시 시도'}
                   </Button>
                 )}
               </li>
@@ -157,9 +218,8 @@ export function RecordJobsPanel({
       )}
       {professor && (
         <p className="input-hint">
-          최종 질문 분류와 AI 답변 정리 실패만 이 화면에서 다시 시도할 수
-          있습니다. 고품질 Transcript는 수업 기록의 신뢰성을 위해 여기서
-          재시도하지 않습니다.
+          실패했고 서버가 재시도를 허용한 공용 작업만 다시 시작할 수 있습니다.
+          FINAL 질문 분류는 class 완료 뒤에만 재시도할 수 있습니다.
         </p>
       )}
     </section>

@@ -97,6 +97,81 @@ function liveSessionFor(courseId: string) {
   }
 }
 
+function processingSessionFor(courseId: string, suffix: string) {
+  return {
+    ...readySession,
+    id: `30000000-0000-0000-0000-${suffix}`,
+    course_id: courseId,
+    title:
+      courseId === professorCourse.id
+        ? '그래프 기록 정리'
+        : '운영체제 기록 정리',
+    status: 'PROCESSING' as const,
+    version: 3,
+    started_at: '2026-07-15T06:00:00Z',
+    ended_at: '2026-07-15T06:52:00Z',
+    updated_at: '2026-07-15T06:54:00Z',
+  }
+}
+
+function processingRecordFor(session: ReturnType<typeof processingSessionFor>) {
+  return {
+    session,
+    recording: null,
+    recording_url: `/api/v1/sessions/${session.id}/recording`,
+    materials: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/materials`,
+    },
+    transcript: {
+      state: null,
+      selected_version_id: null,
+      segment_count: 0,
+      gap_count: 0,
+      timeline_url: `/api/v1/sessions/${session.id}/transcript`,
+      versions_url: `/api/v1/sessions/${session.id}/transcript/versions`,
+    },
+    summary: {
+      state: { status: 'PENDING', reason: null },
+      summary_url: null,
+      summaries_url: `/api/v1/sessions/${session.id}/summaries?summary_type=FINAL`,
+    },
+    questions: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/questions?sort=RECENT`,
+    },
+    question_clusters: {
+      state: {
+        pending: false,
+        requested_through_sequence: 0,
+        applied_through_sequence: 0,
+        current_revision: 0,
+        current_generation: null,
+        final_generation: null,
+        active_job_id: null,
+        retry_job_id: null,
+        last_job: null,
+      },
+      current: {
+        total_count: 0,
+        list_url: `/api/v1/sessions/${session.id}/question-clusters?scope=CURRENT`,
+      },
+      final: {
+        total_count: 0,
+        list_url: `/api/v1/sessions/${session.id}/question-clusters?scope=FINAL`,
+      },
+    },
+    answers: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/answers`,
+    },
+    jobs: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/jobs`,
+    },
+  }
+}
+
 function installLiveRouteHandlers(
   course: typeof professorCourse | typeof studentCourse,
   session: ReturnType<typeof liveSessionFor>,
@@ -538,6 +613,98 @@ describe('Course role flows', () => {
     expect(
       screen.queryByRole('button', { name: '새 코드로 교체' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('renders PROCESSING from the shared production route with Course role-safe controls', async () => {
+    authenticate()
+    const professorSession = processingSessionFor(
+      professorCourse.id,
+      '000000000071',
+    )
+    const studentSession = processingSessionFor(
+      studentCourse.id,
+      '000000000072',
+    )
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId', ({ params }) =>
+        HttpResponse.json(
+          params.sessionId === studentSession.id
+            ? studentSession
+            : professorSession,
+        ),
+      ),
+      http.get('*/api/v1/courses/:courseId', ({ params }) =>
+        HttpResponse.json(
+          params.courseId === studentCourse.id
+            ? studentCourse
+            : professorCourse,
+        ),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/record', ({ params }) =>
+        HttpResponse.json(
+          processingRecordFor(
+            params.sessionId === studentSession.id
+              ? studentSession
+              : professorSession,
+          ),
+        ),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/materials', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/questions', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/question-clusters', ({ params }) =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: processingRecordFor(
+            params.sessionId === studentSession.id
+              ? studentSession
+              : professorSession,
+          ).question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/jobs', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    const router = renderAt(`/sessions/${professorSession.id}`)
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: professorSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      screen.getByRole('textbox', { name: 'class 제목' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('수업 후처리 작업')).toBeInTheDocument()
+    expect(
+      screen.queryByText('미답변 학생 질문에 텍스트 답변'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('복습 AI')).not.toBeInTheDocument()
+
+    await router.navigate(`/sessions/${studentSession.id}`)
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: studentSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      screen.queryByRole('textbox', { name: 'class 제목' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Professor control')).not.toBeInTheDocument()
   })
 
   it('clears cached Course data and preserves return_to after session expiry', async () => {

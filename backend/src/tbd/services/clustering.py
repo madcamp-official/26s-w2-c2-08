@@ -588,16 +588,23 @@ class QuestionClusteringWorker:
         *,
         active: AIJob | None,
     ) -> None:
-        payload = QuestionService.project_clustering_state(state, active=active).model_dump(
-            mode="json"
+        last = (
+            active
+            if active is not None and active.id == state.last_job_id
+            else await session.get(AIJob, state.last_job_id)
+            if state.last_job_id is not None
+            else None
         )
+        payload = QuestionService.project_clustering_state(
+            state, active=active, last=last
+        ).model_dump(mode="json")
         await self.outbox.enqueue(
             session,
             session_id=state.session_id,
             partition_key=f"session:{state.session_id}",
             event_type="clustering.updated",
             resource_version=max(1, state.requested_sequence),
-            payload=payload,
+            payload={"clustering_state": payload},
         )
 
     @staticmethod

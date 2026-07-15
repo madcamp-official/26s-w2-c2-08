@@ -514,9 +514,11 @@ class SessionService:
             partition_key=f"session:{lecture_session.id}",
             event_type="clustering.updated",
             resource_version=max(1, state.requested_sequence),
-            payload=QuestionService.project_clustering_state(state, active=final_job).model_dump(
-                mode="json"
-            ),
+            payload={
+                "clustering_state": QuestionService.project_clustering_state(
+                    state, active=final_job
+                ).model_dump(mode="json")
+            },
         )
         return final_job
 
