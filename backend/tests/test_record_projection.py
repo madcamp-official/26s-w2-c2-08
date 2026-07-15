@@ -7,16 +7,122 @@ from uuid import uuid4
 
 import pytest
 
-from tbd.models.materials import TranscriptSegment
+from tbd.models.knowledge import LectureSummary
+from tbd.models.materials import TranscriptSegment, TranscriptVersion
 from tbd.models.questions import AIJob, QuestionClusteringState
 from tbd.models.sessions import LectureSession
 from tbd.providers.ai.fake import FakeQuestionClusteringProvider
 from tbd.services.answers import AnswerService
 from tbd.services.clustering import QuestionClusteringWorker
 from tbd.services.job_results import AIJobResultService, JobResultIntegrityError
+from tbd.services.personal_ai import PersonalAIService
 from tbd.services.questions import QuestionService
 
 pytestmark = pytest.mark.unit
+
+
+class _LiveFallbackSummarySessionStub:
+    def __init__(
+        self,
+        *,
+        coordinator: AIJob,
+        canonical: TranscriptVersion,
+        summary: LectureSummary,
+        summary_job: AIJob,
+    ) -> None:
+        self.scalar_results = iter((coordinator, None, summary))
+        self.canonical = canonical
+        self.summary_job = summary_job
+
+    async def scalar(self, _query: object) -> object | None:
+        return next(self.scalar_results)
+
+    async def get(self, model: object, identity: object) -> object | None:
+        if model is TranscriptVersion and identity == self.canonical.id:
+            return self.canonical
+        if model is AIJob and identity == self.summary_job.id:
+            return self.summary_job
+        return None
+
+
+def test_final_summary_projection_uses_finalized_canonical_live_fallback() -> None:
+    """A missing HQ upload must not hide a summary generated from canonical LIVE."""
+
+    session_id = uuid4()
+    version_id = uuid4()
+    segment_id = uuid4()
+    job_id = uuid4()
+    lecture_session = LectureSession(
+        id=session_id,
+        course_id=uuid4(),
+        created_by_user_id=uuid4(),
+        title="프랑스에서 살아남기",
+        lecture_date=datetime.now(UTC).date(),
+        status="COMPLETED",
+        canonical_transcript_version_id=version_id,
+        version=1,
+    )
+    canonical = TranscriptVersion(
+        id=version_id,
+        session_id=session_id,
+        version=1,
+        source="LIVE",
+        status="FINALIZED",
+        last_sequence=1,
+    )
+    coordinator = AIJob(
+        id=uuid4(),
+        session_id=session_id,
+        job_type="SESSION_POSTPROCESSING",
+        visibility="SHARED",
+        status="SUCCEEDED",
+        attempt=1,
+        version=1,
+        blocks_session_completion=True,
+        retryable=False,
+    )
+    summary_job = AIJob(
+        id=job_id,
+        session_id=session_id,
+        job_type="FINAL_SUMMARY",
+        visibility="SHARED",
+        status="SUCCEEDED",
+        attempt=1,
+        version=1,
+        input_transcript_version_id=version_id,
+        blocks_session_completion=True,
+        retryable=False,
+    )
+    summary = LectureSummary(
+        id=uuid4(),
+        session_id=session_id,
+        created_by_job_id=job_id,
+        created_by_job_attempt=1,
+        summary_type="FINAL",
+        visibility="COURSE_MEMBERS",
+        content="정상적으로 생성된 요약",
+        source_transcript_version_id=version_id,
+        source_start_segment_id=segment_id,
+        source_end_segment_id=segment_id,
+        model_name="fake",
+        prompt_version="final-summary-v2",
+    )
+    stub = _LiveFallbackSummarySessionStub(
+        coordinator=coordinator,
+        canonical=canonical,
+        summary=summary,
+        summary_job=summary_job,
+    )
+
+    summaries, status, reason = asyncio.run(
+        PersonalAIService()._final_summary_state(  # type: ignore[arg-type]
+            stub, lecture_session
+        )
+    )
+
+    assert summaries == [summary]
+    assert status == "AVAILABLE"
+    assert reason is None
 
 
 def test_final_clustering_projection_keeps_the_persisted_job_mode() -> None:
