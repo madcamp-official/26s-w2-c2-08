@@ -2450,6 +2450,11 @@
   line-height: 1.6;
 }
 
+.dialog__header > .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .dialog__actions {
   display: flex;
   gap: var(--space-2);

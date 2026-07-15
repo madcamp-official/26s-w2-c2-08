@@ -174,9 +174,6 @@ export function LoginPage() {
               <span aria-hidden="true">G</span>
               Google 계정으로 계속하기
             </a>
-            <p className="auth-privacy-note">
-              로그인 정보는 브라우저 JavaScript에 저장하지 않습니다.
-            </p>
           </div>
         )}
       </div>

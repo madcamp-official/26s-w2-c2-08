@@ -72,12 +72,6 @@ export function FoundationPage() {
               </div>
             )}
           </div>
-
-          <ul className="public-hero__principles" aria-label="GOAL의 학습 원칙">
-            <li>Course별 교수자·학생 역할</li>
-            <li>실시간 기능의 부분 실패를 분리</li>
-            <li>수업 종료 후에도 이어지는 기록</li>
-          </ul>
         </div>
 
         <Card
@@ -89,7 +83,11 @@ export function FoundationPage() {
           <header className="lecture-flow-preview__header">
             <div>
               <p className="eyebrow">Lecture workspace</p>
-              <h2 id="preview-title">하나의 강의, 이어지는 학습 흐름</h2>
+              <h2 id="preview-title">
+                하나의 강의,
+                <br />
+                이어지는 학습 흐름
+              </h2>
             </div>
             <span className="status-chip status-chip--success">LIVE</span>
           </header>

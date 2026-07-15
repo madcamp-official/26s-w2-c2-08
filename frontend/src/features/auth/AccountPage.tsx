@@ -222,16 +222,6 @@ export function AccountPage() {
               <p>{user.email ?? '공개된 이메일 없음'}</p>
             </div>
           </div>
-          <dl className="account-details">
-            <div>
-              <dt>현재 인증</dt>
-              <dd>GOAL 서버 Session</dd>
-            </div>
-            <div>
-              <dt>역할 기준</dt>
-              <dd>고정 역할 없음 · Course별 역할 사용</dd>
-            </div>
-          </dl>
         </Card>
 
         <Card
@@ -296,7 +286,6 @@ export function AccountPage() {
       <Dialog
         open={logoutOpen}
         title="GOAL에서 로그아웃할까요?"
-        description="서버 Session을 폐기하고 이 브라우저의 Cookie를 만료합니다."
         onOpenChange={setLogoutOpen}
         actions={
           <>
@@ -378,12 +367,6 @@ export function AccountPage() {
               <strong>관리 중인 Course가 남아 있습니다</strong>
               <p>생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.</p>
             </div>
-          )}
-          {professorCourses.isSuccess && !hasOwnedCourse && (
-            <p>
-              관리 중인 Course가 없음을 확인했습니다. 기존 완료 기록의 공유
-              참조는 비식별 처리되지만 현재 계정으로는 다시 접근할 수 없습니다.
-            </p>
           )}
           {withdrawError && (
             <div
