@@ -59,7 +59,7 @@
       <nav class="mobile-nav" aria-label="모바일 주요 메뉴">
         <a href="#transcriptTitle">Transcript</a
         ><a href="#questionComposerTitle">질문</a
-        ><a href="#questionsTitle">마인드맵</a
+        ><a href="#questionsTitle">질문 목록</a
         ><a href="#liveAiTitle">개인 AI</a>
       </nav>
     </header>
@@ -624,7 +624,7 @@
               </section>
             </div>
 
-            <aside class="student-live-rail" aria-label="질문 마인드맵">
+            <aside class="student-live-rail" aria-label="질문 목록">
               <section
                 class="panel student-live-card questions-panel"
                 id="studentQuestions"
@@ -635,7 +635,7 @@
               >
                 <div class="section-heading">
                   <div>
-                    <h2 id="questionsTitle">질문 마인드맵</h2>
+                    <h2 id="questionsTitle">질문 목록</h2>
                     <p>
                       질문을 저장하면 시스템이 자동으로 다음 실행을 예약합니다.
                     </p>
@@ -908,16 +908,16 @@
                     </h3>
                     <p>
                       원본 질문과 반응은 즉시 저장하지만 Job 성공 전에는 기존
-                      대표질문의 branch로 표시하지 않습니다.
+                      대표질문의 member list로 표시하지 않습니다.
                     </p>
                     <ul data-unclustered-questions>
                       <li
-                        class="live-mindmap__node"
-                        data-node-kind="student-question"
+                        class="question-cluster-list__item"
+                        data-member-kind="student-question"
                         data-question-id="question-105"
                         data-question-fixture-unclustered
                       >
-                        <div class="live-node-meta">
+                        <div class="question-cluster-list__meta">
                           <span>STUDENT_QUESTION</span
                           ><span>OPEN · 클러스터 미배치</span>
                         </div>
@@ -932,12 +932,12 @@
                         </button>
                       </li>
                       <li
-                        class="live-mindmap__node"
-                        data-node-kind="student-question"
+                        class="question-cluster-list__item"
+                        data-member-kind="student-question"
                         data-question-id="question-106"
                         data-question-fixture-unclustered
                       >
-                        <div class="live-node-meta">
+                        <div class="question-cluster-list__meta">
                           <span>STUDENT_QUESTION</span
                           ><span>OPEN · 클러스터 미배치</span>
                         </div>
@@ -955,12 +955,12 @@
                   </section>
 
                   <div
-                    class="live-mindmap"
+                    class="question-cluster-list"
                     role="group"
                     aria-labelledby="questionsTitle"
                   >
                     <article
-                      class="live-mindmap__center"
+                      class="question-cluster-list__representative"
                       data-current-representative
                       data-representative-id="rep-7-12"
                       data-created-in-generation="7"
@@ -971,13 +971,16 @@
                       <p>다익스트라와 벨만-포드의 선택 기준은 무엇인가요?</p>
                       <span class="status-chip status-chip--info">OPEN</span>
                     </article>
-                    <ul class="live-mindmap__branches" data-question-branches>
+                    <ul
+                      class="question-cluster-list__members"
+                      data-question-members
+                    >
                       <li
-                        class="live-mindmap__node"
-                        data-node-kind="student-question"
+                        class="question-cluster-list__item"
+                        data-member-kind="student-question"
                         data-question-id="question-103"
                       >
-                        <div class="live-node-meta">
+                        <div class="question-cluster-list__meta">
                           <span>STUDENT_QUESTION</span><span>OPEN</span>
                         </div>
                         <p>벨만-포드는 음수 간선을 어떻게 처리하나요?</p>
@@ -991,11 +994,11 @@
                         </button>
                       </li>
                       <li
-                        class="live-mindmap__node"
-                        data-node-kind="student-question"
+                        class="question-cluster-list__item"
+                        data-member-kind="student-question"
                         data-question-id="question-104"
                       >
-                        <div class="live-node-meta">
+                        <div class="question-cluster-list__meta">
                           <span>STUDENT_QUESTION</span><span>OPEN</span>
                         </div>
                         <p>
@@ -1011,10 +1014,10 @@
                         </button>
                       </li>
                       <li
-                        class="live-mindmap__node"
-                        data-node-kind="representative-preserved"
+                        class="question-cluster-list__item"
+                        data-member-kind="representative-preserved"
                       >
-                        <div class="live-node-meta">
+                        <div class="question-cluster-list__meta">
                           <span
                             >source_kind=AI_REPRESENTATIVE ·
                             created_in_generation=6 · PRESERVED</span

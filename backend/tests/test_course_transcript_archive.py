@@ -355,13 +355,13 @@ async def _complete_session(database_url: str, tmp_path: Path, session_id: UUID)
                 text(
                     """
                     UPDATE lecture_sessions
-                    SET status = 'COMPLETED', ended_at = :completed_at,
-                        completed_at = :completed_at, version = version + 1,
-                        updated_at = :completed_at
+                    SET status = 'COMPLETED', ended_at = started_at + interval '1 second',
+                        completed_at = started_at + interval '1 second', version = version + 1,
+                        updated_at = started_at + interval '1 second'
                     WHERE id = :session_id
                     """
                 ),
-                {"session_id": session_id, "completed_at": completed_at},
+                {"session_id": session_id},
             )
     finally:
         await database.dispose()

@@ -226,7 +226,7 @@ class QuestionService:
             sequence = state.requested_sequence
         else:
             # The Session lock serializes post-class inserts. Their sequence stays
-            # beyond the frozen FINAL clustering watermark, so the final mindmap
+            # beyond the frozen FINAL clustering watermark, so the final Cluster question list
             # remains an immutable snapshot of questions asked during LIVE.
             sequence = await self.repository.latest_sequence(session, session_id) + 1
         question = Question(

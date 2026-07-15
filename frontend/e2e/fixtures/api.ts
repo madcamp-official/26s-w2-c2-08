@@ -252,6 +252,27 @@ export async function installApiFixture(
       return
     }
 
+    const abandonRecordingUploadMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/recording\/abandon-upload$/,
+    )
+    if (request.method() === 'POST' && abandonRecordingUploadMatch) {
+      const session =
+        abandonRecordingUploadMatch[1] === processingStudentSession.id
+          ? processingStudentSession
+          : processingProfessorSession
+      const recording = processingRecord(session).recording
+      await fulfillJson(route, {
+        ...recording,
+        status: 'FAILED',
+        content_type: null,
+        byte_size: null,
+        duration_ms: null,
+        playback_url: null,
+        version: recording.version + 1,
+      })
+      return
+    }
+
     const transcriptMatch = url.pathname.match(
       /^\/api\/v1\/sessions\/([^/]+)\/transcript$/,
     )

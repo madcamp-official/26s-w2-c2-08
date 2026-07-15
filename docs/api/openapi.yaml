@@ -1716,7 +1716,7 @@ paths:
       operationId: getAIRepresentativeQuestion
       summary: AI 대표질문 단건 조회
       description: |
-        현재 Cluster 중앙 대표질문과 Answer target으로 보존된 과거 대표질문을
+        현재 Cluster 대표질문과 Answer target으로 보존된 과거 대표질문을
         해당 Course 멤버가 불투명 ID로 조회한다. generation 배열 위치나
         pagination cursor에 의존하지 않는 Evidence 경로다. 교체 또는 PRESERVED
         Answer 취소로 폐기된 대표질문은 Evidence provenance용 내부 DISCARDED
@@ -1749,7 +1749,7 @@ paths:
       operationId: listSessionQuestionClusters
       summary: 현재 또는 최종 질문 Cluster 목록
       description: |
-        Course 멤버가 마인드맵의 중앙 노드인 immutable AI 대표질문과
+        Course 멤버가 질문 목록의 대표 항목인 immutable AI 대표질문과
         Cluster 메타데이터를 조회한다. Cluster는 ordinal ASC, id ASC로 정렬한다.
         응답의 clustering_state는 requested·applied watermark, active Job과 마지막
         Job ID·attempt·status를 포함한다. scope=FINAL은 후처리에서 전체 input을
@@ -2732,6 +2732,39 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/sessions/{session_id}/recording/abandon-upload:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RequestId"
+    post:
+      tags: [Recordings]
+      operationId: abandonSessionRecordingUpload
+      summary: 로컬 녹음 원본 없음 확정
+      description: |
+        최초 audio publisher인 PROFESSOR의 브라우저에 업로드할 수 있는 로컬 원본이 없을 때
+        PROCESSING/UPLOAD_PENDING Recording을 FAILED terminal 상태로 전환한다. active upload가
+        있으면 거부하며, 후처리는 finalized LIVE Transcript를 fallback 입력으로 즉시 계속한다.
+      responses:
+        "200":
+          description: 원본 없음이 확정된 Session 녹음 메타데이터
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecording"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/RecordingNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 
   /api/v1/sessions/{session_id}/recording/uploads:
     parameters:
@@ -4180,7 +4213,7 @@ components:
       type: string
       enum: [ACTIVE, PRESERVED]
       description: |
-        ACTIVE는 현재 Cluster 중앙, PRESERVED는 Answer 때문에 보존된 child.
+        ACTIVE는 현재 Cluster 대표, PRESERVED는 Answer 때문에 보존된 child.
         Evidence provenance만 유지하는 내부 DISCARDED tombstone은 이 공개 enum과
         대표질문 응답에 절대 노출하지 않는다.
 
@@ -5503,7 +5536,7 @@ components:
       type: object
       additionalProperties: false
       description: |
-        AI가 Cluster 중앙 노드로 생성한 immutable 질문. 대표 문구가 바뀌면
+        AI가 Cluster 대표 노드로 생성한 immutable 질문. 대표 문구가 바뀌면
         기존 행을 수정하지 않고 새 행을 생성한다. CAPTURING 또는 완료 Answer가 있는
         과거 대표질문은 lifecycle_status=PRESERVED인 Cluster child로 계속 노출한다.
         폐기된 미답변 대표질문의 내부 DISCARDED tombstone은 이 스키마로 반환하지 않는다.
@@ -5569,7 +5602,7 @@ components:
               type: string
 
     ActiveAIRepresentativeQuestion:
-      description: 현재 generation의 Cluster 중앙에 있는 AI 대표질문
+      description: 현재 generation에서 Cluster를 대표하는 AI 대표질문
       allOf:
         - $ref: "#/components/schemas/AIRepresentativeQuestion"
         - type: object
@@ -8404,7 +8437,7 @@ x-contract-notes:
     membership_public_discriminator:
       property: source_kind
       values: [STUDENT_QUESTION, AI_REPRESENTATIVE]
-    tbd: similarity threshold, model, prompt, quality score, retry backoff and maximum attempts, post-completion text Answer rebuild policy, zero-input FINAL Job and generation semantics, cursor expiry or restart during generation replacement, preload page count, and large mind-map layout
+    tbd: similarity threshold, model, prompt, quality score, retry backoff and maximum attempts, post-completion text Answer rebuild policy, zero-input FINAL Job and generation semantics, cursor expiry or restart during generation replacement, preload page count, and large Cluster and member list loading
   answer_organization:
     trigger: completed VOICE Answers expose WAITING_SOURCE without a Job during PROCESSING; after source selection SESSION_POSTPROCESSING creates one SHARED blocking ANSWER_ORGANIZATION Job for each
     source: freeze successful HQ mapped range when available, otherwise the immutable original LIVE range

@@ -19,7 +19,7 @@ import { courseKeys } from '../courses/queries'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
 import { purgeLivePersonalAiClientState } from '../personal-ai/client-state'
-import { QuestionMindmap } from '../questions/QuestionMindmap'
+import { QuestionClusterList } from '../questions/QuestionClusterList'
 import { QuestionPanel } from '../questions/QuestionPanel'
 import type { RealtimeConnectionState, RealtimeEvent } from '../realtime/client'
 import { useSessionRealtime } from '../realtime/useSessionRealtime'
@@ -465,8 +465,8 @@ function LiveClassRoom({
             answerCapturePending={answerControlsBlocked}
           />
         </div>
-        <div className="live-mindmap-workspace">
-          <QuestionMindmap
+        <div className="live-cluster-list-workspace">
+          <QuestionClusterList
             sessionId={session.id}
             onStartVoiceAnswer={
               professor && onStartVoiceAnswer

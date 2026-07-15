@@ -1008,7 +1008,7 @@ export interface paths {
         };
         /**
          * AI 대표질문 단건 조회
-         * @description 현재 Cluster 중앙 대표질문과 Answer target으로 보존된 과거 대표질문을
+         * @description 현재 Cluster 대표질문과 Answer target으로 보존된 과거 대표질문을
          *     해당 Course 멤버가 불투명 ID로 조회한다. generation 배열 위치나
          *     pagination cursor에 의존하지 않는 Evidence 경로다. 교체 또는 PRESERVED
          *     Answer 취소로 폐기된 대표질문은 Evidence provenance용 내부 DISCARDED
@@ -1040,7 +1040,7 @@ export interface paths {
         };
         /**
          * 현재 또는 최종 질문 Cluster 목록
-         * @description Course 멤버가 마인드맵의 중앙 노드인 immutable AI 대표질문과
+         * @description Course 멤버가 질문 목록의 대표 항목인 immutable AI 대표질문과
          *     Cluster 메타데이터를 조회한다. Cluster는 ordinal ASC, id ASC로 정렬한다.
          *     응답의 clustering_state는 requested·applied watermark, active Job과 마지막
          *     Job ID·attempt·status를 포함한다. scope=FINAL은 후처리에서 전체 input을
@@ -1682,6 +1682,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{session_id}/recording/abandon-upload": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 LectureSession ID */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 로컬 녹음 원본 없음 확정
+         * @description 최초 audio publisher인 PROFESSOR의 브라우저에 업로드할 수 있는 로컬 원본이 없을 때
+         *     PROCESSING/UPLOAD_PENDING Recording을 FAILED terminal 상태로 전환한다. active upload가
+         *     있으면 거부하며, 후처리는 finalized LIVE Transcript를 fallback 입력으로 즉시 계속한다.
+         */
+        post: operations["abandonSessionRecordingUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{session_id}/recording/uploads": {
         parameters: {
             query?: never;
@@ -1922,7 +1950,7 @@ export interface components {
         /** @enum {string} */
         QuestionClusteringMode: "LIVE_INCREMENTAL" | "FINAL";
         /**
-         * @description ACTIVE는 현재 Cluster 중앙, PRESERVED는 Answer 때문에 보존된 child.
+         * @description ACTIVE는 현재 Cluster 대표, PRESERVED는 Answer 때문에 보존된 child.
          *     Evidence provenance만 유지하는 내부 DISCARDED tombstone은 이 공개 enum과
          *     대표질문 응답에 절대 노출하지 않는다.
          * @enum {string}
@@ -2630,7 +2658,7 @@ export interface components {
             next_cursor: string | null;
         };
         /**
-         * @description AI가 Cluster 중앙 노드로 생성한 immutable 질문. 대표 문구가 바뀌면
+         * @description AI가 Cluster 대표 노드로 생성한 immutable 질문. 대표 문구가 바뀌면
          *     기존 행을 수정하지 않고 새 행을 생성한다. CAPTURING 또는 완료 Answer가 있는
          *     과거 대표질문은 lifecycle_status=PRESERVED인 Cluster child로 계속 노출한다.
          *     폐기된 미답변 대표질문의 내부 DISCARDED tombstone은 이 스키마로 반환하지 않는다.
@@ -2663,7 +2691,7 @@ export interface components {
             status?: "SELECTED" | "ANSWERED";
             answer_id?: string;
         });
-        /** @description 현재 generation의 Cluster 중앙에 있는 AI 대표질문 */
+        /** @description 현재 generation에서 Cluster를 대표하는 AI 대표질문 */
         ActiveAIRepresentativeQuestion: components["schemas"]["AIRepresentativeQuestion"] & {
             /** @constant */
             lifecycle_status?: "ACTIVE";
@@ -7322,6 +7350,38 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    abandonSessionRecordingUpload: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 클라이언트가 선택적으로 지정하는 요청 추적 ID. 형식이 맞지 않으면 서버가 새 ID로 교체한다. */
+                "X-Request-ID"?: components["parameters"]["RequestId"];
+            };
+            path: {
+                /** @description 불투명 LectureSession ID */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 원본 없음이 확정된 Session 녹음 메타데이터 */
+            200: {
+                headers: {
+                    "X-Request-ID": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRecording"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["RecordingNotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     createRecordingUpload: {

@@ -57,6 +57,10 @@ VM에는 build 도구 외에 `curl`, `git`, `flock`, `tar`, PostgreSQL client의
 `recording_transcription`은 Faster-Whisper 운영 설정과 GPU 경계를 확인한 뒤 `GOAL_SERVICES`와
 sudoers 양쪽에 추가한다. Ollama와 PostgreSQL 자체는 application 배포 때 재시작하지 않는다.
 
+Faster-Whisper GPU Worker는 CUDA 12 cuBLAS와 cuDNN 9을 함께 로드한다. cuDNN은
+backend 가상환경의 `nvidia-cudnn-cu12` package에서, cuBLAS는 KCloud Ollama CUDA 12
+runtime에서 공급하며 `goal-worker@.service`의 `LD_LIBRARY_PATH`를 유지한다.
+
 ## 운영 확인
 
 ```bash

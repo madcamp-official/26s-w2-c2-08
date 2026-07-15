@@ -227,6 +227,38 @@ class RecordingService:
             raise RecordingNotFoundError
         return recording
 
+    async def abandon_local_upload(
+        self,
+        session: AsyncSession,
+        *,
+        session_id: UUID,
+        user_id: UUID,
+        now: datetime,
+    ) -> SessionRecording:
+        """Terminalize the HQ source when the publisher has no usable browser recording."""
+
+        lecture_session, recording = await self._lock_recording_context(
+            session, session_id=session_id, user_id=user_id
+        )
+        if recording.publisher_user_id != user_id:
+            raise RecordingPublisherRequiredError
+        if lecture_session.status != "PROCESSING":
+            raise RecordingStateConflictError
+        if recording.status == "FAILED":
+            return recording
+        if recording.status != "UPLOAD_PENDING":
+            raise RecordingStateConflictError
+        if await self.repository.lock_active_upload(session, recording_id=recording.id):
+            raise RecordingUploadConflictError
+
+        recording.status = "FAILED"
+        recording.failed_at = now
+        recording.live_audio_lease_expires_at = None
+        recording.version += 1
+        await session.flush()
+        await self._emit_recording_updated(session, recording)
+        return recording
+
     async def create_upload(
         self,
         session: AsyncSession,

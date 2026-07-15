@@ -111,7 +111,7 @@
         <a href="#profSummaryTitle">요약</a>
         <a href="#profTranscriptTitle">Transcript</a>
         <a href="#profQuestionsTitle">질문</a>
-        <a href="#profClustersTitle">마인드맵</a>
+        <a href="#profClustersTitle">질문 목록</a>
         <a href="#profAnswersTitle">답변</a>
         <a href="#profJobsTitle">작업 상태</a>
         <a href="#profReviewTitle">복습 AI</a>
@@ -815,7 +815,7 @@
               >
                 <div class="record-section__heading">
                   <div>
-                    <h2 id="profClustersTitle">최종 질문 마인드맵</h2>
+                    <h2 id="profClustersTitle">최종 질문 목록</h2>
                     <p>is_final=true · ordinal ASC, id ASC</p>
                   </div>
                   <span class="record-region-status" data-cluster-status>
@@ -839,17 +839,17 @@
                       aria-label="Cluster 1 / 4"
                     >
                       <div data-page-scope="cluster-children">
-                        <div class="record-cluster-map">
-                          <div class="record-cluster-map__center">
+                        <div class="record-cluster-detail">
+                          <div class="record-cluster-detail__representative">
                             <span class="badge"
-                              >AI 대표질문 · 중앙 ·
+                              >AI 대표질문 · Cluster 대표 ·
                               created_in_generation=7</span
                             >
                             <h3>음수 가중치와 최단 경로는 어떤 관계인가요?</h3>
                           </div>
                           <ul
-                            class="record-cluster-map__branches"
-                            aria-label="대표질문의 하위 질문"
+                            class="record-cluster-detail__members"
+                            aria-label="Cluster에 포함된 질문 목록"
                           >
                             <li>
                               <small>source_kind=STUDENT_QUESTION</small
@@ -898,18 +898,19 @@
                       aria-label="Cluster 2 / 4"
                       hidden
                     >
-                      <div class="record-cluster-map">
-                        <div class="record-cluster-map__center">
+                      <div class="record-cluster-detail">
+                        <div class="record-cluster-detail__representative">
                           <span class="badge"
-                            >AI 대표질문 · 중앙 · created_in_generation=7</span
+                            >AI 대표질문 · Cluster 대표 ·
+                            created_in_generation=7</span
                           >
                           <h3>
                             우선순위 큐 구현에 따라 성능은 어떻게 달라지나요?
                           </h3>
                         </div>
                         <ul
-                          class="record-cluster-map__branches"
-                          aria-label="대표질문의 하위 질문"
+                          class="record-cluster-detail__members"
+                          aria-label="Cluster에 포함된 질문 목록"
                         >
                           <li>
                             <small>source_kind=STUDENT_QUESTION</small><br />힙
@@ -930,18 +931,19 @@
                       aria-label="Cluster 3 / 4"
                       hidden
                     >
-                      <div class="record-cluster-map">
-                        <div class="record-cluster-map__center">
+                      <div class="record-cluster-detail">
+                        <div class="record-cluster-detail__representative">
                           <span class="badge"
-                            >AI 대표질문 · 중앙 · created_in_generation=7</span
+                            >AI 대표질문 · Cluster 대표 ·
+                            created_in_generation=7</span
                           >
                           <h3>
                             방향·무방향 그래프의 경로 탐색은 어떻게 다른가요?
                           </h3>
                         </div>
                         <ul
-                          class="record-cluster-map__branches"
-                          aria-label="대표질문의 하위 질문"
+                          class="record-cluster-detail__members"
+                          aria-label="Cluster에 포함된 질문 목록"
                         >
                           <li>
                             <small>source_kind=STUDENT_QUESTION</small
@@ -958,13 +960,13 @@
                       aria-label="Cluster 4 / 4 · 기타 질문"
                       hidden
                     >
-                      <div class="record-cluster-map">
-                        <div class="record-cluster-map__center">
+                      <div class="record-cluster-detail">
+                        <div class="record-cluster-detail__representative">
                           <span class="badge">fallback Cluster · 중앙</span>
                           <h3>기타 질문</h3>
                         </div>
                         <ul
-                          class="record-cluster-map__branches"
+                          class="record-cluster-detail__members"
                           aria-label="기타 질문 Cluster의 하위 질문"
                         >
                           <li>

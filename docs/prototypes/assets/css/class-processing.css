@@ -250,7 +250,7 @@ body {
   box-shadow: 0 0 0 4px rgb(37 99 235 / 14%);
 }
 
-.record-cluster-map__branches li {
+.record-cluster-detail__members li {
   border-left-color: rgb(37 99 235 / 35%);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--color-surface-soft);

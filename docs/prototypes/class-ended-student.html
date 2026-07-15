@@ -97,7 +97,7 @@
         <a href="#studentSummaryTitle">요약</a>
         <a href="#studentTranscriptTitle">Transcript</a>
         <a href="#studentQuestionsTitle">질문</a>
-        <a href="#studentClustersTitle">마인드맵</a>
+        <a href="#studentClustersTitle">질문 목록</a>
         <a href="#studentAnswersTitle">답변</a>
         <a href="#studentJobsTitle">작업 상태</a>
         <a href="#studentReviewTitle">복습 AI</a>
@@ -694,7 +694,7 @@
               >
                 <div class="record-section__heading">
                   <div>
-                    <h2 id="studentClustersTitle">최종 질문 마인드맵</h2>
+                    <h2 id="studentClustersTitle">최종 질문 목록</h2>
                     <p>is_final=true · ordinal ASC, id ASC</p>
                   </div>
                   <span class="record-region-status" data-cluster-status>
@@ -718,10 +718,10 @@
                       aria-label="Cluster 1 / 3"
                     >
                       <div data-page-scope="cluster-children">
-                        <div class="record-cluster-map">
-                          <div class="record-cluster-map__center">
+                        <div class="record-cluster-detail">
+                          <div class="record-cluster-detail__representative">
                             <span class="badge"
-                              >AI 대표질문 · 중앙 ·
+                              >AI 대표질문 · Cluster 대표 ·
                               created_in_generation=5</span
                             >
                             <h3>
@@ -729,8 +729,8 @@
                             </h3>
                           </div>
                           <ul
-                            class="record-cluster-map__branches"
-                            aria-label="대표질문의 하위 질문"
+                            class="record-cluster-detail__members"
+                            aria-label="Cluster에 포함된 질문 목록"
                           >
                             <li>
                               <small>source_kind=STUDENT_QUESTION</small
@@ -779,16 +779,17 @@
                       aria-label="Cluster 2 / 3"
                       hidden
                     >
-                      <div class="record-cluster-map">
-                        <div class="record-cluster-map__center">
+                      <div class="record-cluster-detail">
+                        <div class="record-cluster-detail__representative">
                           <span class="badge"
-                            >AI 대표질문 · 중앙 · created_in_generation=5</span
+                            >AI 대표질문 · Cluster 대표 ·
+                            created_in_generation=5</span
                           >
                           <h3>합성곱 필터는 무엇을 학습하나요?</h3>
                         </div>
                         <ul
-                          class="record-cluster-map__branches"
-                          aria-label="대표질문의 하위 질문"
+                          class="record-cluster-detail__members"
+                          aria-label="Cluster에 포함된 질문 목록"
                         >
                           <li>
                             <small>source_kind=STUDENT_QUESTION</small
@@ -809,13 +810,13 @@
                       aria-label="Cluster 3 / 3 · 기타 질문"
                       hidden
                     >
-                      <div class="record-cluster-map">
-                        <div class="record-cluster-map__center">
+                      <div class="record-cluster-detail">
+                        <div class="record-cluster-detail__representative">
                           <span class="badge">fallback Cluster · 중앙</span>
                           <h3>기타 질문</h3>
                         </div>
                         <ul
-                          class="record-cluster-map__branches"
+                          class="record-cluster-detail__members"
                           aria-label="기타 질문 Cluster의 하위 질문"
                         >
                           <li>

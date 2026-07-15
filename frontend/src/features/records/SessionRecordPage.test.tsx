@@ -8,11 +8,11 @@ import {
 } from '@testing-library/react'
 import { delay, http, HttpResponse } from 'msw'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ToastProvider } from '../../components/feedback/ToastProvider'
 import { server } from '../../test/server'
-import { seekRecordingPlayback } from './playback'
+import { seekAndPlayRecording, seekRecordingPlayback } from './playback'
 import { SessionRecordPage } from './SessionRecordPage'
 
 const sessionId = '10000000-0000-0000-0000-000000000001'
@@ -203,6 +203,23 @@ describe('SessionRecordPage', () => {
     await seeking
 
     expect(audio.currentTime).toBe(7.1)
+  })
+
+  it('keeps the Transcript position when the browser blocks autoplay', async () => {
+    const audio = document.createElement('audio')
+    Object.defineProperty(audio, 'readyState', {
+      configurable: true,
+      value: HTMLMediaElement.HAVE_METADATA,
+    })
+    Object.defineProperty(audio, 'play', {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(new DOMException('Not allowed')),
+    })
+
+    const result = await seekAndPlayRecording(audio, 12_340)
+
+    expect(result).toBe('positioned')
+    expect(audio.currentTime).toBe(12.34)
   })
 
   it('clears the record shell and redirects when the manifest reports an expired login', async () => {
