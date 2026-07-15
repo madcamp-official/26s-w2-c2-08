@@ -2658,6 +2658,36 @@
   min-height: 54px;
 }
 
+.start-recording-consent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-4);
+  border: 1px solid rgb(46 84 206 / 20%);
+  border-radius: var(--radius-sm);
+  background: var(--color-info-soft);
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.start-recording-consent input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+
+.start-recording-consent span {
+  display: grid;
+  gap: 4px;
+}
+
+.start-recording-consent small {
+  color: var(--color-muted);
+}
+
 .api-map {
   display: grid;
   gap: var(--space-3);

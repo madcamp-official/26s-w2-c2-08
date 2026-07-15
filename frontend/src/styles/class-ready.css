@@ -1,8 +1,7 @@
 .class-create-page,
 .class-ready-page {
   display: grid;
-  width: min(1120px, 100%);
-  margin-inline: auto;
+  width: 100%;
   gap: var(--space-7);
 }
 
@@ -284,6 +283,38 @@
 
 .class-ready-launch__button {
   width: 100%;
+}
+
+.class-ready-recording-consent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 20%, white);
+  border-radius: var(--radius-xs);
+  color: var(--color-ink);
+  background: var(--color-brand-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.class-ready-recording-consent input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--color-brand);
+}
+
+.class-ready-recording-consent span {
+  display: grid;
+  gap: 4px;
+}
+
+.class-ready-recording-consent small {
+  color: var(--color-muted);
+  font-size: 12px;
 }
 
 .class-ready-launch__hint {

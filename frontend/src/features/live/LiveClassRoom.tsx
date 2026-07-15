@@ -296,24 +296,15 @@ function LiveClassRoom({
   return (
     <section className="live-session-page" aria-labelledby="live-session-title">
       <header className="live-session-header">
-        <div className="live-session-header__copy">
-          <div className="live-session-header__topline">
+        <div className="live-session-header__context">
+          <h1 id="live-session-title">{session.title}</h1>
+          <div className="live-session-header__meta">
             <span className="status-chip status-chip--live">LIVE</span>
             <span>{professor ? '교수자 수업 운영' : '학생 수업 참여'}</span>
+            <span>{courseTitle}</span>
+            <span>{session.lecture_date}</span>
+            <span>{formatStartedAt(session.started_at)}</span>
           </div>
-          <p className="eyebrow">{courseTitle}</p>
-          <h1 id="live-session-title">{session.title}</h1>
-          <p>확정 Transcript, 익명 질문과 개인 AI를 한 흐름에서 확인합니다.</p>
-          <dl className="live-session-header__meta">
-            <div>
-              <dt>수업 날짜</dt>
-              <dd>{session.lecture_date}</dd>
-            </div>
-            <div>
-              <dt>시작</dt>
-              <dd>{formatStartedAt(session.started_at)}</dd>
-            </div>
-          </dl>
         </div>
         <div className="live-session-header__actions">
           {professor && onRename && (
@@ -372,38 +363,6 @@ function LiveClassRoom({
         </p>
       </div>
 
-      {professor && (
-        <section
-          className="live-professor-operations"
-          aria-label="교수자 음성 및 녹음 운영"
-        >
-          <div className="panel live-professor-operation">
-            <div>
-              <p className="eyebrow">Live audio</p>
-              <h2>교수자 마이크</h2>
-              <p>실시간 STT 전송 상태이며 로컬 원본 녹음과 독립적입니다.</p>
-            </div>
-            <LiveAudioPublisherControl
-              ref={audioControlRef}
-              sessionId={session.id}
-              onActivityChange={setAudioActive}
-              onMediaStream={(stream, clientStreamId) => {
-                setRecordingStream(stream)
-                setRecordingClientStreamId(clientStreamId)
-              }}
-            />
-          </div>
-          <LocalRecordingPanel
-            ref={recordingControlRef}
-            sessionId={session.id}
-            stream={recordingStream}
-            clientStreamId={recordingClientStreamId}
-            sessionStatus="LIVE"
-            onActivityChange={setRecordingActive}
-          />
-        </section>
-      )}
-
       {professor && captureGate !== 'clear' && (
         <div
           ref={captureAlertRef}
@@ -443,15 +402,50 @@ function LiveClassRoom({
           professor ? 'live-workspace--professor' : 'live-workspace--student'
         }`}
       >
-        <LiveTranscriptPanel
-          transcript={transcript}
-          connectionState={connectionState}
-          loading={timeline.isPending}
-          error={timeline.isError}
-          retrying={timeline.isFetching}
-          onRetry={() => void syncTranscript()}
-        />
-        <div className="live-rail">
+        <div className="live-study-column live-study-column--transcript">
+          {professor && (
+            <section
+              className="live-professor-operations"
+              aria-label="교수자 음성 및 녹음 운영"
+            >
+              <div className="panel live-professor-operation">
+                <div>
+                  <p className="eyebrow">Live audio</p>
+                  <h2>교수자 마이크</h2>
+                  <p>
+                    실시간 STT 전송 상태이며 로컬 원본 녹음과 독립적입니다.
+                  </p>
+                </div>
+                <LiveAudioPublisherControl
+                  ref={audioControlRef}
+                  sessionId={session.id}
+                  onActivityChange={setAudioActive}
+                  onMediaStream={(stream, clientStreamId) => {
+                    setRecordingStream(stream)
+                    setRecordingClientStreamId(clientStreamId)
+                  }}
+                />
+              </div>
+              <LocalRecordingPanel
+                ref={recordingControlRef}
+                sessionId={session.id}
+                stream={recordingStream}
+                clientStreamId={recordingClientStreamId}
+                sessionStatus="LIVE"
+                onActivityChange={setRecordingActive}
+              />
+            </section>
+          )}
+          <LiveTranscriptPanel
+            transcript={transcript}
+            connectionState={connectionState}
+            loading={timeline.isPending}
+            error={timeline.isError}
+            retrying={timeline.isFetching}
+            onRetry={() => void syncTranscript()}
+          />
+        </div>
+        <div className="live-study-column live-study-column--questions">
           <QuestionPanel
             sessionId={session.id}
             student={!professor}
@@ -464,8 +458,6 @@ function LiveClassRoom({
             }
             answerCapturePending={answerControlsBlocked}
           />
-        </div>
-        <div className="live-cluster-list-workspace">
           <QuestionClusterList
             sessionId={session.id}
             onStartVoiceAnswer={
@@ -477,24 +469,24 @@ function LiveClassRoom({
             }
             answerCapturePending={answerControlsBlocked}
           />
-        </div>
-        <div className="live-ai-workspace">
-          <PersonalAiPanel sessionId={session.id} mode="LIVE" />
-        </div>
-        {professor && (
-          <div className="live-professor-support">
+          {professor && (
             <AnswerPanel
               sessionId={session.id}
               professor
               sessionStatus="LIVE"
             />
+          )}
+        </div>
+        <div className="live-study-column live-study-column--ai">
+          <PersonalAiPanel sessionId={session.id} mode="LIVE" />
+          {professor && (
             <MaterialPanel
               sessionId={session.id}
               professor
               sessionStatus="LIVE"
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {professor && onRename && (

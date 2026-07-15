@@ -376,8 +376,7 @@
 .account-page {
   display: grid;
   gap: var(--space-6);
-  width: min(1120px, 100%);
-  margin-inline: auto;
+  width: 100%;
 }
 
 .account-primary-grid {

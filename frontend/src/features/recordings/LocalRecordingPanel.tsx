@@ -70,12 +70,12 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
   ) {
     const recorder = useRef<LocalRecorder | null>(null)
     const stopInitiated = useRef(false)
-    const [consented, setConsented] = useState(false)
     const [state, setState] = useState<RecordingPanelState>('idle')
     const [offset, setOffset] = useState(0)
     const [total, setTotal] = useState(0)
     const [error, setError] = useState<string | null>(null)
     const [recordingClosed, setRecordingClosed] = useState(false)
+    const [recordingMetaReady, setRecordingMetaReady] = useState(false)
     const [recoveryRun, setRecoveryRun] = useState(0)
     const active =
       state === 'recording' ||
@@ -184,8 +184,11 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
 
     useEffect(() => {
       if (sessionStatus !== 'LIVE') return
+      let cancelled = false
+      setRecordingMetaReady(false)
       void getRecordingMeta(sessionId)
         .then((meta) => {
+          if (cancelled) return
           if (meta?.finalized) {
             setRecordingClosed(true)
             return
@@ -195,14 +198,19 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
             setState(panelStateForFailure(meta.failedReason))
             return
           }
-          if (meta && !meta.failedReason) setConsented(true)
+          setRecordingMetaReady(true)
         })
-        .catch(() => setState('storage-failed'))
+        .catch(() => {
+          if (!cancelled) setState('storage-failed')
+        })
+      return () => {
+        cancelled = true
+      }
     }, [sessionId, sessionStatus])
 
     useEffect(() => {
       if (
-        !consented ||
+        !recordingMetaReady ||
         !stream ||
         !clientStreamId ||
         sessionStatus !== 'LIVE' ||
@@ -247,7 +255,13 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
               : 'storage-failed',
           )
         })
-    }, [clientStreamId, consented, sessionId, sessionStatus, stream])
+    }, [
+      clientStreamId,
+      recordingMetaReady,
+      sessionId,
+      sessionStatus,
+      stream,
+    ])
     useEffect(
       () => () => {
         if (recorder.current) {
@@ -360,24 +374,13 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
                                 ? '녹음 upload 재개 시간이 만료되어 이 원본은 다시 업로드할 수 없습니다. 저장된 실시간 Transcript는 유지됩니다.'
                                 : state === 'upload-failed'
                                   ? '네트워크 문제로 녹음 upload가 중단되었습니다. 연결되면 다시 시도하세요.'
-                                  : '수업 원본 녹음을 이 브라우저에 저장할 수 있습니다.'
+                                : '교수자 마이크가 연결되면 수업 원본 녹음을 이 브라우저에 자동 저장합니다.'
     return (
       <section className="live-local-recording" aria-label="수업 원본 녹음">
         <div>
           <strong>수업 원본 녹음</strong>
           <p role="status">{copy}</p>
         </div>
-        {sessionStatus === 'LIVE' && state === 'idle' && !recordingClosed && (
-          <label className="recording-consent">
-            <input
-              type="checkbox"
-              checked={consented}
-              onChange={(event) => setConsented(event.target.checked)}
-            />{' '}
-            녹음 원본을 이 기기에 저장하고 수업 종료 후 업로드하는 데
-            동의합니다.
-          </label>
-        )}
         {sessionStatus === 'PROCESSING' && state === 'upload-failed' && (
           <Button
             variant="secondary"
