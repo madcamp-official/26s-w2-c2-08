@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiError } from '../../api/errors'
 import { RealtimeSessionClient, type WebSocketFactory } from './client'
 
 class FakeWebSocket {
@@ -90,5 +91,24 @@ describe('RealtimeSessionClient', () => {
     await vi.advanceTimersByTimeAsync(1_000)
     expect(requestedCursors).toEqual([null, 'cursor-1', null])
     client.stop()
+  })
+
+  it('reports terminal ticket authorization failures as stopped', async () => {
+    vi.useFakeTimers()
+    const states: string[] = []
+    const client = new RealtimeSessionClient({
+      sessionId: 'session-1',
+      createTicket: async () => {
+        throw new ApiError('접근할 수 없습니다.', { status: 403 })
+      },
+      onEvent: vi.fn(),
+      onResyncRequired: vi.fn(),
+      onConnectionState: (state) => states.push(state),
+    })
+
+    client.start()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(states.at(-1)).toBe('stopped')
   })
 })

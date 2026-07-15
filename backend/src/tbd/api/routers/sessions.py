@@ -37,6 +37,7 @@ from tbd.schemas.sessions import (
     LectureSessionUpdateRequest,
     SessionEndAcceptedResponse,
 )
+from tbd.services.answers import AnswerCaptureActiveError
 from tbd.services.courses import (
     CourseAccessDeniedError,
     CourseNotFoundError,
@@ -145,6 +146,12 @@ def _raise_domain_error(error: Exception) -> None:
             409,
             "MATERIAL_PROCESSING_ACTIVE",
             "처리 중인 강의자료가 있어 class를 시작할 수 없습니다.",
+        ) from error
+    if isinstance(error, AnswerCaptureActiveError):
+        raise ApiError(
+            409,
+            "ANSWER_CAPTURE_ACTIVE",
+            "진행 중인 음성 Answer를 먼저 완료하거나 취소해 주세요.",
         ) from error
     if isinstance(error, SessionStateConflictError):
         raise ApiError(
@@ -467,6 +474,7 @@ async def end_session(
         CourseAccessDeniedError,
         CourseRoleRequiredError,
         SessionStateConflictError,
+        AnswerCaptureActiveError,
     ) as exc:
         _raise_domain_error(exc)
     except IdempotencyKeyReusedError as exc:

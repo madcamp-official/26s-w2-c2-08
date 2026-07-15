@@ -3,6 +3,7 @@ import type { RealtimeEvent } from '../realtime/client'
 
 type Segment = components['schemas']['TranscriptSegment']
 type Gap = components['schemas']['TranscriptGap']
+type Timeline = components['schemas']['TranscriptTimelinePage']
 
 export interface LivePartial {
   utteranceId: string
@@ -16,6 +17,8 @@ export interface LiveTranscriptState {
   segments: Segment[]
   gaps: Gap[]
   partials: Record<string, LivePartial>
+  selectedVersionId: string | null
+  awaitingVersionHydration: boolean
   streamStatus:
     'LISTENING' | 'DEGRADED' | 'FINALIZING' | 'FINALIZED' | 'STOPPED' | null
   resyncing: boolean
@@ -25,13 +28,14 @@ export const initialLiveTranscriptState: LiveTranscriptState = {
   segments: [],
   gaps: [],
   partials: {},
+  selectedVersionId: null,
+  awaitingVersionHydration: false,
   streamStatus: null,
   resyncing: false,
 }
 
 export type LiveTranscriptAction =
-  | { type: 'hydrate'; data: { segments: Segment[]; gaps: Gap[] } }
-  | { type: 'event'; event: RealtimeEvent }
+  { type: 'hydrate'; data: Timeline } | { type: 'event'; event: RealtimeEvent }
 
 function sortedSegments(segments: Segment[]) {
   return [...segments].sort(
@@ -45,15 +49,31 @@ function eventData<T>(event: RealtimeEvent): T {
 
 export function hydrateTranscript(
   state: LiveTranscriptState,
-  data: { segments: Segment[]; gaps: Gap[] },
+  data: Timeline,
 ): LiveTranscriptState {
+  const nextVersionId = data.selected_version.id
+  const versionChanged =
+    state.selectedVersionId !== null &&
+    state.selectedVersionId !== nextVersionId
+  const mergedSegments = versionChanged
+    ? data.segments
+    : Array.from(
+        new Map(
+          [...data.segments, ...state.segments].map((segment) => [
+            segment.id,
+            segment,
+          ]),
+        ).values(),
+      )
   return {
     ...state,
-    segments: sortedSegments(data.segments),
+    segments: sortedSegments(mergedSegments),
     gaps: [...data.gaps].sort(
       (a, b) => a.start_ms - b.start_ms || a.id.localeCompare(b.id),
     ),
-    partials: {},
+    partials: versionChanged ? {} : state.partials,
+    selectedVersionId: nextVersionId,
+    awaitingVersionHydration: false,
     resyncing: false,
   }
 }
@@ -93,7 +113,13 @@ export function mergeLiveTranscriptEvent(
   }
   if (event.type === 'transcript.final') {
     const data = eventData<{ utterance_id: string; segment: Segment }>(event)
-    if (!data.segment?.id) return state
+    if (!data.segment?.id || state.awaitingVersionHydration) return state
+    if (
+      state.selectedVersionId !== null &&
+      data.segment.transcript_version_id !== state.selectedVersionId
+    ) {
+      return state
+    }
     const existing = state.segments.find((item) => item.id === data.segment.id)
     const segments = existing
       ? state.segments.map((item) =>
@@ -102,7 +128,13 @@ export function mergeLiveTranscriptEvent(
       : [...state.segments, data.segment]
     const partials = { ...state.partials }
     delete partials[data.utterance_id]
-    return { ...state, segments: sortedSegments(segments), partials }
+    return {
+      ...state,
+      segments: sortedSegments(segments),
+      partials,
+      selectedVersionId:
+        data.segment.transcript_version_id ?? state.selectedVersionId,
+    }
   }
   if (event.type === 'transcript.status') {
     const data = eventData<{
@@ -111,7 +143,12 @@ export function mergeLiveTranscriptEvent(
     return { ...state, streamStatus: data.stream_status ?? state.streamStatus }
   }
   if (event.type === 'transcript.version.updated') {
-    return { ...state, partials: {}, resyncing: true }
+    return {
+      ...state,
+      partials: {},
+      awaitingVersionHydration: true,
+      resyncing: true,
+    }
   }
   return state
 }

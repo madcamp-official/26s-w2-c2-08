@@ -11,6 +11,7 @@ export type QuestionDraftResponse =
 export type QuestionReactionState =
   components['schemas']['QuestionReactionState']
 export type QuestionSort = components['schemas']['QuestionSort']
+export type QuestionStatus = components['schemas']['QuestionStatus']
 export type QuestionClusterListResponse =
   components['schemas']['QuestionClusterListResponse']
 export type QuestionClusterMemberListResponse =
@@ -19,6 +20,7 @@ export type QuestionClusterMemberListResponse =
 interface ListQuestionsInput {
   sessionId: string
   sort: QuestionSort
+  status?: QuestionStatus
   cursor?: string | null
   limit?: number
   signal?: AbortSignal
@@ -27,6 +29,7 @@ interface ListQuestionsInput {
 export async function listSessionQuestions({
   sessionId,
   sort,
+  status,
   cursor,
   limit = 20,
   signal,
@@ -37,7 +40,7 @@ export async function listSessionQuestions({
       {
         params: {
           path: { session_id: sessionId },
-          query: { status: 'OPEN', sort, cursor: cursor ?? undefined, limit },
+          query: { status, sort, cursor: cursor ?? undefined, limit },
         },
         signal,
       },

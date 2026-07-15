@@ -7,6 +7,7 @@ export type LectureSummary = components['schemas']['LectureSummary']
 export type SummaryList = components['schemas']['SummaryListResponse']
 export type Chat = components['schemas']['Chat']
 export type ChatMessage = components['schemas']['ChatMessage']
+export type ChatMessageList = components['schemas']['ChatMessageListResponse']
 
 function headers(key: string) {
   return { 'Idempotency-Key': key }

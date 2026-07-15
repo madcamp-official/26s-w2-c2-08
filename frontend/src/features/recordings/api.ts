@@ -57,13 +57,14 @@ export async function deleteSessionRecording(
 export function createRecordingUpload(
   sessionId: string,
   input: components['schemas']['RecordingUploadCreateRequest'],
+  idempotencyKey: string,
 ) {
   return result(
     () =>
       apiClient.POST('/api/v1/sessions/{session_id}/recording/uploads', {
         params: {
           path: { session_id: sessionId },
-          header: headers(crypto.randomUUID()),
+          header: headers(idempotencyKey),
         },
         body: input,
       }),
@@ -104,13 +105,17 @@ export async function uploadRecordingChunk(
   return (await response.json()) as RecordingUpload
 }
 
-export function completeRecordingUpload(uploadId: string, sha256: string) {
+export function completeRecordingUpload(
+  uploadId: string,
+  sha256: string,
+  idempotencyKey: string,
+) {
   return result(
     () =>
       apiClient.POST('/api/v1/recording-uploads/{upload_id}/complete', {
         params: {
           path: { upload_id: uploadId },
-          header: headers(crypto.randomUUID()),
+          header: headers(idempotencyKey),
         },
         body: { sha256 },
       }),

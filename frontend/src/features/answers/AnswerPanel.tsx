@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ApiError } from '../../api/errors'
 import { StatePanel } from '../../components/feedback/StatePanel'
@@ -11,12 +11,11 @@ import {
   cancelVoiceAnswer,
   completeVoiceAnswer,
   createTextAnswer,
-  listSessionAnswers,
   updateAnswerText,
   withdrawAnswerText,
   type Answer,
 } from './api'
-import { answerKeys } from './queries'
+import { answerKeys, sessionAnswersQueryOptions } from './queries'
 
 const MAX_ANSWER_TEXT_LENGTH = 2000
 
@@ -59,14 +58,20 @@ export function AnswerPanel({
   const [selectedQuestionId, setSelectedQuestionId] = useState('')
   const [newText, setNewText] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const answers = useQuery({
-    queryKey: answerKeys.session(sessionId),
-    queryFn: ({ signal }) => listSessionAnswers(sessionId, signal),
-  })
+  const completionKeys = useRef<Record<string, string>>({})
+  const cancellationKeys = useRef<Record<string, string>>({})
+  const createTextKey = useRef<{ signature: string; key: string } | null>(null)
+  const withdrawalKeys = useRef<Record<string, string>>({})
+  const answers = useQuery(sessionAnswersQueryOptions(sessionId))
   const unansweredQuestions = useQuery({
-    queryKey: questionKeys.list(sessionId, 'RECENT'),
+    queryKey: questionKeys.list(sessionId, 'RECENT', 'OPEN'),
     queryFn: ({ signal }) =>
-      listSessionQuestions({ sessionId, sort: 'RECENT', signal }),
+      listSessionQuestions({
+        sessionId,
+        sort: 'RECENT',
+        status: 'OPEN',
+        signal,
+      }),
     enabled: professor && sessionStatus === 'COMPLETED',
   })
 
@@ -81,8 +86,12 @@ export function AnswerPanel({
 
   const complete = useMutation({
     mutationFn: (answerId: string) =>
-      completeVoiceAnswer(answerId, crypto.randomUUID()),
-    onSuccess: () => {
+      completeVoiceAnswer(
+        answerId,
+        (completionKeys.current[answerId] ??= crypto.randomUUID()),
+      ),
+    onSuccess: (_, answerId) => {
+      delete completionKeys.current[answerId]
       setErrorMessage(null)
       refresh()
       showToast({
@@ -94,8 +103,12 @@ export function AnswerPanel({
   })
   const cancel = useMutation({
     mutationFn: (answerId: string) =>
-      cancelVoiceAnswer(answerId, crypto.randomUUID()),
-    onSuccess: () => {
+      cancelVoiceAnswer(
+        answerId,
+        (cancellationKeys.current[answerId] ??= crypto.randomUUID()),
+      ),
+    onSuccess: (_, answerId) => {
+      delete cancellationKeys.current[answerId]
       setErrorMessage(null)
       refresh()
       showToast({
@@ -106,14 +119,23 @@ export function AnswerPanel({
     onError: (error) => setErrorMessage(answerErrorMessage(error)),
   })
   const createText = useMutation({
-    mutationFn: () =>
-      createTextAnswer(
+    mutationFn: () => {
+      const signature = JSON.stringify([
+        selectedQuestionId,
+        newText.normalize('NFC'),
+      ])
+      if (createTextKey.current?.signature !== signature) {
+        createTextKey.current = { signature, key: crypto.randomUUID() }
+      }
+      return createTextAnswer(
         sessionId,
         selectedQuestionId,
         newText,
-        crypto.randomUUID(),
-      ),
+        createTextKey.current.key,
+      )
+    },
     onSuccess: () => {
+      createTextKey.current = null
       setNewText('')
       setSelectedQuestionId('')
       setErrorMessage(null)
@@ -138,8 +160,12 @@ export function AnswerPanel({
   })
   const withdraw = useMutation({
     mutationFn: (answerId: string) =>
-      withdrawAnswerText(answerId, crypto.randomUUID()),
-    onSuccess: () => {
+      withdrawAnswerText(
+        answerId,
+        (withdrawalKeys.current[answerId] ??= crypto.randomUUID()),
+      ),
+    onSuccess: (_, answerId) => {
+      delete withdrawalKeys.current[answerId]
       setEditing(null)
       setDraft('')
       setErrorMessage(null)
@@ -227,7 +253,6 @@ export function AnswerPanel({
           </select>
           <textarea
             value={newText}
-            maxLength={MAX_ANSWER_TEXT_LENGTH + 1}
             onChange={(event) => setNewText(event.target.value)}
             placeholder="수업 후 보충할 설명을 작성하세요."
             rows={4}
@@ -332,7 +357,6 @@ export function AnswerPanel({
           <textarea
             id="answer-edit-text"
             value={draft}
-            maxLength={MAX_ANSWER_TEXT_LENGTH + 1}
             onChange={(event) => setDraft(event.target.value)}
             rows={5}
           />

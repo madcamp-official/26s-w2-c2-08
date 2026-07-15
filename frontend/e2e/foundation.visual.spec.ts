@@ -8,8 +8,11 @@ import {
 import {
   professorCourse,
   professorDraftCourse,
+  liveProfessorSession,
+  liveStudentSession,
   readySession,
   studentCourse,
+  studentLiveCourse,
 } from './fixtures/entities'
 import {
   collectRuntimeErrors,
@@ -26,6 +29,7 @@ interface FoundationScenario {
   heading: string
   path: string
   requiredRequests: string[]
+  realtime?: boolean
   screenId: string
 }
 
@@ -127,6 +131,47 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/courses/${professorDraftCourse.id}`,
     ],
   },
+  {
+    screenId: 'LIVE_CLASS_PAGE_PROF',
+    path: `/sessions/${liveProfessorSession.id}`,
+    auth: 'signed-in',
+    heading: liveProfessorSession.title,
+    checkpoint: { level: 2, name: '실시간 강의 내용' },
+    realtime: true,
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/sessions/${liveProfessorSession.id}`,
+      `GET /api/v1/courses/${professorCourse.id}`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/transcript?limit=100`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/answers?limit=100`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/questions?sort=POPULAR&limit=20`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/question-clusters?scope=CURRENT&limit=20`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/summaries?summary_type=LIVE&limit=20`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/chats?limit=20`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/materials?limit=100`,
+      `GET /api/v1/sessions/${liveProfessorSession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
+      'POST /api/v1/realtime-tickets',
+    ],
+  },
+  {
+    screenId: 'LIVE_CLASS_PAGE_STUD',
+    path: `/sessions/${liveStudentSession.id}`,
+    auth: 'signed-in',
+    heading: liveStudentSession.title,
+    checkpoint: { level: 2, name: '실시간 강의 내용' },
+    realtime: true,
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/sessions/${liveStudentSession.id}`,
+      `GET /api/v1/courses/${studentLiveCourse.id}`,
+      `GET /api/v1/sessions/${liveStudentSession.id}/transcript?limit=100`,
+      `GET /api/v1/sessions/${liveStudentSession.id}/questions?sort=POPULAR&limit=20`,
+      `GET /api/v1/sessions/${liveStudentSession.id}/question-clusters?scope=CURRENT&limit=20`,
+      `GET /api/v1/sessions/${liveStudentSession.id}/summaries?summary_type=LIVE&limit=20`,
+      `GET /api/v1/sessions/${liveStudentSession.id}/chats?limit=20`,
+      'POST /api/v1/realtime-tickets',
+    ],
+  },
 ]
 
 for (const scenario of scenarios) {
@@ -137,6 +182,7 @@ for (const scenario of scenarios) {
       page,
       scenario.auth === 'signed-out' ? [/401 \(Unauthorized\)/] : [],
     )
+    if (scenario.realtime) await installRealtimeSocketFixture(page)
     const api = await installApiFixture(page, scenario.auth)
 
     await page.goto(scenario.path)

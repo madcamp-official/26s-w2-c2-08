@@ -604,8 +604,10 @@ export interface paths {
          *     새 audio 입력과 resume을 즉시 차단한다. 첫 audio.start에서 생성된 Recording은
          *     UPLOAD_PENDING으로 전이한다. 같은 요청의 반복 호출은 새 작업을 중복 생성하지 않고
          *     기존 Session, Recording과 작업을 반환해야 한다. 정상 흐름도 종료 확인 즉시 이 API를
-         *     호출하며 audio.stop 전송과 로컬 녹음 마감은 best-effort로 병행한다. audio.stopped와
-         *     drain 완료는 이 API의 선행조건이 아니고 서버는 수신분만 별도로 drain한다. CAPTURING
+         *     호출하며 audio.stop 전송과 MediaRecorder fragment flush·pause를 best-effort로
+         *     병행한다. 202 또는 REST 조정으로 종료가 확인된 뒤에만 로컬 녹음을
+         *     finalize하고, LIVE면 같은 instance를 resume한다. audio.stopped·로컬 finalize·drain
+         *     완료는 이 API의 선행조건이 아니고 서버는 수신분만 별도로 drain한다. CAPTURING
          *     Answer가 있으면 409로 거부한다. Recording upload complete 전에는 HQ STT를 시작하지 않는다.
          *     active·retry-reserved LIVE clustering 실행은 Session·attempt·run-token fence로
          *     정지하고 느린 결과 commit과 LIVE 재실행을 막는다. 같은 transaction의 FINAL
@@ -1695,9 +1697,12 @@ export interface paths {
         put?: never;
         /**
          * 녹음 resumable upload 초기화
-         * @description 첫 publisher와 같은 client_stream_id를 사용하는 Course PROFESSOR가 PROCESSING
-         *     Session의 UPLOAD_PENDING Recording에 active upload를 하나 만든다. 허용 content type은
-         *     audio/webm과 audio/mp4이고 total_bytes는 100,000,000 이하이며 expiry는 생성부터 24시간이다.
+         * @description 첫 publisher와 같은 client_stream_id를 사용하는 Course PROFESSOR가 정상 흐름의
+         *     PROCESSING/UPLOAD_PENDING Recording 또는 만료·실패한 같은 논리 녹음에 active upload를
+         *     하나 만든다. watchdog 뒤 COMPLETED Session에서도 UPLOAD_PENDING, UPLOADING 또는 FAILED
+         *     Recording 복구를 허용하되 Session 상태를 되돌리지 않는다. CAPTURING과 UPLOADED는 거부한다.
+         *     허용 content type은 audio/webm과 audio/mp4이고 total_bytes는 100,000,000 이하이며
+         *     expiry는 생성부터 24시간이다.
          */
         post: operations["createRecordingUpload"];
         delete?: never;
@@ -3816,7 +3821,7 @@ export interface components {
                  * @constant
                  */
                 chunk_duration_ms: 500;
-                /** @description 재연결 시 마지막 audio.ack.received_through. 신규 stream이면 null */
+                /** @description 재연결 시 가장 최근 audio.ack.received_through 또는 정상 audio.stopped.last_received_sequence. 신규 stream과 첫 frame 전이면 null */
                 resume_from_sequence: number | null;
             };
         };
@@ -3848,6 +3853,7 @@ export interface components {
             max_chunk_bytes: number;
             /** @description 현재 runtime은 application PCM 대기열 없이 한 frame씩 handoff한다. */
             max_in_flight: number;
+            /** @description 정상 stop까지 영속된 resume watermark. 첫 frame 전이면 null */
             last_received_sequence: number | null;
             last_processed_sequence: number | null;
         };

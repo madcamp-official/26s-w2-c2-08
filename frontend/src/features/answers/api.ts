@@ -11,16 +11,34 @@ export async function listSessionAnswers(
   signal?: AbortSignal,
 ): Promise<AnswerListResponse> {
   try {
-    const { data, error, response } = await apiClient.GET(
-      '/api/v1/sessions/{session_id}/answers',
-      {
-        params: { path: { session_id: sessionId }, query: { limit: 100 } },
-        signal,
-      },
-    )
-    if (error) throw apiErrorFromResponse(response, error)
-    if (!data) throw new Error('Answer 목록 응답이 비어 있습니다.')
-    return data as unknown as AnswerListResponse
+    const items: Answer[] = []
+    const seenCursors = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const result = await apiClient.GET(
+        '/api/v1/sessions/{session_id}/answers',
+        {
+          params: {
+            path: { session_id: sessionId },
+            query: { cursor: cursor ?? undefined, limit: 100 },
+          },
+          signal,
+        },
+      )
+      const data = result.data as unknown as AnswerListResponse | undefined
+      const { error, response } = result
+      if (error) throw apiErrorFromResponse(response, error)
+      if (!data) throw new Error('Answer 목록 응답이 비어 있습니다.')
+      items.push(...(data.items as unknown as Answer[]))
+      cursor = data.next_cursor
+      if (cursor) {
+        if (seenCursors.has(cursor)) {
+          throw new Error('Answer cursor가 반복되어 복구를 중단했습니다.')
+        }
+        seenCursors.add(cursor)
+      }
+    } while (cursor)
+    return { items, next_cursor: null }
   } catch (error) {
     throw normalizeApiError(error)
   }

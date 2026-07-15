@@ -85,6 +85,98 @@ function authenticate() {
   server.use(http.get('*/api/v1/me', () => HttpResponse.json(user)))
 }
 
+function liveSessionFor(courseId: string) {
+  return {
+    ...readySession,
+    course_id: courseId,
+    title: '그래프 탐색과 최단 경로',
+    status: 'LIVE' as const,
+    version: 2,
+    started_at: '2026-07-15T06:00:00Z',
+    updated_at: '2026-07-15T06:00:00Z',
+  }
+}
+
+function installLiveRouteHandlers(
+  course: typeof professorCourse | typeof studentCourse,
+  session: ReturnType<typeof liveSessionFor>,
+  onProfessorOnlyRequest?: () => void,
+) {
+  const version = {
+    id: '70000000-0000-0000-0000-000000000001',
+    session_id: session.id,
+    source: 'LIVE',
+    status: 'LIVE',
+    version: 1,
+    last_sequence: 0,
+    is_canonical: true,
+    recording_id: null,
+    created_by_job_id: null,
+    created_by_job_attempt: null,
+    finalized_at: null,
+    failed_at: null,
+    created_at: '2026-07-15T06:00:00Z',
+    updated_at: '2026-07-15T06:00:00Z',
+  }
+  server.use(
+    http.get('*/api/v1/sessions/:sessionId', () => HttpResponse.json(session)),
+    http.get('*/api/v1/courses/:courseId', () => HttpResponse.json(course)),
+    http.get('*/api/v1/sessions/:sessionId/transcript', () =>
+      HttpResponse.json({
+        transcript: {
+          session_id: session.id,
+          status: 'LIVE',
+          current_version: version,
+          canonical_version_id: version.id,
+          canonical_version: version,
+          updated_at: '2026-07-15T06:00:00Z',
+        },
+        selected_version: version,
+        segments: [],
+        gaps: [],
+        next_cursor: null,
+      }),
+    ),
+    http.get('*/api/v1/sessions/:sessionId/questions', () =>
+      HttpResponse.json({ items: [], next_cursor: null }),
+    ),
+    http.get('*/api/v1/sessions/:sessionId/question-clusters', () =>
+      HttpResponse.json({
+        scope: 'CURRENT',
+        generation: null,
+        clustering_state: {
+          pending: false,
+          requested_through_sequence: 0,
+          applied_through_sequence: 0,
+          current_revision: 0,
+          current_generation: null,
+          final_generation: null,
+          active_job_id: null,
+          retry_job_id: null,
+          last_job: null,
+        },
+        items: [],
+        next_cursor: null,
+      }),
+    ),
+    http.get('*/api/v1/sessions/:sessionId/chats', () =>
+      HttpResponse.json({ items: [], next_cursor: null }),
+    ),
+    http.get('*/api/v1/sessions/:sessionId/answers', () => {
+      onProfessorOnlyRequest?.()
+      return HttpResponse.json({ items: [], next_cursor: null })
+    }),
+    http.get('*/api/v1/sessions/:sessionId/materials', () => {
+      onProfessorOnlyRequest?.()
+      return HttpResponse.json({ items: [], next_cursor: null })
+    }),
+    http.get('*/api/v1/sessions/:sessionId/jobs', () => {
+      onProfessorOnlyRequest?.()
+      return HttpResponse.json({ items: [], next_cursor: null })
+    }),
+  )
+}
+
 describe('Course role flows', () => {
   it('shows independent professor and student Course lists on the dashboard', async () => {
     authenticate()
@@ -1077,17 +1169,416 @@ describe('Course role flows', () => {
       }),
     ).toBeInTheDocument()
     expect(
-      await screen.findByText(
-        '실시간 수업이 진행 중입니다. 종료하면 수업 기록 정리가 시작됩니다.',
-        undefined,
-        { timeout: 7_000 },
-      ),
+      await screen.findByText('학생 수업 참여', undefined, { timeout: 7_000 }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: studentLiveSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '수업 종료' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: '교수자 마이크 전송' }),
+    ).not.toBeInTheDocument()
     expect(sessionRequests).toBeGreaterThanOrEqual(2)
     expect(
       screen.queryByRole('button', { name: '수업 시작' }),
     ).not.toBeInTheDocument()
   }, 8_000)
+
+  it('renders the professor LIVE production view with professor-only operations', async () => {
+    authenticate()
+    const liveSession = liveSessionFor(professorCourse.id)
+    installLiveRouteHandlers(professorCourse, liveSession)
+
+    renderAt(`/sessions/${liveSession.id}`)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: liveSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('교수자 수업 운영')).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: '교수자 마이크 전송' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: '수업 원본 녹음' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: '수업 종료' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '실시간 강의 내용' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '익명 질문' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '질문 답변' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '수업 따라잡기 AI' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '강의자료' }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders the student LIVE production view without professor operations or requests', async () => {
+    authenticate()
+    const liveSession = liveSessionFor(studentCourse.id)
+    let professorOnlyRequests = 0
+    installLiveRouteHandlers(studentCourse, liveSession, () => {
+      professorOnlyRequests += 1
+    })
+
+    renderAt(`/sessions/${liveSession.id}`)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: liveSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('학생 수업 참여')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '실시간 강의 내용' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '익명 질문' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '수업 따라잡기 AI' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('교수자 수업 운영')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: '교수자 마이크 전송' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: '수업 원본 녹음' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '수업 종료' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: '질문 답변' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: '강의자료' }),
+    ).not.toBeInTheDocument()
+    await waitFor(() => expect(professorOnlyRequests).toBe(0))
+  })
+
+  it('blocks professor end while a voice Answer is CAPTURING', async () => {
+    authenticate()
+    const liveSession = liveSessionFor(professorCourse.id)
+    let endRequests = 0
+    installLiveRouteHandlers(professorCourse, liveSession)
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId/answers', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: '80000000-0000-0000-0000-000000000001',
+              session_id: liveSession.id,
+              answer_type: 'VOICE',
+              status: 'CAPTURING',
+              version: 1,
+              target: {
+                type: 'STUDENT_QUESTION',
+                question_id: '90000000-0000-0000-0000-000000000001',
+              },
+              target_text_snapshot: '음수 간선은 왜 문제가 되나요?',
+              text_content: null,
+              source_transcript_version_id: null,
+              canonical_transcript_mapping: null,
+              organization_state: {
+                status: 'NOT_STARTED',
+                job_id: null,
+                attempt: null,
+                retryable: false,
+                organization: null,
+              },
+              capture_started_after_sequence: 2,
+              start_sequence: null,
+              end_sequence: null,
+              started_at: '2026-07-15T06:05:00Z',
+              completed_at: null,
+              updated_at: '2026-07-15T06:05:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.post('*/api/v1/sessions/:sessionId/end', () => {
+        endRequests += 1
+        return HttpResponse.json({}, { status: 500 })
+      }),
+    )
+
+    renderAt(`/sessions/${liveSession.id}`)
+
+    expect(await screen.findByText('답변 캡처 중')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '수업 종료' }))
+
+    const alertCopy = await screen.findByText(
+      '진행 중인 음성 Answer를 먼저 완료하거나 취소해 주세요.',
+    )
+    const alert = alertCopy.closest('[role="alert"]')
+    expect(alert).not.toBeNull()
+    expect(alert).toHaveFocus()
+    expect(
+      screen.queryByRole('dialog', { name: '수업을 종료할까요?' }),
+    ).not.toBeInTheDocument()
+    expect(endRequests).toBe(0)
+  })
+
+  it('rechecks Answer safety and opens the end dialog after a failed check recovers', async () => {
+    authenticate()
+    const liveSession = liveSessionFor(professorCourse.id)
+    let answerRequests = 0
+    let failSafetyCheck = true
+    installLiveRouteHandlers(professorCourse, liveSession)
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId/answers', () => {
+        answerRequests += 1
+        if (answerRequests > 1 && failSafetyCheck) {
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'DEPENDENCY_UNAVAILABLE',
+                message: 'Answer 상태를 확인하지 못했습니다.',
+                request_id: 'req_answer_safety',
+                details: null,
+              },
+            },
+            { status: 503 },
+          )
+        }
+        return HttpResponse.json({ items: [], next_cursor: null })
+      }),
+    )
+
+    renderAt(`/sessions/${liveSession.id}`)
+    await screen.findByRole('heading', { level: 1, name: liveSession.title })
+    await screen.findByText('아직 완료된 Answer가 없습니다')
+    fireEvent.click(screen.getByRole('button', { name: '수업 종료' }))
+
+    expect(
+      await screen.findByText(
+        'Answer 상태를 확인하지 못해 안전하게 종료를 막았습니다.',
+        undefined,
+        { timeout: 3_000 },
+      ),
+    ).toBeInTheDocument()
+    failSafetyCheck = false
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Answer 상태 다시 확인' }),
+    )
+
+    expect(
+      await screen.findByRole('dialog', { name: '수업을 종료할까요?' }),
+    ).toBeInTheDocument()
+    expect(answerRequests).toBeGreaterThanOrEqual(3)
+  })
+
+  it('blocks end from the synchronous CAPTURING cache while the follow-up Answer fetch is pending', async () => {
+    authenticate()
+    const liveSession = liveSessionFor(professorCourse.id)
+    const questionId = '90000000-0000-0000-0000-000000000002'
+    const answerId = '80000000-0000-0000-0000-000000000002'
+    let answerRequests = 0
+    let endRequests = 0
+    let releaseAnswerRefetch: (() => void) | undefined
+    const pendingAnswerRefetch = new Promise<Response>((resolve) => {
+      releaseAnswerRefetch = () =>
+        resolve(
+          HttpResponse.json({
+            items: [],
+            next_cursor: null,
+          }),
+        )
+    })
+    installLiveRouteHandlers(professorCourse, liveSession)
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId/questions', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: questionId,
+              session_id: liveSession.id,
+              content: '음수 간선은 왜 문제가 되나요?',
+              status: 'OPEN',
+              version: 1,
+              clustering_sequence: 1,
+              reaction_count: 2,
+              reacted_by_me: false,
+              cluster_id: null,
+              created_at: '2026-07-15T06:04:00Z',
+              updated_at: '2026-07-15T06:04:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/answers', () => {
+        answerRequests += 1
+        if (answerRequests === 1) {
+          return HttpResponse.json({ items: [], next_cursor: null })
+        }
+        return pendingAnswerRefetch
+      }),
+      http.post('*/api/v1/sessions/:sessionId/answers', async ({ request }) => {
+        expect(request.headers.get('Idempotency-Key')).toBeTruthy()
+        expect(await request.json()).toEqual({
+          answer_type: 'VOICE',
+          target: {
+            type: 'STUDENT_QUESTION',
+            question_id: questionId,
+          },
+        })
+        return HttpResponse.json({
+          id: answerId,
+          session_id: liveSession.id,
+          answer_type: 'VOICE',
+          status: 'CAPTURING',
+          version: 1,
+          target: {
+            type: 'STUDENT_QUESTION',
+            question_id: questionId,
+          },
+          target_text_snapshot: '음수 간선은 왜 문제가 되나요?',
+          text_content: null,
+          source_transcript_version_id: null,
+          canonical_transcript_mapping: null,
+          organization_state: {
+            status: 'NOT_STARTED',
+            job_id: null,
+            attempt: null,
+            retryable: false,
+            organization: null,
+          },
+          capture_started_after_sequence: 2,
+          start_sequence: null,
+          end_sequence: null,
+          started_at: '2026-07-15T06:05:00Z',
+          completed_at: null,
+          updated_at: '2026-07-15T06:05:00Z',
+        })
+      }),
+      http.post('*/api/v1/sessions/:sessionId/end', () => {
+        endRequests += 1
+        return HttpResponse.json({}, { status: 500 })
+      }),
+    )
+
+    renderAt(`/sessions/${liveSession.id}`)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '음성 답변 시작' }),
+    )
+    expect(await screen.findByText('답변 캡처 중')).toBeInTheDocument()
+    await waitFor(() => expect(answerRequests).toBeGreaterThanOrEqual(2))
+
+    fireEvent.click(screen.getByRole('button', { name: '수업 종료' }))
+
+    expect(
+      await screen.findByText(
+        '진행 중인 음성 Answer를 먼저 완료하거나 취소해 주세요.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: '수업을 종료할까요?' }),
+    ).not.toBeInTheDocument()
+    expect(endRequests).toBe(0)
+    releaseAnswerRefetch?.()
+  })
+
+  it('keeps end disabled while an Answer create request is still in flight', async () => {
+    authenticate()
+    const liveSession = liveSessionFor(professorCourse.id)
+    const questionId = '90000000-0000-0000-0000-000000000003'
+    let createRequests = 0
+    let releaseCreate: ((response: Response) => void) | undefined
+    const pendingCreate = new Promise<Response>((resolve) => {
+      releaseCreate = resolve
+    })
+    installLiveRouteHandlers(professorCourse, liveSession)
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId/questions', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: questionId,
+              session_id: liveSession.id,
+              content: 'Answer 생성 중에는 종료할 수 있나요?',
+              status: 'OPEN',
+              version: 1,
+              clustering_sequence: 2,
+              reaction_count: 1,
+              reacted_by_me: false,
+              cluster_id: null,
+              created_at: '2026-07-15T06:06:00Z',
+              updated_at: '2026-07-15T06:06:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.post('*/api/v1/sessions/:sessionId/answers', async () => {
+        createRequests += 1
+        return pendingCreate
+      }),
+    )
+
+    renderAt(`/sessions/${liveSession.id}`)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '음성 답변 시작' }),
+    )
+    await waitFor(() => expect(createRequests).toBe(1))
+
+    expect(
+      screen.getByRole('button', { name: 'Answer 확인 중…' }),
+    ).toBeDisabled()
+    expect(
+      screen.getByText('Answer 상태를 확인한 뒤 수업을 종료할 수 있습니다.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: '수업을 종료할까요?' }),
+    ).not.toBeInTheDocument()
+
+    releaseCreate?.(
+      HttpResponse.json({
+        id: '80000000-0000-0000-0000-000000000003',
+        session_id: liveSession.id,
+        answer_type: 'VOICE',
+        status: 'CAPTURING',
+        version: 1,
+        target: { type: 'STUDENT_QUESTION', question_id: questionId },
+        target_text_snapshot: 'Answer 생성 중에는 종료할 수 있나요?',
+        text_content: null,
+        source_transcript_version_id: null,
+        canonical_transcript_mapping: null,
+        organization_state: {
+          status: 'NOT_STARTED',
+          job_id: null,
+          attempt: null,
+          retryable: false,
+          organization: null,
+        },
+        capture_started_after_sequence: 2,
+        start_sequence: null,
+        end_sequence: null,
+        started_at: '2026-07-15T06:06:00Z',
+        completed_at: null,
+        updated_at: '2026-07-15T06:06:00Z',
+      }),
+    )
+  })
 
   it('blocks READY start while a PDF is processing', async () => {
     authenticate()

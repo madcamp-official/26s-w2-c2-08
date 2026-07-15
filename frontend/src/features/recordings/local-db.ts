@@ -13,6 +13,12 @@ export interface RecordingMeta {
   uploadId: string | null
   acknowledgedOffset: number
   failedReason: string | null
+  /** Local-only recovery fields. Optional values migrate rows written by older builds. */
+  uploadCreateKey?: string | null
+  uploadCompleteKey?: string | null
+  uploadState?: 'NOT_STARTED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED'
+  /** True only after MediaRecorder stopped and every final fragment committed. */
+  finalizationReady?: boolean
 }
 
 interface Fragment {
@@ -66,11 +72,18 @@ async function transaction<T>(
 }
 
 export async function getRecordingMeta(sessionId: string) {
-  return (
+  const meta =
     (await transaction<RecordingMeta>(['meta'], 'readonly', (tx) =>
       tx.objectStore('meta').get(sessionId),
     )) ?? null
-  )
+  if (!meta) return null
+  return {
+    ...meta,
+    uploadCreateKey: meta.uploadCreateKey ?? null,
+    uploadCompleteKey: meta.uploadCompleteKey ?? null,
+    uploadState: meta.uploadState ?? (meta.uploadId ? 'ACTIVE' : 'NOT_STARTED'),
+    finalizationReady: meta.finalizationReady ?? false,
+  }
 }
 
 export async function putRecordingMeta(meta: RecordingMeta) {
@@ -79,10 +92,15 @@ export async function putRecordingMeta(meta: RecordingMeta) {
   )
 }
 
-export async function appendFragment(meta: RecordingMeta, blob: Blob) {
+export async function appendFragment(
+  meta: RecordingMeta,
+  blob: Blob,
+  durationMs = meta.durationMs,
+) {
   const start = meta.totalBytes
   const next = {
     ...meta,
+    durationMs: Math.max(meta.durationMs, durationMs),
     totalBytes: start + blob.size,
     nextSequence: meta.nextSequence + 1,
   }

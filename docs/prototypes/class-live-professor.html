@@ -8,9 +8,10 @@
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/live-class.css" />
     <script type="module" src="assets/js/class-live-professor.js"></script>
   </head>
-  <body>
+  <body class="live-reference-page live-reference-page--professor">
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
       Static prototype · 마이크·녹음·WebSocket·REST·AI를 실제로 사용하지
@@ -21,7 +22,7 @@
         <a class="brand" href="dashboard.html" aria-label="GOAL 대시보드"
           ><span class="brand__mark" aria-hidden="true">G</span
           ><span class="brand__copy"
-            ><strong>GOAL</strong><small>God of all lectures</small></span
+            ><strong>GOAL</strong><small>Live lecture workspace</small></span
           ></a
         >
         <nav class="primary-nav" aria-label="주요 메뉴">
@@ -209,6 +210,18 @@
                 aria-pressed="false"
               >
                 마감</button
+              ><button
+                type="button"
+                data-state="owned-elsewhere"
+                aria-pressed="false"
+              >
+                다른 탭</button
+              ><button
+                type="button"
+                data-state="capture-interrupted"
+                aria-pressed="false"
+              >
+                완결성 실패</button
               ><button
                 type="button"
                 data-state="ready-upload"
@@ -490,6 +503,22 @@
                 <strong>로컬 녹음 파일 마감 중</strong>
                 <p>Session PROCESSING 전이와 독립적으로 진행합니다.</p>
               </div>
+              <div data-show-state="owned-elsewhere" hidden>
+                <strong>다른 탭이 녹음 lifecycle lock을 소유합니다</strong>
+                <p>이 탭은 중복 녹음하지 않고 조회 기능만 유지합니다.</p>
+              </div>
+              <div
+                class="live-axis-alert"
+                data-show-state="capture-interrupted"
+                role="alert"
+                hidden
+              >
+                <strong>마지막 녹음 조각의 완결성을 확인할 수 없습니다</strong>
+                <p>
+                  안전하지 않은 원본은 upload하지 않고 저장된 live final로
+                  후처리를 계속합니다.
+                </p>
+              </div>
               <div data-show-state="ready-upload" hidden>
                 <strong>UPLOAD_PENDING으로 인계됨</strong>
                 <p>resumable upload 상세는 기록 정리 화면에서 표시합니다.</p>
@@ -535,7 +564,7 @@
             </article>
           </section>
 
-          <div class="live-workspace">
+          <div class="live-workspace live-workspace--professor">
             <section
               class="live-panel transcript-panel"
               id="transcriptPanel"
@@ -1213,533 +1242,541 @@
                 </p>
               </div>
             </section>
-          </div>
 
-          <section
-            class="panel live-materials"
-            id="materialsPanel"
-            data-demo-state="mixed"
-            data-query-state="materials"
-            data-query-default="mixed"
-            aria-labelledby="materialsTitle"
-          >
-            <div class="section-heading">
-              <div>
-                <h2 id="materialsTitle">LIVE 강의자료</h2>
-                <p>
-                  언제든 업로드·삭제할 수 있으며 READY 자료만 새 AI 답변의
-                  근거가 됩니다.
-                </p>
-              </div>
-              <strong><span data-material-count>3</span>/10</strong>
-            </div>
-            <form data-material-upload novalidate>
-              <div class="field">
-                <label for="liveMaterialInput">PDF 추가</label>
-                <input
-                  id="liveMaterialInput"
-                  type="file"
-                  multiple
-                  accept="application/pdf,.pdf"
-                  aria-describedby="liveMaterialHelp liveMaterialError"
-                />
-                <p class="field__help" id="liveMaterialHelp">
-                  PDF 한 개당 최대 100 MB(100,000,000 bytes) · 동일 내용 허용 ·
-                  같은 표시 이름은 (1), (2) suffix 적용
-                </p>
-                <p
-                  class="field__error"
-                  id="liveMaterialError"
-                  data-material-error
-                  role="alert"
-                  hidden
-                ></p>
-              </div>
-              <button class="button button--primary" type="submit">
-                선택 PDF 업로드
-              </button>
-            </form>
-            <div data-show-state="empty" hidden>
-              <p class="notice notice--info">
-                연결된 PDF가 없습니다. 수업·질문·AI 기능은 그대로 사용할 수
-                있습니다.
-              </p>
-            </div>
-            <div data-show-state="uploading" hidden>
-              <p class="notice notice--info" aria-busy="true">
-                새 PDF를 UPLOADED 행으로 저장하고 있습니다. 기존 자료와 LIVE
-                기능은 유지합니다.
-              </p>
-            </div>
-            <div data-show-state="processing" hidden>
-              <p class="notice notice--info">
-                자료를 처리 중입니다. 이 자료만 아직 AI 근거가 아니며 수업은
-                계속됩니다.
-              </p>
-            </div>
-            <div data-show-state="all-ready" hidden>
-              <p class="notice notice--success">
-                모든 연결 자료가 READY이며 새 AI 검색 근거로 사용할 수 있습니다.
-              </p>
-            </div>
-            <div data-show-state="failed" hidden>
-              <p class="notice notice--warning" role="alert">
-                실패한 자료는 원본 열기와 AI 검색에서 제외했습니다. 다른 LIVE
-                기능은 유지합니다.
-              </p>
-            </div>
-            <div data-show-state="full" hidden>
-              <p class="notice notice--warning" role="alert">
-                강의자료는 최대 10개까지 연결할 수 있습니다. 기존 자료를 삭제한
-                뒤 다시 시도해 주세요.
-              </p>
-            </div>
-            <div data-show-state="size-error" hidden>
-              <p class="notice notice--danger" role="alert">
-                PDF 한 개는 100 MB(100,000,000 bytes) 이하여야 합니다.
-              </p>
-            </div>
-            <div data-show-state="mime-error" hidden>
-              <p class="notice notice--danger" role="alert">
-                내용과 형식이 유효한 PDF 파일만 업로드할 수 있습니다.
-              </p>
-            </div>
-            <div data-show-state="delete-conflict" hidden>
-              <p class="notice notice--warning" role="alert">
-                다른 변경과 겹쳐 삭제하지 못했습니다. 최신 목록을 다시
-                불러왔습니다.
-              </p>
-            </div>
-            <div data-show-state="delete-missing" hidden>
-              <p class="notice notice--info">
-                이미 삭제되었거나 접근할 수 없는 자료여서 목록에서 제거했습니다.
-              </p>
-            </div>
-            <div data-show-state="load-error" hidden>
-              <p class="notice notice--danger" role="alert">
-                강의자료 목록을 불러오지 못했습니다. Transcript·질문·개인 AI는
-                계속 사용할 수 있습니다.
-              </p>
-            </div>
-            <ul class="live-material-list" data-material-list>
-              <li
-                class="live-material-row"
-                data-material-row
-                data-material-name="그래프 탐색 자료.pdf"
-                data-material-status="ready"
-              >
+            <section
+              class="panel live-materials"
+              id="materialsPanel"
+              data-demo-state="mixed"
+              data-query-state="materials"
+              data-query-default="mixed"
+              aria-labelledby="materialsTitle"
+            >
+              <div class="section-heading">
                 <div>
-                  <strong>그래프 탐색 자료.pdf</strong>
-                  <small>READY · 새 AI 검색 근거로 사용 · 18.4 MB</small>
-                </div>
-                <div class="cluster">
-                  <a
-                    class="button button--ghost"
-                    href="/api/v1/materials/material-graph/content"
-                    aria-label="그래프 탐색 자료.pdf 원본 열기"
-                    >원본 열기</a
-                  ><button
-                    class="button button--danger"
-                    type="button"
-                    data-material-delete
-                  >
-                    그래프 탐색 자료.pdf 삭제
-                  </button>
-                </div>
-              </li>
-              <li
-                class="live-material-row"
-                data-material-row
-                data-material-name="그래프 탐색 자료 (1).pdf"
-                data-material-status="processing"
-              >
-                <div>
-                  <strong>그래프 탐색 자료 (1).pdf</strong>
-                  <small
-                    >PROCESSING · 아직 AI 근거 아님 · LIVE 기능 차단 없음</small
-                  >
-                </div>
-                <div class="cluster">
-                  <a
-                    class="button button--ghost"
-                    href="/api/v1/materials/material-processing/content"
-                    aria-label="그래프 탐색 자료 (1).pdf 원본 열기"
-                    >원본 열기</a
-                  ><button
-                    class="button button--danger"
-                    type="button"
-                    data-material-delete
-                  >
-                    그래프 탐색 자료 (1).pdf 삭제
-                  </button>
-                </div>
-              </li>
-              <li
-                class="live-material-row"
-                data-material-row
-                data-material-name="깨진 파일.pdf"
-                data-material-status="failed"
-              >
-                <div>
-                  <strong>깨진 파일.pdf</strong>
-                  <small
-                    >FAILED · 업로드되지 않음 · 원본 열기·AI 검색 불가</small
-                  >
-                </div>
-                <div class="cluster">
-                  <button
-                    class="button button--secondary"
-                    type="button"
-                    data-material-retry
-                  >
-                    같은 Material 재시도 · attempt 2</button
-                  ><button
-                    class="button button--danger"
-                    type="button"
-                    data-material-delete
-                  >
-                    깨진 파일.pdf 삭제
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </section>
-
-          <section
-            class="live-private-ai"
-            data-live-ai
-            aria-labelledby="liveAiTitle"
-          >
-            <div class="section-heading">
-              <div>
-                <h2 id="liveAiTitle">나만의 LIVE AI</h2>
-                <p>
-                  두 역할에 같은 UI를 제공합니다. 202 Job polling과 저장 결과
-                  조회만 사용하며 Session WS에 개인 결과를 보내지 않습니다.
-                </p>
-              </div>
-            </div>
-            <div class="live-ai-grid" data-live-private-content>
-              <article class="panel live-ai-card">
-                <div class="section-heading">
-                  <div>
-                    <h2>현재까지 개인 Summary</h2>
-                    <p>요청 시점의 마지막 live final까지 고정합니다.</p>
-                  </div>
-                  <div
-                    class="state-switcher"
-                    data-state-switcher
-                    data-state-target="#profSummaryState"
-                    aria-label="Summary 목 응답 상태"
-                  >
-                    <button
-                      type="button"
-                      data-state="not-ready"
-                      data-live-summary-action="not-ready"
-                      aria-pressed="false"
-                    >
-                      0 final</button
-                    ><button
-                      type="button"
-                      data-state="running"
-                      data-live-summary-action="running"
-                      aria-pressed="false"
-                    >
-                      running</button
-                    ><button
-                      type="button"
-                      data-state="complete"
-                      data-live-summary-action="complete"
-                      aria-pressed="false"
-                    >
-                      성공</button
-                    ><button
-                      type="button"
-                      data-state="error"
-                      data-live-summary-action="error"
-                      aria-pressed="false"
-                    >
-                      실패
-                    </button>
-                  </div>
-                </div>
-                <div
-                  class="live-ai-result"
-                  id="profSummaryState"
-                  data-live-summary-state
-                  data-demo-state="idle"
-                  data-query-state="summary"
-                  data-query-default="idle"
-                  aria-live="polite"
-                >
-                  <div data-show-state="idle">
-                    <button
-                      class="button button--primary"
-                      type="button"
-                      data-live-summary-action="pending"
-                    >
-                      현재까지 요약 요청
-                    </button>
-                  </div>
-                  <div data-show-state="not-ready" hidden role="alert">
-                    <p class="notice notice--warning">
-                      아직 확정된 강의 내용이 없습니다. 잠시 후 다시 시도해
-                      주세요.
-                    </p>
-                    <small>409 SUMMARY_TRANSCRIPT_NOT_READY · Job 없음</small>
-                  </div>
-                  <div data-show-state="pending" hidden>
-                    <p class="notice notice--info">Job PENDING · polling 중</p>
-                    <div class="live-job-meta">
-                      <span>requester only</span
-                      ><span data-live-summary-attempt data-attempt="1"
-                        >attempt 1</span
-                      >
-                    </div>
-                  </div>
-                  <div data-show-state="running" hidden>
-                    <p class="notice notice--info">Job RUNNING · polling 중</p>
-                  </div>
-                  <div data-show-state="complete" hidden>
-                    <div class="live-ai-result__body">
-                      다익스트라는 음수 간선이 없는 그래프에서 가장 가까운
-                      정점을 반복 확정합니다.
-                    </div>
-                    <small>SUCCEEDED 저장 결과를 REST로 조회했습니다.</small>
-                  </div>
-                  <div data-show-state="error retry" hidden role="alert">
-                    <p class="notice notice--danger">
-                      Summary를 만들지 못했습니다. Transcript와 질문은 계속
-                      사용할 수 있습니다.
-                    </p>
-                    <button
-                      class="button button--secondary"
-                      type="button"
-                      data-live-summary-action="retry"
-                    >
-                      같은 Job 재시도
-                    </button>
-                  </div>
-                </div>
-              </article>
-
-              <article class="panel live-ai-card">
-                <div class="section-heading">
-                  <div>
-                    <h2>수업 중 개인 Chat</h2>
-                    <p>
-                      USER Message는 요청 때 저장하고, ASSISTANT는 성공한 최종
-                      Message·Evidence만 저장합니다.
-                    </p>
-                  </div>
-                  <div
-                    class="state-switcher"
-                    data-state-switcher
-                    data-state-target="#profChatState"
-                    aria-label="Chat 목 응답 상태"
-                  >
-                    <button
-                      type="button"
-                      data-state="evidence"
-                      data-live-chat-action="evidence"
-                      aria-pressed="false"
-                    >
-                      근거 있음</button
-                    ><button
-                      type="button"
-                      data-state="no-evidence"
-                      data-live-chat-action="no-evidence"
-                      aria-pressed="false"
-                    >
-                      근거 없음</button
-                    ><button
-                      type="button"
-                      data-state="error"
-                      data-live-chat-action="error"
-                      aria-pressed="false"
-                    >
-                      실패
-                    </button>
-                  </div>
-                </div>
-                <div
-                  class="live-ai-result"
-                  id="profChatState"
-                  data-live-chat-state
-                  data-demo-state="idle"
-                  data-query-state="chat"
-                  data-query-default="idle"
-                  aria-live="polite"
-                >
-                  <p data-show-state="idle" class="text-muted">
-                    partial을 제외한 live final과 READY PDF만 참고합니다.
+                  <h2 id="materialsTitle">LIVE 강의자료</h2>
+                  <p>
+                    언제든 업로드·삭제할 수 있으며 READY 자료만 새 AI 답변의
+                    근거가 됩니다.
                   </p>
-                  <div data-show-state="pending" hidden>
-                    <p class="notice notice--info">
-                      USER Message와 Job 저장 완료 · polling 중
-                    </p>
-                    <div class="live-job-meta">
-                      <span data-live-chat-attempt data-attempt="1"
-                        >attempt 1</span
-                      ><span>동일 입력 snapshot 유지</span>
-                    </div>
-                    <p>“<span data-live-chat-snapshot>저장된 입력</span>”</p>
+                </div>
+                <strong><span data-material-count>3</span>/10</strong>
+              </div>
+              <form data-material-upload novalidate>
+                <div class="field">
+                  <label for="liveMaterialInput">PDF 추가</label>
+                  <input
+                    id="liveMaterialInput"
+                    type="file"
+                    multiple
+                    accept="application/pdf,.pdf"
+                    aria-describedby="liveMaterialHelp liveMaterialError"
+                  />
+                  <p class="field__help" id="liveMaterialHelp">
+                    PDF 한 개당 최대 100 MB(100,000,000 bytes) · 동일 내용 허용
+                    · 같은 표시 이름은 (1), (2) suffix 적용
+                  </p>
+                  <p
+                    class="field__error"
+                    id="liveMaterialError"
+                    data-material-error
+                    role="alert"
+                    hidden
+                  ></p>
+                </div>
+                <button class="button button--primary" type="submit">
+                  선택 PDF 업로드
+                </button>
+              </form>
+              <div data-show-state="empty" hidden>
+                <p class="notice notice--info">
+                  연결된 PDF가 없습니다. 수업·질문·AI 기능은 그대로 사용할 수
+                  있습니다.
+                </p>
+              </div>
+              <div data-show-state="uploading" hidden>
+                <p class="notice notice--info" aria-busy="true">
+                  새 PDF를 UPLOADED 행으로 저장하고 있습니다. 기존 자료와 LIVE
+                  기능은 유지합니다.
+                </p>
+              </div>
+              <div data-show-state="processing" hidden>
+                <p class="notice notice--info">
+                  자료를 처리 중입니다. 이 자료만 아직 AI 근거가 아니며 수업은
+                  계속됩니다.
+                </p>
+              </div>
+              <div data-show-state="all-ready" hidden>
+                <p class="notice notice--success">
+                  모든 연결 자료가 READY이며 새 AI 검색 근거로 사용할 수
+                  있습니다.
+                </p>
+              </div>
+              <div data-show-state="failed" hidden>
+                <p class="notice notice--warning" role="alert">
+                  실패한 자료는 원본 열기와 AI 검색에서 제외했습니다. 다른 LIVE
+                  기능은 유지합니다.
+                </p>
+              </div>
+              <div data-show-state="full" hidden>
+                <p class="notice notice--warning" role="alert">
+                  강의자료는 최대 10개까지 연결할 수 있습니다. 기존 자료를
+                  삭제한 뒤 다시 시도해 주세요.
+                </p>
+              </div>
+              <div data-show-state="size-error" hidden>
+                <p class="notice notice--danger" role="alert">
+                  PDF 한 개는 100 MB(100,000,000 bytes) 이하여야 합니다.
+                </p>
+              </div>
+              <div data-show-state="mime-error" hidden>
+                <p class="notice notice--danger" role="alert">
+                  내용과 형식이 유효한 PDF 파일만 업로드할 수 있습니다.
+                </p>
+              </div>
+              <div data-show-state="delete-conflict" hidden>
+                <p class="notice notice--warning" role="alert">
+                  다른 변경과 겹쳐 삭제하지 못했습니다. 최신 목록을 다시
+                  불러왔습니다.
+                </p>
+              </div>
+              <div data-show-state="delete-missing" hidden>
+                <p class="notice notice--info">
+                  이미 삭제되었거나 접근할 수 없는 자료여서 목록에서
+                  제거했습니다.
+                </p>
+              </div>
+              <div data-show-state="load-error" hidden>
+                <p class="notice notice--danger" role="alert">
+                  강의자료 목록을 불러오지 못했습니다. Transcript·질문·개인 AI는
+                  계속 사용할 수 있습니다.
+                </p>
+              </div>
+              <ul class="live-material-list" data-material-list>
+                <li
+                  class="live-material-row"
+                  data-material-row
+                  data-material-name="그래프 탐색 자료.pdf"
+                  data-material-status="ready"
+                >
+                  <div>
+                    <strong>그래프 탐색 자료.pdf</strong>
+                    <small>READY · 새 AI 검색 근거로 사용 · 18.4 MB</small>
                   </div>
-                  <div data-show-state="evidence" hidden>
-                    <div class="live-chat-turn live-chat-turn--user">
-                      <small>USER</small>
-                      <p data-live-chat-snapshot>
-                        다익스트라와 벨만-포드의 차이는 무엇인가요?
-                      </p>
-                    </div>
-                    <small>ASSISTANT</small>
-                    <div class="live-ai-result__body">
-                      벨만-포드는 간선 완화를 반복해 음수 간선을 처리합니다.
-                    </div>
-                    <ul class="live-evidence-list">
-                      <li>
-                        <a
-                          class="live-evidence-link"
-                          href="/api/v1/sessions/session_graph_live/transcript?transcript_version_id=transcript_version_live_v1&amp;start_sequence=126&amp;end_sequence=126"
-                        >
-                          <strong>LIVE Transcript · 10:12–10:27</strong>
-                          <small
-                            >source_kind: TRANSCRIPT · session/version/sequence
-                            이동</small
-                          >
-                        </a>
-                      </li>
-                      <li>
-                        <a
-                          class="live-evidence-link"
-                          data-evidence-material-name="그래프 탐색 자료.pdf"
-                          href="/api/v1/materials/material-graph/content#page=12"
-                        >
-                          <strong>그래프 탐색 자료.pdf · 12쪽</strong>
-                          <small
-                            >source_kind: MATERIAL · 권한 재검사 link</small
-                          >
-                        </a>
-                      </li>
-                      <li>
-                        <span class="live-evidence-link" aria-disabled="true">
-                          <strong>이전 참고자료 · 접근 해제됨</strong>
-                          <small
-                            >source_kind: MATERIAL · label snapshot 유지 · link:
-                            null</small
-                          >
-                        </span>
-                      </li>
-                    </ul>
+                  <div class="cluster">
+                    <a
+                      class="button button--ghost"
+                      href="/api/v1/materials/material-graph/content"
+                      aria-label="그래프 탐색 자료.pdf 원본 열기"
+                      >원본 열기</a
+                    ><button
+                      class="button button--danger"
+                      type="button"
+                      data-material-delete
+                    >
+                      그래프 탐색 자료.pdf 삭제
+                    </button>
                   </div>
-                  <div data-show-state="no-evidence" hidden>
-                    <div class="live-chat-turn live-chat-turn--user">
-                      <small>USER</small>
-                      <p data-live-chat-snapshot>
-                        현재 근거만으로 비교할 수 있나요?
-                      </p>
-                    </div>
-                    <small>ASSISTANT</small>
-                    <div class="live-ai-result__body">
-                      현재 저장된 근거에서 직접 확인하기 어려운 질문입니다.
-                    </div>
-                    <small>근거 없음도 SUCCEEDED 저장 결과입니다.</small>
+                </li>
+                <li
+                  class="live-material-row"
+                  data-material-row
+                  data-material-name="그래프 탐색 자료 (1).pdf"
+                  data-material-status="processing"
+                >
+                  <div>
+                    <strong>그래프 탐색 자료 (1).pdf</strong>
+                    <small
+                      >PROCESSING · 아직 AI 근거 아님 · LIVE 기능 차단
+                      없음</small
+                    >
                   </div>
-                  <div data-show-state="error retry" hidden role="alert">
-                    <p class="notice notice--danger">
-                      답변 생성에 실패했습니다. 동일 USER Message로 재시도할 수
-                      있습니다.
-                    </p>
+                  <div class="cluster">
+                    <a
+                      class="button button--ghost"
+                      href="/api/v1/materials/material-processing/content"
+                      aria-label="그래프 탐색 자료 (1).pdf 원본 열기"
+                      >원본 열기</a
+                    ><button
+                      class="button button--danger"
+                      type="button"
+                      data-material-delete
+                    >
+                      그래프 탐색 자료 (1).pdf 삭제
+                    </button>
+                  </div>
+                </li>
+                <li
+                  class="live-material-row"
+                  data-material-row
+                  data-material-name="깨진 파일.pdf"
+                  data-material-status="failed"
+                >
+                  <div>
+                    <strong>깨진 파일.pdf</strong>
+                    <small
+                      >FAILED · 업로드되지 않음 · 원본 열기·AI 검색 불가</small
+                    >
+                  </div>
+                  <div class="cluster">
                     <button
                       class="button button--secondary"
                       type="button"
-                      data-live-chat-action="retry"
+                      data-material-retry
                     >
-                      같은 Job 재시도
+                      같은 Material 재시도 · attempt 2</button
+                    ><button
+                      class="button button--danger"
+                      type="button"
+                      data-material-delete
+                    >
+                      깨진 파일.pdf 삭제
                     </button>
                   </div>
-                </div>
-                <form data-live-chat-form novalidate>
-                  <div class="field">
-                    <label for="profChatInput">현재 수업 내용 질문</label>
-                    <textarea
-                      id="profChatInput"
-                      rows="3"
-                      data-live-chat-input
-                      data-live-limit="2000"
-                      aria-describedby="profChatHelp profChatError profChatCount"
-                    ></textarea>
-                    <div class="live-char-row">
-                      <p class="field__help" id="profChatHelp">
-                        trim → Unicode NFC → code point 기준 1~2,000자
-                      </p>
-                      <span
-                        class="live-char-count"
-                        id="profChatCount"
-                        data-count-for="profChatInput"
-                        >0 / 2000</span
-                      >
-                    </div>
-                    <p
-                      class="field__error"
-                      id="profChatError"
-                      data-limit-error-for="profChatInput"
-                      role="alert"
-                      hidden
-                    ></p>
-                  </div>
-                  <button class="button button--primary" type="submit">
-                    개인 AI에 질문
-                  </button>
-                </form>
-              </article>
-            </div>
-            <div data-live-private-purged hidden>
-              <p class="notice notice--info">
-                Session이 PROCESSING으로 전환되어 개인 LIVE
-                Summary·Chat·Message·Evidence·Job을 삭제했습니다. 이전 ID
-                polling·단건 조회와 멱등 재요청의 정확한 응답은 아직 미정이며 이
-                Prototype은 추가 요청을 보내지 않습니다.
-              </p>
-            </div>
-          </section>
+                </li>
+              </ul>
+            </section>
 
-          <section class="live-support-grid">
-            <article class="panel">
-              <h2>영구 상태 복구</h2>
-              <ul class="live-mapping">
-                <li>
-                  <code>GET Session · Transcript · Questions · Answers</code
-                  ><small>WS는 알림, REST가 canonical 진실</small>
-                </li>
-                <li>
-                  <code>SESSION_EVENTS_READ · SESSION_AUDIO_WRITE</code
-                  ><small>서로 다른 scope의 1회용 ticket</small>
-                </li>
-                <li>
-                  <code>Answer target + target_text_snapshot</code
-                  ><small>학생 질문 또는 대표질문 정확히 하나</small>
-                </li>
-              </ul>
-            </article>
-            <article class="panel">
-              <h2>아직 정하지 않은 것</h2>
-              <ul class="live-mapping">
-                <li>
-                  <code>publisher lease · takeover</code
-                  ><small>이 화면은 다른 탭 takeover를 제공하지 않음</small>
-                </li>
-                <li>
-                  <code>recording codec · container · local storage</code
-                  ><small>실시간 PCM 규격에서 추정하지 않음</small>
-                </li>
-                <li>
-                  <code>DEGRADED · stop timeout · replay window · live gap</code
-                  ><small>임계값과 강제 종료를 UI가 만들지 않음</small>
-                </li>
-              </ul>
-            </article>
-          </section>
+            <section
+              class="live-private-ai"
+              data-live-ai
+              aria-labelledby="liveAiTitle"
+            >
+              <div class="section-heading">
+                <div>
+                  <h2 id="liveAiTitle">나만의 LIVE AI</h2>
+                  <p>
+                    두 역할에 같은 UI를 제공합니다. 202 Job polling과 저장 결과
+                    조회만 사용하며 Session WS에 개인 결과를 보내지 않습니다.
+                  </p>
+                </div>
+              </div>
+              <div class="live-ai-grid" data-live-private-content>
+                <article class="panel live-ai-card">
+                  <div class="section-heading">
+                    <div>
+                      <h2>현재까지 개인 Summary</h2>
+                      <p>요청 시점의 마지막 live final까지 고정합니다.</p>
+                    </div>
+                    <div
+                      class="state-switcher"
+                      data-state-switcher
+                      data-state-target="#profSummaryState"
+                      aria-label="Summary 목 응답 상태"
+                    >
+                      <button
+                        type="button"
+                        data-state="not-ready"
+                        data-live-summary-action="not-ready"
+                        aria-pressed="false"
+                      >
+                        0 final</button
+                      ><button
+                        type="button"
+                        data-state="running"
+                        data-live-summary-action="running"
+                        aria-pressed="false"
+                      >
+                        running</button
+                      ><button
+                        type="button"
+                        data-state="complete"
+                        data-live-summary-action="complete"
+                        aria-pressed="false"
+                      >
+                        성공</button
+                      ><button
+                        type="button"
+                        data-state="error"
+                        data-live-summary-action="error"
+                        aria-pressed="false"
+                      >
+                        실패
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    class="live-ai-result"
+                    id="profSummaryState"
+                    data-live-summary-state
+                    data-demo-state="idle"
+                    data-query-state="summary"
+                    data-query-default="idle"
+                    aria-live="polite"
+                  >
+                    <div data-show-state="idle">
+                      <button
+                        class="button button--primary"
+                        type="button"
+                        data-live-summary-action="pending"
+                      >
+                        현재까지 요약 요청
+                      </button>
+                    </div>
+                    <div data-show-state="not-ready" hidden role="alert">
+                      <p class="notice notice--warning">
+                        아직 확정된 강의 내용이 없습니다. 잠시 후 다시 시도해
+                        주세요.
+                      </p>
+                      <small>409 SUMMARY_TRANSCRIPT_NOT_READY · Job 없음</small>
+                    </div>
+                    <div data-show-state="pending" hidden>
+                      <p class="notice notice--info">
+                        Job PENDING · polling 중
+                      </p>
+                      <div class="live-job-meta">
+                        <span>requester only</span
+                        ><span data-live-summary-attempt data-attempt="1"
+                          >attempt 1</span
+                        >
+                      </div>
+                    </div>
+                    <div data-show-state="running" hidden>
+                      <p class="notice notice--info">
+                        Job RUNNING · polling 중
+                      </p>
+                    </div>
+                    <div data-show-state="complete" hidden>
+                      <div class="live-ai-result__body">
+                        다익스트라는 음수 간선이 없는 그래프에서 가장 가까운
+                        정점을 반복 확정합니다.
+                      </div>
+                      <small>SUCCEEDED 저장 결과를 REST로 조회했습니다.</small>
+                    </div>
+                    <div data-show-state="error retry" hidden role="alert">
+                      <p class="notice notice--danger">
+                        Summary를 만들지 못했습니다. Transcript와 질문은 계속
+                        사용할 수 있습니다.
+                      </p>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-live-summary-action="retry"
+                      >
+                        같은 Job 재시도
+                      </button>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="panel live-ai-card">
+                  <div class="section-heading">
+                    <div>
+                      <h2>수업 중 개인 Chat</h2>
+                      <p>
+                        USER Message는 요청 때 저장하고, ASSISTANT는 성공한 최종
+                        Message·Evidence만 저장합니다.
+                      </p>
+                    </div>
+                    <div
+                      class="state-switcher"
+                      data-state-switcher
+                      data-state-target="#profChatState"
+                      aria-label="Chat 목 응답 상태"
+                    >
+                      <button
+                        type="button"
+                        data-state="evidence"
+                        data-live-chat-action="evidence"
+                        aria-pressed="false"
+                      >
+                        근거 있음</button
+                      ><button
+                        type="button"
+                        data-state="no-evidence"
+                        data-live-chat-action="no-evidence"
+                        aria-pressed="false"
+                      >
+                        근거 없음</button
+                      ><button
+                        type="button"
+                        data-state="error"
+                        data-live-chat-action="error"
+                        aria-pressed="false"
+                      >
+                        실패
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    class="live-ai-result"
+                    id="profChatState"
+                    data-live-chat-state
+                    data-demo-state="idle"
+                    data-query-state="chat"
+                    data-query-default="idle"
+                    aria-live="polite"
+                  >
+                    <p data-show-state="idle" class="text-muted">
+                      partial을 제외한 live final과 READY PDF만 참고합니다.
+                    </p>
+                    <div data-show-state="pending" hidden>
+                      <p class="notice notice--info">
+                        USER Message와 Job 저장 완료 · polling 중
+                      </p>
+                      <div class="live-job-meta">
+                        <span data-live-chat-attempt data-attempt="1"
+                          >attempt 1</span
+                        ><span>동일 입력 snapshot 유지</span>
+                      </div>
+                      <p>“<span data-live-chat-snapshot>저장된 입력</span>”</p>
+                    </div>
+                    <div data-show-state="evidence" hidden>
+                      <div class="live-chat-turn live-chat-turn--user">
+                        <small>USER</small>
+                        <p data-live-chat-snapshot>
+                          다익스트라와 벨만-포드의 차이는 무엇인가요?
+                        </p>
+                      </div>
+                      <small>ASSISTANT</small>
+                      <div class="live-ai-result__body">
+                        벨만-포드는 간선 완화를 반복해 음수 간선을 처리합니다.
+                      </div>
+                      <ul class="live-evidence-list">
+                        <li>
+                          <a
+                            class="live-evidence-link"
+                            href="/api/v1/sessions/session_graph_live/transcript?transcript_version_id=transcript_version_live_v1&amp;start_sequence=126&amp;end_sequence=126"
+                          >
+                            <strong>LIVE Transcript · 10:12–10:27</strong>
+                            <small
+                              >source_kind: TRANSCRIPT ·
+                              session/version/sequence 이동</small
+                            >
+                          </a>
+                        </li>
+                        <li>
+                          <a
+                            class="live-evidence-link"
+                            data-evidence-material-name="그래프 탐색 자료.pdf"
+                            href="/api/v1/materials/material-graph/content#page=12"
+                          >
+                            <strong>그래프 탐색 자료.pdf · 12쪽</strong>
+                            <small
+                              >source_kind: MATERIAL · 권한 재검사 link</small
+                            >
+                          </a>
+                        </li>
+                        <li>
+                          <span class="live-evidence-link" aria-disabled="true">
+                            <strong>이전 참고자료 · 접근 해제됨</strong>
+                            <small
+                              >source_kind: MATERIAL · label snapshot 유지 ·
+                              link: null</small
+                            >
+                          </span>
+                        </li>
+                      </ul>
+                    </div>
+                    <div data-show-state="no-evidence" hidden>
+                      <div class="live-chat-turn live-chat-turn--user">
+                        <small>USER</small>
+                        <p data-live-chat-snapshot>
+                          현재 근거만으로 비교할 수 있나요?
+                        </p>
+                      </div>
+                      <small>ASSISTANT</small>
+                      <div class="live-ai-result__body">
+                        현재 저장된 근거에서 직접 확인하기 어려운 질문입니다.
+                      </div>
+                      <small>근거 없음도 SUCCEEDED 저장 결과입니다.</small>
+                    </div>
+                    <div data-show-state="error retry" hidden role="alert">
+                      <p class="notice notice--danger">
+                        답변 생성에 실패했습니다. 동일 USER Message로 재시도할
+                        수 있습니다.
+                      </p>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-live-chat-action="retry"
+                      >
+                        같은 Job 재시도
+                      </button>
+                    </div>
+                  </div>
+                  <form data-live-chat-form novalidate>
+                    <div class="field">
+                      <label for="profChatInput">현재 수업 내용 질문</label>
+                      <textarea
+                        id="profChatInput"
+                        rows="3"
+                        data-live-chat-input
+                        data-live-limit="2000"
+                        aria-describedby="profChatHelp profChatError profChatCount"
+                      ></textarea>
+                      <div class="live-char-row">
+                        <p class="field__help" id="profChatHelp">
+                          trim → Unicode NFC → code point 기준 1~2,000자
+                        </p>
+                        <span
+                          class="live-char-count"
+                          id="profChatCount"
+                          data-count-for="profChatInput"
+                          >0 / 2000</span
+                        >
+                      </div>
+                      <p
+                        class="field__error"
+                        id="profChatError"
+                        data-limit-error-for="profChatInput"
+                        role="alert"
+                        hidden
+                      ></p>
+                    </div>
+                    <button class="button button--primary" type="submit">
+                      개인 AI에 질문
+                    </button>
+                  </form>
+                </article>
+              </div>
+              <div data-live-private-purged hidden>
+                <p class="notice notice--info">
+                  Session이 PROCESSING으로 전환되어 개인 LIVE
+                  Summary·Chat·Message·Evidence·Job을 삭제했습니다. 이전 ID
+                  polling·단건 조회와 멱등 재요청의 정확한 응답은 아직 미정이며
+                  이 Prototype은 추가 요청을 보내지 않습니다.
+                </p>
+              </div>
+            </section>
+
+            <section class="live-support-grid">
+              <article class="panel">
+                <h2>영구 상태 복구</h2>
+                <ul class="live-mapping">
+                  <li>
+                    <code>GET Session · Transcript · Questions · Answers</code
+                    ><small>WS는 알림, REST가 canonical 진실</small>
+                  </li>
+                  <li>
+                    <code>SESSION_EVENTS_READ · SESSION_AUDIO_WRITE</code
+                    ><small>서로 다른 scope의 1회용 ticket</small>
+                  </li>
+                  <li>
+                    <code>Answer target + target_text_snapshot</code
+                    ><small>학생 질문 또는 대표질문 정확히 하나</small>
+                  </li>
+                </ul>
+              </article>
+              <article class="panel">
+                <h2>아직 정하지 않은 것</h2>
+                <ul class="live-mapping">
+                  <li>
+                    <code>publisher lease · takeover</code
+                    ><small>이 화면은 다른 탭 takeover를 제공하지 않음</small>
+                  </li>
+                  <li>
+                    <code>recording codec · container · local storage</code
+                    ><small>실시간 PCM 규격에서 추정하지 않음</small>
+                  </li>
+                  <li>
+                    <code
+                      >DEGRADED · stop timeout · replay window · live gap</code
+                    ><small>임계값과 강제 종료를 UI가 만들지 않음</small>
+                  </li>
+                </ul>
+              </article>
+            </section>
+          </div>
         </div>
 
         <section
