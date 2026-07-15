@@ -250,12 +250,15 @@ class RecordService:
             )
             .order_by(AIJob.created_at.desc(), AIJob.id.desc())
         )
+        last = (
+            await session.get(AIJob, state.last_job_id) if state.last_job_id is not None else None
+        )
         current_count = await self._cluster_count(
             session, lecture_session.id, state.current_generation
         )
         final_count = await self._cluster_count(session, lecture_session.id, state.final_generation)
         return (
-            QuestionService.project_clustering_state(state, active=active),
+            QuestionService.project_clustering_state(state, active=active, last=last),
             current_count,
             final_count,
         )

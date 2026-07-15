@@ -45,7 +45,6 @@ from tbd.providers.ai import (
 )
 from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.repositories.jobs import ClaimedJob, JobRepository
-from tbd.schemas.jobs import AIJobResourceLink
 from tbd.schemas.personal_ai import (
     ChatEvidenceResponse,
     ChatMessageResponse,
@@ -488,37 +487,6 @@ class PersonalAIService:
             prompt_version=message.prompt_version,
             created_at=message.created_at,
         )
-
-    async def result_link(self, session: AsyncSession, job: AIJob) -> AIJobResourceLink | None:
-        if job.status != AIJobStatus.SUCCEEDED:
-            return None
-        if job.job_type == AIJobType.LIVE_SUMMARY:
-            summary = await session.scalar(
-                select(LectureSummary).where(
-                    LectureSummary.created_by_job_id == job.id,
-                    LectureSummary.created_by_job_attempt == job.attempt,
-                )
-            )
-            if summary is not None:
-                return AIJobResourceLink(
-                    resource_type="SUMMARY",
-                    resource_id=str(summary.id),
-                    resource_url=f"/api/v1/summaries/{summary.id}",
-                )
-        if job.job_type == AIJobType.CHAT_RESPONSE:
-            message = await session.scalar(
-                select(ChatMessage).where(
-                    ChatMessage.created_by_job_id == job.id,
-                    ChatMessage.created_by_job_attempt == job.attempt,
-                )
-            )
-            if message is not None:
-                return AIJobResourceLink(
-                    resource_type="CHAT_MESSAGE",
-                    resource_id=str(message.id),
-                    resource_url=f"/api/v1/chat-messages/{message.id}",
-                )
-        return None
 
     async def lock_purge_records(
         self, session: AsyncSession, *, session_id: UUID

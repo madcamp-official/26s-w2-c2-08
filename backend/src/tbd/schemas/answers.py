@@ -69,6 +69,20 @@ class AnswerTranscriptMappingResponse(BaseModel):
     updated_at: datetime
 
 
+class AnswerOrganizationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1)
+    source_transcript_version_id: UUID
+    start_sequence: int = Field(ge=1)
+    end_sequence: int = Field(ge=1)
+    created_by_job_id: UUID
+    created_by_job_attempt: int = Field(ge=1)
+    model_name: str | None
+    prompt_version: str | None
+    created_at: datetime
+
+
 class AnswerOrganizationStateResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -85,7 +99,7 @@ class AnswerOrganizationStateResponse(BaseModel):
     job_id: UUID | None = None
     attempt: int | None = None
     retryable: bool = False
-    organization: None = None
+    organization: AnswerOrganizationResponse | None = None
 
 
 class AnswerResponse(BaseModel):

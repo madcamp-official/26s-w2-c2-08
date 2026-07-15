@@ -17,7 +17,13 @@ function clusteringCopy(status: string) {
   return null
 }
 
-export function FinalQuestionMindmap({ sessionId }: { sessionId: string }) {
+export function FinalQuestionMindmap({
+  sessionId,
+  sessionStatus,
+}: {
+  sessionId: string
+  sessionStatus: 'PROCESSING' | 'COMPLETED'
+}) {
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
     null,
   )
@@ -27,6 +33,7 @@ export function FinalQuestionMindmap({ sessionId }: { sessionId: string }) {
     queryFn: ({ pageParam, signal }) =>
       listFinalQuestionClusters(sessionId, pageParam, signal),
     getNextPageParam: (page) => page.next_cursor,
+    refetchInterval: sessionStatus === 'PROCESSING' ? 3_000 : false,
   })
   const clusterItems = useMemo(
     () => clusters.data?.pages.flatMap((page) => page.items) ?? [],
@@ -58,6 +65,7 @@ export function FinalQuestionMindmap({ sessionId }: { sessionId: string }) {
       ? firstPage.clustering_state.last_job
       : null
   const stateCopy = firstPage && clusteringCopy(finalJob?.status ?? 'SUCCEEDED')
+  const finalFailed = finalJob?.status === 'FAILED'
 
   return (
     <section
@@ -81,8 +89,11 @@ export function FinalQuestionMindmap({ sessionId }: { sessionId: string }) {
           )}
       </header>
 
-      {stateCopy && (
-        <p className="input-hint" role="status">
+      {stateCopy && !(finalFailed && clusterItems.length === 0) && (
+        <p
+          className="input-hint"
+          role={finalJob?.status === 'FAILED' ? 'alert' : 'status'}
+        >
           {stateCopy}
         </p>
       )}
@@ -104,9 +115,25 @@ export function FinalQuestionMindmap({ sessionId }: { sessionId: string }) {
       )}
       {clusters.data && clusterItems.length === 0 && (
         <StatePanel
-          kind="empty"
-          title="확정된 질문 분류가 없습니다"
-          description="질문이 없거나 최종 분류 결과가 아직 준비되지 않았습니다."
+          kind={
+            finalFailed
+              ? 'error'
+              : sessionStatus === 'PROCESSING'
+                ? 'loading'
+                : 'empty'
+          }
+          title={
+            finalFailed
+              ? '최종 질문 분류에 실패했습니다'
+              : sessionStatus === 'PROCESSING'
+                ? '최종 질문 분류를 정리하는 중'
+                : '확정된 질문 분류가 없습니다'
+          }
+          description={
+            finalFailed
+              ? '기존 질문 목록은 유지됩니다. 재시도 가능 여부는 후처리 작업에서 확인할 수 있습니다.'
+              : '기존 질문은 유지되며 최종 분류 결과가 준비되면 이 영역만 갱신합니다.'
+          }
         />
       )}
       {clusterItems.length > 0 && (

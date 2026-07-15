@@ -11,6 +11,7 @@ import './styles/public-auth.css'
 import './styles/home-account.css'
 import './styles/course-workspace.css'
 import './styles/class-ready.css'
+import './styles/processing-class.css'
 
 const rootElement = document.getElementById('root')
 

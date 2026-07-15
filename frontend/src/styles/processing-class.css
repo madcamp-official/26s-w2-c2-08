@@ -1,0 +1,251 @@
+.processing-class-page {
+  display: grid;
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  gap: var(--space-6);
+}
+
+.processing-class-header__description {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.processing-class-header__description > span:not(.ui-status) {
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.processing-class-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.38fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.processing-class-authority,
+.processing-class-title-card {
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+
+.processing-class-authority:only-child {
+  grid-column: 1 / -1;
+}
+
+.processing-class-authority {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  border-color: color-mix(in srgb, var(--color-brand) 20%, var(--color-line));
+  background: var(--color-brand-soft);
+}
+
+.processing-class-authority__pulse {
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 24%, transparent);
+}
+
+.processing-class-authority h2,
+.processing-class-authority p,
+.processing-class-title-card h2,
+.processing-class-title-card p {
+  margin: 0;
+}
+
+.processing-class-authority h2,
+.processing-class-title-card h2 {
+  margin-top: var(--space-2);
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.processing-class-authority p:last-child,
+.processing-class-title-card > div > p:last-child {
+  margin-top: var(--space-2);
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.processing-class-authority dl {
+  display: grid;
+  min-width: 230px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--color-brand) 18%, white);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+}
+
+.processing-class-authority dl div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: 10px 12px;
+}
+
+.processing-class-authority dl div + div {
+  border-top: 1px solid var(--color-line);
+}
+
+.processing-class-authority dt,
+.processing-class-authority dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.processing-class-authority dt {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.processing-class-authority dd {
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.processing-class-title-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.processing-class-title-card .button {
+  width: 100%;
+}
+
+.processing-class-local-recording {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.processing-class-local-recording .live-local-recording {
+  margin: 0;
+  border: 0;
+  border-radius: inherit;
+}
+
+.record-page--processing {
+  margin-top: 0;
+}
+
+.record-page--processing .record-processing {
+  border-color: color-mix(in srgb, var(--color-brand) 16%, var(--color-line));
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.record-processing__heading,
+.record-job-list__title {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.record-processing__heading .eyebrow {
+  margin: 0;
+}
+
+.record-page__content--processing {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.record-page__content--processing > * {
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+
+.record-page__content--processing .record-transcript,
+.record-page__content--processing .record-questions,
+.record-page__content--processing .record-answers,
+.record-page__content--processing .record-jobs,
+.record-page__content--processing .final-mindmap {
+  grid-column: 1 / -1;
+}
+
+.record-page__content--processing .record-job-list__title .ui-status {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 980px) {
+  .processing-class-intro {
+    grid-template-columns: 1fr;
+  }
+
+  .processing-class-authority {
+    grid-template-columns: 12px minmax(0, 1fr);
+  }
+
+  .processing-class-authority dl {
+    grid-column: 2;
+    width: 100%;
+  }
+
+  .record-page__content--processing {
+    grid-template-columns: 1fr;
+  }
+
+  .record-page__content--processing .record-transcript,
+  .record-page__content--processing .record-questions,
+  .record-page__content--processing .record-answers,
+  .record-page__content--processing .record-jobs,
+  .record-page__content--processing .final-mindmap {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .processing-class-page {
+    gap: var(--space-5);
+  }
+
+  .processing-class-page .ui-page-header__actions,
+  .processing-class-page .ui-page-header__actions .button {
+    width: 100%;
+  }
+
+  .processing-class-authority {
+    grid-template-columns: 1fr;
+    padding: var(--space-5);
+  }
+
+  .processing-class-authority__pulse {
+    width: 10px;
+    height: 10px;
+  }
+
+  .processing-class-authority dl {
+    grid-column: auto;
+    min-width: 0;
+  }
+
+  .processing-class-authority dl div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .record-page--processing .record-processing {
+    padding: var(--space-5);
+  }
+
+  .record-page--processing .record-overview li:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .record-processing__heading,
+  .record-job-list__title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

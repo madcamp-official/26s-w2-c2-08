@@ -29,7 +29,7 @@ import {
   StudentLiveClassView,
 } from '../live/LiveClassRoom'
 import { clearAudioPublisherClientState } from '../live/audio-publisher'
-import { LocalRecordingPanel } from '../recordings/LocalRecordingPanel'
+import { ProcessingClassView } from '../records/ProcessingClassView'
 import { SessionRecordPage } from '../records/SessionRecordPage'
 import { ReadyClassView } from './ReadyClassView'
 
@@ -212,7 +212,14 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
     )
   }
   if (session.isError && !session.data)
-    return <StatePanel kind="error" title="class를 불러오지 못했습니다" />
+    return (
+      <StatePanel
+        kind="error"
+        title="class를 불러오지 못했습니다"
+        actionLabel="class 다시 불러오기"
+        onAction={() => void session.refetch()}
+      />
+    )
 
   if (course.isPending) {
     return <StatePanel kind="loading" title="Course 권한을 확인하는 중" />
@@ -331,10 +338,29 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
     )
   }
 
+  if (data.status === 'PROCESSING') {
+    return (
+      <ProcessingClassView
+        key={data.id}
+        course={courseData}
+        session={data}
+        refreshWarning={canonicalRefreshWarning}
+        onRename={(nextTitle) => rename.mutateAsync(nextTitle)}
+        renamePending={rename.isPending}
+        renameError={
+          rename.isError
+            ? rename.error instanceof ApiError
+              ? rename.error.message
+              : 'class 제목을 저장하지 못했습니다.'
+            : null
+        }
+      />
+    )
+  }
+
   const [statusTitle, statusDescription] = statusCopy(data.status)
   const canDelete = data.status === 'COMPLETED'
-  const isRecordView =
-    data.status === 'PROCESSING' || data.status === 'COMPLETED'
+  const isRecordView = data.status === 'COMPLETED'
 
   return (
     <section
@@ -434,14 +460,6 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
           </p>
         )}
       </div>
-      {professor && data.status === 'PROCESSING' && (
-        <LocalRecordingPanel
-          sessionId={data.id}
-          stream={null}
-          clientStreamId={null}
-          sessionStatus="PROCESSING"
-        />
-      )}
       {isRecordView && (
         <SessionRecordPage sessionId={data.id} professor={professor} />
       )}

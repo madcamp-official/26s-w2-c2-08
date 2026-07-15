@@ -126,19 +126,19 @@ const selectedTranscript = ["finalized", "empty"].includes(config.transcript)
   ? transcriptPresentation[config.transcript]
   : transcriptPresentation.live;
 const recordingManifest = {
-  preparing: "PREPARING",
-  "in-progress": "UPLOAD_IN_PROGRESS",
-  interrupted: "UPLOAD_INTERRUPTED",
-  resuming: "UPLOAD_RESUMING",
+  preparing: "UPLOAD_PENDING",
+  "in-progress": "UPLOADING",
+  interrupted: "UPLOADING · 연결 중단",
+  resuming: "UPLOADING · 재개 중",
   completed: "UPLOADED",
   failed: "FAILED",
 }[config.upload];
 const summaryManifest = {
   waiting: "PENDING · Job 없음",
-  running: "RUNNING · attempt 1",
+  running: "PENDING · Job RUNNING (attempt 1)",
   available: "AVAILABLE",
   "not-applicable": "NOT_APPLICABLE",
-  "source-unavailable": "SOURCE_UNAVAILABLE",
+  "source-unavailable": "FAILED · SUMMARY_SOURCE_UNAVAILABLE",
   "data-error": "DATA_INTEGRITY_ERROR",
 }[config.summary];
 const clusterManifest = {
@@ -235,6 +235,13 @@ document.addEventListener("click", (event) => {
     setDemoState(document.querySelector("#storedRecordRegion"), "normal");
     showToast(
       "다른 영역을 유지하고 저장 기록 첫 cursor 페이지만 다시 조회했습니다.",
+      "success",
+    );
+  }
+  if (event.target.closest("[data-job-retry]")) {
+    setDemoState(document.querySelector("#coordinatorJob"), "pending");
+    showToast(
+      "기존 기록을 유지하고 실패한 후처리 Job을 새 attempt로 다시 요청했습니다.",
       "success",
     );
   }

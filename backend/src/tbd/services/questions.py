@@ -355,7 +355,7 @@ class QuestionService:
             # is monotonically increased with this update and is the value a
             # client needs to know before an AI revision exists.
             resource_version=max(1, state.requested_through_sequence),
-            payload=state.model_dump(mode="json"),
+            payload={"clustering_state": state.model_dump(mode="json")},
         )
 
     @staticmethod
@@ -386,14 +386,28 @@ class QuestionService:
 
     @staticmethod
     def project_clustering_state(
-        state: QuestionClusteringState, *, active: AIJob | None
+        state: QuestionClusteringState,
+        *,
+        active: AIJob | None,
+        last: AIJob | None = None,
     ) -> QuestionClusteringStateResponse:
+        projected_job = (
+            last
+            if last is not None and last.id == state.last_job_id
+            else active
+            if active is not None and active.id == state.last_job_id
+            else None
+        )
         last_job = (
             QuestionClusteringJobRef(
                 id=state.last_job_id,
                 attempt=state.last_job_attempt,
                 status=state.last_job_status,
-                mode="LIVE_INCREMENTAL",
+                mode=(
+                    str(projected_job.clustering_mode)
+                    if projected_job is not None and projected_job.clustering_mode is not None
+                    else "LIVE_INCREMENTAL"
+                ),
             )
             if state.last_job_id is not None
             and state.last_job_attempt is not None

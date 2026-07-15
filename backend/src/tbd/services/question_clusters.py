@@ -17,7 +17,7 @@ from tbd.models.clustering import (
     QuestionCluster,
     QuestionClusterMember,
 )
-from tbd.models.questions import Question, QuestionClusteringState
+from tbd.models.questions import AIJob, Question, QuestionClusteringState
 from tbd.repositories.questions import QuestionRepository
 from tbd.schemas.clustering import (
     QuestionClusterListResponse,
@@ -107,7 +107,10 @@ class QuestionClusterService:
         state = await self._visible_state(session, session_id=session_id, user_id=user_id)
         generation = state.current_generation if scope == "CURRENT" else state.final_generation
         active = await self.repository.active_clustering_job(session, session_id)
-        projection = QuestionService.project_clustering_state(state, active=active)
+        last = (
+            await session.get(AIJob, state.last_job_id) if state.last_job_id is not None else None
+        )
+        projection = QuestionService.project_clustering_state(state, active=active, last=last)
         if generation is None:
             return QuestionClusterListResponse(
                 scope=scope,

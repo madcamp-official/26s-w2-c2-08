@@ -6,14 +6,23 @@ import {
   failedMaterialJob,
   professorCourse,
   professorDraftCourse,
+  professorProcessingCourse,
   liveProfessorSession,
   liveQuestions,
   liveStudentSession,
   liveTimeline,
+  processingAnswer,
+  processingJobs,
+  processingProfessorSession,
+  processingQuestions,
+  processingRecord,
+  processingStudentSession,
+  processingTimeline,
   readyMaterial,
   readySession,
   studentCourse,
   studentLiveCourse,
+  studentProcessingCourse,
   studentWorkspaceCourse,
   visualUser,
 } from './entities'
@@ -137,11 +146,15 @@ export async function installApiFixture(
         route,
         courseDetailMatch[1] === studentCourse.id
           ? studentWorkspaceCourse
-          : courseDetailMatch[1] === studentLiveCourse.id
-            ? studentLiveCourse
-            : courseDetailMatch[1] === professorDraftCourse.id
-              ? professorDraftCourse
-              : professorCourse,
+          : courseDetailMatch[1] === studentProcessingCourse.id
+            ? studentProcessingCourse
+            : courseDetailMatch[1] === professorProcessingCourse.id
+              ? professorProcessingCourse
+              : courseDetailMatch[1] === studentLiveCourse.id
+                ? studentLiveCourse
+                : courseDetailMatch[1] === professorDraftCourse.id
+                  ? professorDraftCourse
+                  : professorCourse,
       )
       return
     }
@@ -190,8 +203,24 @@ export async function installApiFixture(
           ? liveProfessorSession
           : sessionId === liveStudentSession.id
             ? liveStudentSession
-            : readySession,
+            : sessionId === processingProfessorSession.id
+              ? processingProfessorSession
+              : sessionId === processingStudentSession.id
+                ? processingStudentSession
+                : readySession,
       )
+      return
+    }
+
+    const sessionRecordMatch = url.pathname.match(
+      /^\/api\/v1\/sessions\/([^/]+)\/record$/,
+    )
+    if (request.method() === 'GET' && sessionRecordMatch) {
+      const session =
+        sessionRecordMatch[1] === processingStudentSession.id
+          ? processingStudentSession
+          : processingProfessorSession
+      await fulfillJson(route, processingRecord(session))
       return
     }
 
@@ -203,13 +232,19 @@ export async function installApiFixture(
       const session =
         sessionId === liveProfessorSession.id
           ? liveProfessorSession
-          : liveStudentSession
+          : sessionId === liveStudentSession.id
+            ? liveStudentSession
+            : sessionId === processingStudentSession.id
+              ? processingStudentSession
+              : processingProfessorSession
       await fulfillJson(
         route,
-        liveTimeline(
-          session.id,
-          session.canonical_transcript_version_id ?? 'missing-version',
-        ),
+        session.status === 'PROCESSING'
+          ? processingTimeline(session)
+          : liveTimeline(
+              session.id,
+              session.canonical_transcript_version_id ?? 'missing-version',
+            ),
       )
       return
     }
@@ -218,8 +253,16 @@ export async function installApiFixture(
       /^\/api\/v1\/sessions\/([^/]+)\/questions$/,
     )
     if (request.method() === 'GET' && sessionQuestionsMatch) {
+      const processingSession =
+        sessionQuestionsMatch[1] === processingProfessorSession.id
+          ? processingProfessorSession
+          : sessionQuestionsMatch[1] === processingStudentSession.id
+            ? processingStudentSession
+            : null
       await fulfillJson(route, {
-        items: liveQuestions(sessionQuestionsMatch[1] ?? ''),
+        items: processingSession
+          ? processingQuestions(processingSession)
+          : liveQuestions(sessionQuestionsMatch[1] ?? ''),
         next_cursor: null,
       })
       return
@@ -229,6 +272,23 @@ export async function installApiFixture(
       /^\/api\/v1\/sessions\/([^/]+)\/question-clusters$/,
     )
     if (request.method() === 'GET' && sessionClustersMatch) {
+      const processingSession =
+        sessionClustersMatch[1] === processingProfessorSession.id
+          ? processingProfessorSession
+          : sessionClustersMatch[1] === processingStudentSession.id
+            ? processingStudentSession
+            : null
+      if (processingSession) {
+        await fulfillJson(route, {
+          scope: 'FINAL',
+          clustering_state:
+            processingRecord(processingSession).question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        })
+        return
+      }
       await fulfillJson(route, {
         scope: 'CURRENT',
         generation: null,
@@ -253,7 +313,16 @@ export async function installApiFixture(
       /^\/api\/v1\/sessions\/([^/]+)\/answers$/,
     )
     if (request.method() === 'GET' && sessionAnswersMatch) {
-      await fulfillJson(route, { items: [], next_cursor: null })
+      const processingSession =
+        sessionAnswersMatch[1] === processingProfessorSession.id
+          ? processingProfessorSession
+          : sessionAnswersMatch[1] === processingStudentSession.id
+            ? processingStudentSession
+            : null
+      await fulfillJson(route, {
+        items: processingSession ? [processingAnswer(processingSession)] : [],
+        next_cursor: null,
+      })
       return
     }
 
@@ -296,10 +365,42 @@ export async function installApiFixture(
       /^\/api\/v1\/sessions\/([^/]+)\/jobs$/,
     )
     if (request.method() === 'GET' && sessionJobsMatch) {
+      const processingSession =
+        sessionJobsMatch[1] === processingProfessorSession.id
+          ? processingProfessorSession
+          : sessionJobsMatch[1] === processingStudentSession.id
+            ? processingStudentSession
+            : null
+      const requestedJobType = url.searchParams.get('job_type')
+      const processingItems = processingSession
+        ? processingJobs(processingSession).filter(
+            (job) => !requestedJobType || job.job_type === requestedJobType,
+          )
+        : []
       await fulfillJson(route, {
-        items:
-          sessionJobsMatch[1] === readySession.id ? [failedMaterialJob] : [],
+        items: processingSession
+          ? processingItems
+          : sessionJobsMatch[1] === readySession.id
+            ? [failedMaterialJob]
+            : [],
         next_cursor: null,
+      })
+      return
+    }
+
+    const recordingPlaybackMatch = url.pathname.match(
+      /^\/api\/v1\/recordings\/([^/]+)\/playback$/,
+    )
+    if (request.method() === 'GET' && recordingPlaybackMatch) {
+      await route.fulfill({
+        body: '',
+        headers: {
+          'accept-ranges': 'bytes',
+          'cache-control': 'no-store',
+          'content-length': '0',
+          'content-type': 'audio/webm',
+        },
+        status: 200,
       })
       return
     }

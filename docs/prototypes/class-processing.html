@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/class-processing.css" />
     <script type="module" src="assets/js/class-processing.js"></script>
   </head>
   <body>
@@ -297,7 +298,22 @@
                     </div>
                     <div data-show-state="failed" hidden role="alert">
                       <h3>SESSION_POSTPROCESSING · FAILED</h3>
-                      <p>기존 HQ Transcript와 저장 기록은 rollback하지 않음</p>
+                      <p>
+                        retryable · 기존 HQ Transcript와 저장 기록은
+                        rollback하지 않음
+                      </p>
+                      <button
+                        class="button button--secondary"
+                        type="button"
+                        data-professor-only
+                        data-job-retry
+                      >
+                        수업 후처리 다시 시도
+                      </button>
+                      <p data-student-only>
+                        교수자가 재시도를 요청할 때까지 저장 기록을 계속 볼 수
+                        있습니다.
+                      </p>
                     </div>
                   </li>
                   <li

@@ -59,6 +59,10 @@ export function useSessionRealtime({
       void queryClient.invalidateQueries({
         queryKey: materialKeys.jobs(sessionId),
       })
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'records' && query.queryKey.includes(sessionId),
+      })
     }
     const client = new RealtimeSessionClient({
       sessionId,

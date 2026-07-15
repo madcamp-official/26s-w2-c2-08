@@ -1,0 +1,324 @@
+:root {
+  --color-canvas: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-soft: #f8fafc;
+  --color-ink: #0f172a;
+  --color-ink-soft: #334155;
+  --color-muted: #64748b;
+  --color-placeholder: #94a3b8;
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+  --color-brand: #2563eb;
+  --color-brand-dark: #1d4ed8;
+  --color-brand-soft: #eff6ff;
+  --color-accent: #93c5fd;
+  --color-accent-ink: #172554;
+  --color-success: #15803d;
+  --color-success-soft: #f0fdf4;
+  --color-warning: #a16207;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-info: #1d4ed8;
+  --color-info-soft: #eff6ff;
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 5%);
+  --shadow-md: 0 10px 28px rgb(15 23 42 / 9%);
+  --shadow-focus: 0 0 0 3px rgb(37 99 235 / 18%);
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --container-wide: 1200px;
+}
+
+body {
+  background: var(--color-canvas);
+}
+
+:focus-visible {
+  outline-color: rgb(37 99 235 / 46%);
+}
+
+.prototype-bar {
+  flex-wrap: wrap;
+  border-bottom-color: rgb(37 99 235 / 18%);
+  background: #dbeafe;
+}
+
+.prototype-bar a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding-inline: 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.page-main {
+  padding-block: 36px 72px;
+}
+
+.subpage-heading {
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+}
+
+.subpage-heading h1 {
+  margin-top: 6px;
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.subpage-heading p:not(.eyebrow) {
+  margin-top: var(--space-2);
+  line-height: 1.55;
+}
+
+.subpage-heading .record-admin-actions {
+  margin-top: var(--space-3);
+}
+
+.button,
+.icon-button,
+.profile-button {
+  border-radius: var(--radius-xs);
+}
+
+.button--primary {
+  box-shadow: 0 4px 12px rgb(37 99 235 / 18%);
+}
+
+.panel,
+.card,
+.record-section,
+.record-manifest,
+.processing-overview > div,
+.job-card,
+.record-preview details,
+.record-manifest__item,
+.record-material,
+.record-question,
+.record-cluster,
+.record-job-card,
+.record-transcript .transcript-segment {
+  border-color: var(--color-line);
+  background: var(--color-surface);
+}
+
+.panel,
+.record-section {
+  padding: clamp(18px, 2.4vw, 24px);
+}
+
+.processing-overview {
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.processing-overview > div {
+  min-width: 0;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.processing-overview strong {
+  margin-top: var(--space-2);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.processing-overview small,
+.record-manifest__item small,
+.record-material small,
+.record-job-card p,
+.job-card p,
+.record-preview p,
+.record-preview li,
+.recording-player p,
+.record-answer p {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.processing-layout {
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.55fr);
+  gap: var(--space-4);
+}
+
+.record-main,
+.record-sidebar {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.record-section__heading {
+  gap: var(--space-3);
+}
+
+.record-section__heading h2 {
+  font-size: 19px;
+  letter-spacing: -0.025em;
+}
+
+.record-section__heading p {
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.record-region-status,
+.record-codepoint-count,
+.record-data-note,
+.processing-stage-list li {
+  font-size: 12px;
+}
+
+.record-region-status {
+  padding: 5px 8px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-soft);
+}
+
+.record-data-note {
+  border-left-width: 3px;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--color-brand-soft);
+}
+
+.record-manifest {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.record-sidebar .record-manifest {
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-3);
+}
+
+.record-sidebar .record-manifest__item {
+  display: block;
+}
+
+.record-sidebar .record-manifest__item strong {
+  margin-top: 5px;
+  font-size: 14px;
+  text-align: left;
+}
+
+.record-manifest__item,
+.record-material,
+.record-question,
+.record-cluster,
+.record-job-card,
+.job-card,
+.record-preview details,
+.record-transcript .transcript-segment {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.recording-player {
+  border-color: rgb(37 99 235 / 22%);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-brand-soft), #ffffff);
+}
+
+.record-answer {
+  border-color: rgb(37 99 235 / 22%);
+  background: var(--color-brand-soft);
+}
+
+.record-preview summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.processing-stage-list li {
+  min-height: 28px;
+  line-height: 1.5;
+}
+
+.processing-stage-list li[data-stage-state="active"]::before {
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 14%);
+}
+
+.record-cluster-map__branches li {
+  border-left-color: rgb(37 99 235 / 35%);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-surface-soft);
+  font-size: 12px;
+}
+
+.completion-card {
+  border-color: rgb(37 99 235 / 22%);
+}
+
+@media (max-width: 900px) {
+  .processing-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .subpage-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .subpage-heading > .button {
+    align-self: flex-start;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 900px) {
+  .record-sidebar .record-manifest {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .page-main {
+    padding-block: 28px 56px;
+  }
+
+  .subpage-heading h1 {
+    font-size: 30px;
+  }
+
+  .subpage-heading > .button,
+  .subpage-heading .record-admin-actions,
+  .subpage-heading .record-admin-actions .button {
+    width: 100%;
+  }
+
+  .processing-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .processing-overview > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .record-section__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .record-manifest {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .icon-button,
+  .profile-button {
+    transition: none;
+  }
+}

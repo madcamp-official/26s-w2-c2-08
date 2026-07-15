@@ -115,7 +115,12 @@ class AIJobListResponse(BaseModel):
     next_cursor: str | None
 
 
-def project_ai_job(job: AIJob, *, result: AIJobResourceLink | None = None) -> AIJobResponse:
+def project_ai_job(
+    job: AIJob,
+    *,
+    result: AIJobResourceLink | None = None,
+    result_unavailable_reason: Literal["SUPERSEDED"] | None = None,
+) -> AIJobResponse:
     """Project one Job without exposing run tokens, leases, or internal inputs."""
 
     progress = (
@@ -159,7 +164,7 @@ def project_ai_job(job: AIJob, *, result: AIJobResourceLink | None = None) -> AI
         error=error,
         target=_target_link(job),
         result=result,
-        result_unavailable_reason=None,
+        result_unavailable_reason=result_unavailable_reason,
         created_at=job.created_at,
         updated_at=job.updated_at,
         started_at=job.started_at,

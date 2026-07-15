@@ -971,9 +971,11 @@ class SessionPostprocessingWorker:
                     partition_key=f"session:{lecture_session.id}",
                     event_type="clustering.updated",
                     resource_version=max(1, state.requested_sequence),
-                    payload=QuestionService.project_clustering_state(state, active=None).model_dump(
-                        mode="json"
-                    ),
+                    payload={
+                        "clustering_state": QuestionService.project_clustering_state(
+                            state, active=None, last=timeout_job
+                        ).model_dump(mode="json")
+                    },
                 )
 
         answers = list(

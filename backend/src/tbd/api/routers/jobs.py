@@ -20,6 +20,7 @@ from tbd.core.errors import ApiError
 from tbd.core.request_hash import canonical_request_hash, idempotency_key_hash
 from tbd.db import transaction
 from tbd.models.enums import AIJobStatus
+from tbd.models.questions import AIJob
 from tbd.repositories.idempotency import (
     AcquiredIdempotencyRecord,
     IdempotencyKeyReusedError,
@@ -36,6 +37,7 @@ from tbd.schemas.jobs import (
     SharedAIJobType,
     project_ai_job,
 )
+from tbd.services.job_results import AIJobResultService
 from tbd.services.jobs import (
     InvalidSharedJobCursorError,
     JobAccessDeniedError,
@@ -45,7 +47,6 @@ from tbd.services.jobs import (
     SessionJobAccessDeniedError,
     SessionJobNotFoundError,
 )
-from tbd.services.personal_ai import PersonalAIService
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 session_jobs_router = APIRouter(tags=["Jobs"])
@@ -59,6 +60,15 @@ IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1)]
 AllowedOrigin = Annotated[None, Depends(require_allowed_origin)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 PROCESSING_LEASE = timedelta(seconds=60)
+
+
+async def _project_job(session: AsyncSession, job: AIJob) -> AIJobResponse:
+    projection = await AIJobResultService().project(session, job)
+    return project_ai_job(
+        job,
+        result=projection.result,
+        result_unavailable_reason=projection.unavailable_reason,
+    )
 
 
 @session_jobs_router.get(
@@ -102,10 +112,7 @@ async def list_session_shared_jobs(
     except InvalidSharedJobCursorError as exc:
         raise ApiError(400, "INVALID_CURSOR", "작업 목록 cursor를 확인해 주세요.") from exc
     return AIJobListResponse(
-        items=[
-            project_ai_job(job, result=await PersonalAIService().result_link(session, job))
-            for job in jobs
-        ],
+        items=[await _project_job(session, job) for job in jobs],
         next_cursor=next_cursor,
     )
 
@@ -133,7 +140,7 @@ async def get_job(
             code="RESOURCE_NOT_FOUND",
             message="요청한 리소스를 찾을 수 없습니다.",
         ) from exc
-    return project_ai_job(job, result=await PersonalAIService().result_link(session, job))
+    return await _project_job(session, job)
 
 
 @router.post(

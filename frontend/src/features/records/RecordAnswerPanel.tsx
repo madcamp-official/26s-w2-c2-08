@@ -94,10 +94,12 @@ function mappingCopy(answer: Answer) {
 export function RecordAnswerPanel({
   sessionId,
   professor,
+  sessionStatus,
   onFocusTranscriptRange,
 }: {
   sessionId: string
   professor: boolean
+  sessionStatus: 'PROCESSING' | 'COMPLETED'
   onFocusTranscriptRange: (startSequence: number, endSequence: number) => void
 }) {
   const queryClient = useQueryClient()
@@ -107,12 +109,14 @@ export function RecordAnswerPanel({
   const [selectedQuestionId, setSelectedQuestionId] = useState('')
   const [newText, setNewText] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const editable = professor && sessionStatus === 'COMPLETED'
   const answers = useInfiniteQuery({
     queryKey: recordKeys.answers(sessionId),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam, signal }) =>
       listRecordAnswers(sessionId, pageParam, signal),
     getNextPageParam: (page) => page.next_cursor,
+    refetchInterval: sessionStatus === 'PROCESSING' ? 3_000 : false,
   })
   const openQuestions = useInfiniteQuery({
     queryKey: recordKeys.openQuestions(sessionId),
@@ -120,7 +124,7 @@ export function RecordAnswerPanel({
     queryFn: ({ pageParam, signal }) =>
       listOpenRecordQuestions(sessionId, pageParam, signal),
     getNextPageParam: (page) => page.next_cursor,
-    enabled: professor,
+    enabled: editable,
   })
   const items = answers.data?.pages.flatMap((page) => page.items) ?? []
   const unansweredQuestions =
@@ -216,7 +220,7 @@ export function RecordAnswerPanel({
         </p>
       )}
 
-      {professor && (
+      {editable && (
         <form
           className="answer-text-composer"
           onSubmit={(event) => {
@@ -328,13 +332,14 @@ export function RecordAnswerPanel({
                 {organization && (
                   <div
                     className={`answer-organization answer-organization--${organization.tone}`}
+                    role={organization.tone === 'failed' ? 'alert' : 'status'}
                   >
                     <strong>AI 답변 정리</strong>
                     <p>{organization.content}</p>
                     <span className="input-hint">{organization.detail}</span>
                   </div>
                 )}
-                {professor && (
+                {editable && (
                   <div className="form-actions">
                     <Button
                       variant="secondary"
@@ -374,7 +379,7 @@ export function RecordAnswerPanel({
         </Button>
       )}
 
-      {professor && editing && (
+      {editable && editing && (
         <form
           className="answer-text-editor"
           onSubmit={(event) => {
