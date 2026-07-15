@@ -1437,7 +1437,10 @@ export interface paths {
          * 사용자 메시지 전송과 AI 답변 요청
          * @description 대화 소유자만 요청할 수 있다. 서버가 URL로 확정된 Session에 연결된 READY PDF,
          *     final Transcript와 Q&A만 검색하며 UPLOADED, PROCESSING, FAILED 또는 분리된 자료는
-         *     제외한다. content는 앞뒤 공백 제거·Unicode NFC 정규화 후 Unicode
+         *     제외한다. 검색 결과가 질문을 직접 뒷받침하면 Assistant는 `강의 근거에 의하면, ...`과
+         *     Evidence를 저장한다. 근거가 없거나 불충분하면 일반 지식으로 답변할 수 있으며
+         *     `강의 내용에는 직접적인 근거가 없지만, 일반적으로 ...`으로 구분하고 Evidence는 비운다.
+         *     content는 앞뒤 공백 제거·Unicode NFC 정규화 후 Unicode
          *     code point 기준 1~2,000자를 검증한다. 정규화 결과를 USER Message에
          *     저장하며 빈 결과·초과는 자르지 않고 422 VALIDATION_ERROR와 field,
          *     EMPTY_AFTER_NORMALIZATION 또는 MAX_LENGTH_EXCEEDED reason, max_length,

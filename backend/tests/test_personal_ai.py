@@ -21,10 +21,39 @@ from tbd.providers.ai import (
     FakeProviderBehavior,
     ProviderUnavailableError,
 )
-from tbd.services.personal_ai import PersonalAIWorker
+from tbd.services.personal_ai import (
+    COURSE_ANSWER_PREFIX,
+    GENERAL_ANSWER_PREFIX,
+    PersonalAIWorker,
+    _resolve_chat_answer,
+)
 
 pytestmark = pytest.mark.integration
 TRUSTED_ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+def test_chat_answer_policy_separates_course_evidence_and_general_knowledge() -> None:
+    """Only an explicit, evidence-backed model decision may expose Evidence links."""
+
+    course_answer, course_evidence = _resolve_chat_answer(
+        "[[COURSE]] TCP 혼잡 제어는 전송 속도를 조절하는 방식입니다.",
+        evidence_available=True,
+    )
+    general_answer, general_evidence = _resolve_chat_answer(
+        "[[GENERAL]] TCP 혼잡 제어는 네트워크 혼잡을 줄이기 위한 제어 방식입니다.",
+        evidence_available=True,
+    )
+    fallback_answer, fallback_evidence = _resolve_chat_answer(
+        "태그를 누락한 일반적인 설명입니다.",
+        evidence_available=True,
+    )
+
+    assert course_answer.startswith(COURSE_ANSWER_PREFIX)
+    assert course_evidence is True
+    assert general_answer.startswith(GENERAL_ANSWER_PREFIX)
+    assert general_evidence is False
+    assert fallback_answer.startswith(GENERAL_ANSWER_PREFIX)
+    assert fallback_evidence is False
 
 
 def _settings(database_url: str) -> Settings:
@@ -178,9 +207,10 @@ def test_personal_live_resources_are_polled_then_purged_at_class_end(
             messages = client.get(f"/api/v1/chats/{chat_id}/messages")
             assert messages.status_code == 200
             assert [item["role"] for item in messages.json()["items"]] == ["USER", "ASSISTANT"]
-            assert (
-                messages.json()["items"][1]["content"] == "저장된 강의 근거에서 확인할 수 없습니다."
-            )
+            assistant = messages.json()["items"][1]
+            assert assistant["content"].startswith(GENERAL_ANSWER_PREFIX)
+            assert assistant["evidence"] == []
+            assert assistant["model_name"] == "fake-llm-v1"
 
             current_user["id"] = professor_id
             assert client.get(f"/api/v1/chats/{chat_id}").status_code == 404
