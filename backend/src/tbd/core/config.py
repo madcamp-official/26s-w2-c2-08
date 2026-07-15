@@ -29,6 +29,13 @@ class AppEnvironment(StrEnum):
     PRODUCTION = "production"
 
 
+class AIProviderRuntime(StrEnum):
+    """Provider profile selectable for application and standalone workers."""
+
+    FAKE = "fake"
+    OLLAMA = "ollama"
+
+
 class Settings(BaseSettings):
     """Runtime settings with production-safe database validation."""
 
@@ -52,6 +59,10 @@ class Settings(BaseSettings):
     database_url: str | None = None
     storage_root: Path = REPOSITORY_ROOT / "data" / "uploads"
     max_upload_bytes: int = 100_000_000
+    ai_provider: AIProviderRuntime = AIProviderRuntime.FAKE
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_llm_model: str = "mistral-small3.2:24b"
+    ollama_embedding_model: str = "embeddinggemma"
     frontend_origin: str = "http://localhost:5173"
     auth_allowed_origins: str = "http://localhost:5173"
     auth_secret_key: SecretStr = SecretStr(DEFAULT_AUTH_SECRET)
@@ -131,6 +142,7 @@ class Settings(BaseSettings):
         """Reject repository defaults and incomplete auth configuration in production."""
 
         self._validate_auth_urls()
+        self._validate_ai_provider()
 
         if self.app_env is not AppEnvironment.PRODUCTION:
             return self
@@ -171,6 +183,29 @@ class Settings(BaseSettings):
                 raise ValueError("GOOGLE_OIDC_REDIRECT_URI must use HTTPS when APP_ENV=production")
 
         return self
+
+    def _validate_ai_provider(self) -> None:
+        """Validate an Ollama origin and model tags without contacting the runtime."""
+
+        if self.ai_provider is not AIProviderRuntime.OLLAMA:
+            return
+        parsed = urlsplit(self.ollama_base_url.strip().rstrip("/"))
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("OLLAMA_BASE_URL must be an exact HTTP(S) origin")
+        for field_name, value in (
+            ("OLLAMA_LLM_MODEL", self.ollama_llm_model),
+            ("OLLAMA_EMBEDDING_MODEL", self.ollama_embedding_model),
+        ):
+            if not value.strip():
+                raise ValueError(f"{field_name} must not be empty when AI_PROVIDER=ollama")
 
     def _validate_auth_urls(self) -> None:
         """Validate exact origins and the backend callback URL."""

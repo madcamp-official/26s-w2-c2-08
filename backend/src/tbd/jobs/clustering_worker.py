@@ -7,7 +7,7 @@ import asyncio
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
-from tbd.providers.ai.fake import FakeQuestionClusteringProvider
+from tbd.providers.ai import create_ai_providers
 from tbd.services.clustering import QuestionClusteringWorker
 
 DEFAULT_IDLE_POLL_SECONDS = 1.0
@@ -22,9 +22,10 @@ async def run(
 
     settings = get_settings()
     database = create_database(settings)
+    providers = create_ai_providers(settings)
     worker = QuestionClusteringWorker(
         database.session_factory,
-        FakeQuestionClusteringProvider(),
+        providers.question_clustering,
     )
     try:
         while True:

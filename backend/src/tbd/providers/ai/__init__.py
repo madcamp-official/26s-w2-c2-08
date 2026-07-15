@@ -21,15 +21,18 @@ from tbd.providers.ai.contracts import (
     ProviderUnavailableError,
     invoke_provider,
 )
+from tbd.providers.ai.factory import AIProviders, create_ai_providers
 from tbd.providers.ai.fake import (
     FakeEmbeddingProvider,
     FakeLLMProvider,
     FakeProviderBehavior,
     FakeQuestionClusteringProvider,
 )
+from tbd.providers.ai.ollama import OllamaEmbeddingProvider, OllamaLLMProvider
 
 __all__ = [
     "AIProviderError",
+    "AIProviders",
     "EmbeddingProvider",
     "EmbeddingRequest",
     "EmbeddingResult",
@@ -43,6 +46,8 @@ __all__ = [
     "LLMGenerationResult",
     "LLMMessage",
     "LLMProvider",
+    "OllamaEmbeddingProvider",
+    "OllamaLLMProvider",
     "QuestionClusteringProvider",
     "ProviderErrorCode",
     "ProviderInvalidResponseError",
@@ -50,4 +55,5 @@ __all__ = [
     "ProviderTimeoutError",
     "ProviderUnavailableError",
     "invoke_provider",
+    "create_ai_providers",
 ]
