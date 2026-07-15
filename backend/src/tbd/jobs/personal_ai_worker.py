@@ -29,6 +29,7 @@ async def run(
         providers.llm,
         providers.embedding,
         provider_timeout=timedelta(seconds=settings.personal_ai_provider_timeout_seconds),
+        embedding_timeout=timedelta(seconds=settings.knowledge_embedding_timeout_seconds),
     )
     try:
         while True:

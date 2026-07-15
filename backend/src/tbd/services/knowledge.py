@@ -29,7 +29,7 @@ from tbd.repositories.jobs import ClaimedJob
 from tbd.storage import Storage, StorageError, StorageKey
 
 KNOWLEDGE_CHUNK_MAX_CHARS = 1000
-KNOWLEDGE_EMBEDDING_TIMEOUT = timedelta(seconds=5)
+KNOWLEDGE_EMBEDDING_TIMEOUT = timedelta(seconds=60)
 KNOWLEDGE_INDEXING_LEASE = timedelta(minutes=2)
 EMBEDDINGGEMMA_DOCUMENT_PURPOSE = "embeddinggemma-retrieval-document-v1"
 EMBEDDINGGEMMA_QUERY_PURPOSE = "embeddinggemma-retrieval-query-v1"
@@ -192,11 +192,15 @@ class KnowledgeIndexingWorker:
         provider: EmbeddingProvider,
         *,
         kernel: JobKernel | None = None,
+        embedding_timeout: timedelta = KNOWLEDGE_EMBEDDING_TIMEOUT,
     ) -> None:
+        if embedding_timeout.total_seconds() <= 0:
+            raise ValueError("embedding_timeout must be positive")
         self.session_factory = session_factory
         self.storage = storage
         self.provider = provider
         self.kernel = kernel or JobKernel()
+        self.embedding_timeout = embedding_timeout
 
     async def run_once(self, *, now: datetime | None = None) -> bool:
         """Claim, embed, and persist one fenced session-wide indexing Job."""
@@ -213,7 +217,7 @@ class KnowledgeIndexingWorker:
                         purpose=EMBEDDINGGEMMA_DOCUMENT_PURPOSE,
                         texts=tuple(candidate.embedding_text for candidate in candidates),
                     ),
-                    timeout=KNOWLEDGE_EMBEDDING_TIMEOUT,
+                    timeout=self.embedding_timeout,
                 )
                 if (
                     len(result.vectors) != len(candidates)
@@ -553,8 +557,16 @@ class KnowledgeIndexingWorker:
 class KnowledgeRetrievalService:
     """Scope vector retrieval in SQL before a caller creates public Evidence."""
 
-    def __init__(self, provider: EmbeddingProvider) -> None:
+    def __init__(
+        self,
+        provider: EmbeddingProvider,
+        *,
+        embedding_timeout: timedelta = KNOWLEDGE_EMBEDDING_TIMEOUT,
+    ) -> None:
+        if embedding_timeout.total_seconds() <= 0:
+            raise ValueError("embedding_timeout must be positive")
         self.provider = provider
+        self.embedding_timeout = embedding_timeout
 
     async def retrieve(
         self,
@@ -572,7 +584,7 @@ class KnowledgeRetrievalService:
                 purpose=EMBEDDINGGEMMA_QUERY_PURPOSE,
                 texts=(format_embeddinggemma_query(query),),
             ),
-            timeout=KNOWLEDGE_EMBEDDING_TIMEOUT,
+            timeout=self.embedding_timeout,
         )
         if embedded.dimension != KNOWLEDGE_EMBEDDING_DIMENSION:
             raise ProviderInvalidResponseError
