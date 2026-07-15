@@ -7,7 +7,7 @@ import asyncio
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
-from tbd.providers.ai import FakeEmbeddingProvider
+from tbd.providers.ai import create_ai_providers
 from tbd.services.knowledge import KnowledgeIndexingWorker
 from tbd.storage import FilesystemStorage
 
@@ -23,10 +23,11 @@ async def run(
 
     settings = get_settings()
     database = create_database(settings)
+    providers = create_ai_providers(settings)
     worker = KnowledgeIndexingWorker(
         database.session_factory,
         FilesystemStorage(settings.storage_root),
-        FakeEmbeddingProvider(),
+        providers.embedding,
     )
     try:
         while True:
