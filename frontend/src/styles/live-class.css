@@ -65,7 +65,9 @@
   font-weight: 700;
 }
 
-.live-session-header__meta > span:not(.status-chip) + span:not(.status-chip)::before {
+.live-session-header__meta
+  > span:not(.status-chip)
+  + span:not(.status-chip)::before {
   margin-right: var(--space-3);
   color: var(--color-line-strong);
   content: '·';

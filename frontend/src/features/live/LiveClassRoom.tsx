@@ -412,9 +412,7 @@ function LiveClassRoom({
                 <div>
                   <p className="eyebrow">Live audio</p>
                   <h2>교수자 마이크</h2>
-                  <p>
-                    실시간 STT 전송 상태이며 로컬 원본 녹음과 독립적입니다.
-                  </p>
+                  <p>실시간 STT 전송 상태이며 로컬 원본 녹음과 독립적입니다.</p>
                 </div>
                 <LiveAudioPublisherControl
                   ref={audioControlRef}

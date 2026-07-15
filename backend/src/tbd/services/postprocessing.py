@@ -49,7 +49,18 @@ COORDINATOR_LEASE = timedelta(minutes=1)
 FINAL_AI_LEASE = timedelta(minutes=1)
 DEFAULT_FINAL_AI_TIMEOUT = timedelta(seconds=60)
 PROCESSING_DEADLINE = timedelta(minutes=10)
-FINAL_SUMMARY_PROMPT_VERSION = "final-summary-v1"
+FINAL_SUMMARY_PROMPT_VERSION = "final-summary-v2"
+FINAL_SUMMARY_SYSTEM_PROMPT = """당신은 강의 Transcript를 학습용 강의 노트로 정리하는 편집자입니다.
+아래 규칙을 반드시 지키세요.
+- Transcript에서 실제로 다룬 내용만 요약하고 외부 지식이나 추측을 추가하지 마세요.
+- 강의의 중심 주제와 핵심 설명, 개념 사이의 관계가 드러나도록 구체적으로 정리하세요.
+- 단순한 감상이나 칭찬 대신 학생이 강의 내용을 복습할 수 있는 정보 중심의 문장으로 작성하세요.
+- 사용자에게 질문하거나 추가 질문을 제안하거나 도움을 제안하지 마세요.
+- "궁금한 점이 있다면", "알려주세요" 같은 대화형 표현과 이모지를 사용하지 마세요.
+- 출력은 '핵심 요약'과 '주요 내용' 두 부분으로 구성하세요. 핵심 요약은 짧은 문단으로,
+  주요 내용은 구체적인 글머리표로 작성하세요.
+- Transcript만으로 확실하지 않은 내용은 사실처럼 만들어 내지 말고 생략하세요.
+"""
 ANSWER_ORGANIZATION_PROMPT_VERSION = "answer-organization-v1"
 
 
@@ -221,6 +232,37 @@ async def _latest_recording_version(
     )
 
 
+async def _finalized_summary_source(
+    session: AsyncSession, lecture_session: LectureSession
+) -> TranscriptVersion | None:
+    """Prefer finalized HQ output, then fall back to the canonical LIVE Transcript."""
+
+    recording = await _latest_recording_version(session, lecture_session.id)
+    if (
+        recording is not None
+        and recording.status == TranscriptStatus.FINALIZED
+        and recording.last_sequence > 0
+    ):
+        return recording
+    if lecture_session.canonical_transcript_version_id is None:
+        return None
+    canonical = await session.scalar(
+        select(TranscriptVersion)
+        .where(
+            TranscriptVersion.id == lecture_session.canonical_transcript_version_id,
+            TranscriptVersion.session_id == lecture_session.id,
+        )
+        .with_for_update()
+    )
+    if (
+        canonical is not None
+        and canonical.status == TranscriptStatus.FINALIZED
+        and canonical.last_sequence > 0
+    ):
+        return canonical
+    return None
+
+
 class SessionPostprocessingWorker:
     """Schedule and execute the non-STT terminal stages of a class."""
 
@@ -254,6 +296,8 @@ class SessionPostprocessingWorker:
         summary_work = await self._claim_final_ai(AIJobType.FINAL_SUMMARY, timestamp)
         if summary_work is not None:
             await self._run_final_summary(summary_work, now=timestamp)
+            return True
+        if await self._schedule_missing_final_summary():
             return True
         return False
 
@@ -321,17 +365,18 @@ class SessionPostprocessingWorker:
                     )
                     return
 
-                version = await _latest_recording_version(session, lecture_session.id)
-                finalized = (
-                    version is not None
-                    and version.status == TranscriptStatus.FINALIZED
-                    and version.last_sequence > 0
+                recording_version = await _latest_recording_version(session, lecture_session.id)
+                recording_finalized = (
+                    recording_version is not None
+                    and recording_version.status == TranscriptStatus.FINALIZED
+                    and recording_version.last_sequence > 0
                 )
-                if finalized:
+                source_version = await _finalized_summary_source(session, lecture_session)
+                if recording_finalized:
                     await self._rebuild_answer_mappings(
                         session,
                         lecture_session=lecture_session,
-                        target_version=version,
+                        target_version=recording_version,
                         job=job,
                         now=now,
                     )
@@ -343,13 +388,13 @@ class SessionPostprocessingWorker:
                 await self._schedule_answer_organizations(
                     session,
                     lecture_session=lecture_session,
-                    target_version=version if finalized else None,
+                    target_version=(recording_version if recording_finalized else None),
                 )
-                if finalized:
+                if source_version is not None:
                     await self._schedule_final_summary(
                         session,
                         lecture_session=lecture_session,
-                        source_version=version,
+                        source_version=source_version,
                     )
                 if not await self.kernel.succeed(
                     session,
@@ -541,10 +586,47 @@ class SessionPostprocessingWorker:
                 status=AIJobStatus.PENDING,
                 attempt=1,
                 version=1,
+                input_transcript_version_id=source_version.id,
                 blocks_session_completion=True,
                 retryable=True,
             ),
         )
+
+    async def _schedule_missing_final_summary(self) -> bool:
+        """Backfill completed sessions whose fallback path never created a summary Job."""
+
+        async with self.session_factory() as session:
+            async with session.begin():
+                candidate = await session.scalar(
+                    select(LectureSession)
+                    .join(
+                        TranscriptVersion,
+                        TranscriptVersion.id == LectureSession.canonical_transcript_version_id,
+                    )
+                    .where(
+                        LectureSession.status == LectureSessionStatus.COMPLETED,
+                        TranscriptVersion.status == TranscriptStatus.FINALIZED,
+                        TranscriptVersion.last_sequence > 0,
+                        ~select(AIJob.id)
+                        .where(
+                            AIJob.session_id == LectureSession.id,
+                            AIJob.job_type == AIJobType.FINAL_SUMMARY,
+                        )
+                        .exists(),
+                    )
+                    .order_by(LectureSession.completed_at, LectureSession.id)
+                    .with_for_update(skip_locked=True)
+                    .limit(1)
+                )
+                if candidate is None:
+                    return False
+                source = await _finalized_summary_source(session, candidate)
+                if source is None:
+                    return False
+                await self._schedule_final_summary(
+                    session, lecture_session=candidate, source_version=source
+                )
+                return True
 
     async def _claim_final_ai(self, job_type: str, now: datetime) -> _ClaimedFinalAI | None:
         async with self.session_factory() as session:
@@ -662,9 +744,15 @@ class SessionPostprocessingWorker:
             text = await self._input_text(claimed)
             result = await self.llm_provider.generate(
                 LLMGenerationRequest(
-                    purpose="final-summary-v1",
+                    purpose="final-summary-v2",
                     prompt_version=FINAL_SUMMARY_PROMPT_VERSION,
-                    messages=(LLMMessage(role="user", content=text),),
+                    messages=(
+                        LLMMessage(role="system", content=FINAL_SUMMARY_SYSTEM_PROMPT),
+                        LLMMessage(
+                            role="user",
+                            content=f"다음 강의 Transcript를 요약하세요.\n\n<transcript>\n{text}\n</transcript>",
+                        ),
+                    ),
                 ),
                 timeout=self.provider_timeout,
             )
@@ -686,7 +774,11 @@ class SessionPostprocessingWorker:
                     .where(LectureSession.id == claimed.session_id)
                     .with_for_update()
                 )
-                version = await _latest_recording_version(session, claimed.session_id)
+                version = (
+                    await session.get(TranscriptVersion, job.input_transcript_version_id)
+                    if job is not None and job.input_transcript_version_id is not None
+                    else None
+                )
                 if (
                     job is None
                     or lecture_session is None
@@ -749,13 +841,15 @@ class SessionPostprocessingWorker:
                     )
                 )
             else:
-                version = await _latest_recording_version(session, claimed.session_id)
-                if version is None:
+                if job.input_transcript_version_id is None:
                     raise ValueError("Final Transcript input is unavailable")
                 segments = list(
                     await session.scalars(
                         select(TranscriptSegment)
-                        .where(TranscriptSegment.transcript_version_id == version.id)
+                        .where(
+                            TranscriptSegment.transcript_version_id
+                            == job.input_transcript_version_id
+                        )
                         .order_by(TranscriptSegment.sequence)
                     )
                 )

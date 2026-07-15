@@ -255,13 +255,7 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
               : 'storage-failed',
           )
         })
-    }, [
-      clientStreamId,
-      recordingMetaReady,
-      sessionId,
-      sessionStatus,
-      stream,
-    ])
+    }, [clientStreamId, recordingMetaReady, sessionId, sessionStatus, stream])
     useEffect(
       () => () => {
         if (recorder.current) {
@@ -374,7 +368,7 @@ export const LocalRecordingPanel = forwardRef<LocalRecordingPanelHandle, Props>(
                                 ? '녹음 upload 재개 시간이 만료되어 이 원본은 다시 업로드할 수 없습니다. 저장된 실시간 Transcript는 유지됩니다.'
                                 : state === 'upload-failed'
                                   ? '네트워크 문제로 녹음 upload가 중단되었습니다. 연결되면 다시 시도하세요.'
-                                : '교수자 마이크가 연결되면 수업 원본 녹음을 이 브라우저에 자동 저장합니다.'
+                                  : '교수자 마이크가 연결되면 수업 원본 녹음을 이 브라우저에 자동 저장합니다.'
     return (
       <section className="live-local-recording" aria-label="수업 원본 녹음">
         <div>

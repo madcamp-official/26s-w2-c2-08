@@ -7,20 +7,33 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 
 from tbd.api.dependencies import get_current_user_id
 from tbd.app import create_app
 from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database, transaction
+from tbd.models.knowledge import LectureSummary
+from tbd.models.materials import TranscriptSegment, TranscriptVersion
+from tbd.models.questions import AIJob
 from tbd.models.sessions import LectureSession
-from tbd.providers.ai import FakeLLMProvider
+from tbd.providers.ai import FakeLLMProvider, LLMGenerationRequest
 from tbd.services.courses import CourseService
 from tbd.services.postprocessing import SessionPostprocessingWorker
 from tbd.services.sessions import ActiveSessionExistsError, SessionService
 
 pytestmark = pytest.mark.integration
 TRUSTED_ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+class _CapturingLLMProvider(FakeLLMProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.requests: list[LLMGenerationRequest] = []
+
+    async def generate(self, request: LLMGenerationRequest, *, timeout: timedelta):
+        self.requests.append(request)
+        return await super().generate(request, timeout=timeout)
 
 
 def _settings(database_url: str) -> Settings:
@@ -51,6 +64,28 @@ async def _seed_user(database_url: str) -> UUID:
             )
             assert isinstance(user_id, UUID)
             return user_id
+    finally:
+        await database.dispose()
+
+
+async def _append_live_transcript(database_url: str, session_id: UUID, version_id: UUID) -> None:
+    database = create_database(_settings(database_url))
+    try:
+        async with database.session_factory() as session:
+            async with session.begin():
+                version = await session.get(TranscriptVersion, version_id)
+                assert version is not None
+                version.last_sequence = 1
+                session.add(
+                    TranscriptSegment(
+                        session_id=session_id,
+                        transcript_version_id=version_id,
+                        sequence=1,
+                        start_ms=0,
+                        end_ms=1_000,
+                        text="녹음 원본이 없어도 LIVE Transcript로 요약합니다.",
+                    )
+                )
     finally:
         await database.dispose()
 
@@ -99,6 +134,11 @@ def test_session_api_persists_lifecycle_and_never_uses_job_count_as_completion(
         assert started.status_code == 200
         assert started.json()["status"] == "LIVE"
         assert started.json()["canonical_transcript_version_id"] is not None
+        live_version_id = UUID(started.json()["canonical_transcript_version_id"])
+
+        asyncio.run(
+            _append_live_transcript(migrated_database_url, UUID(session_id), live_version_id)
+        )
 
         ended = client.post(
             f"/api/v1/sessions/{session_id}/end",
@@ -124,8 +164,65 @@ def test_session_api_persists_lifecycle_and_never_uses_job_count_as_completion(
             == 409
         )
 
-    worker = SessionPostprocessingWorker(database.session_factory, FakeLLMProvider())
+    provider = _CapturingLLMProvider()
+    worker = SessionPostprocessingWorker(database.session_factory, provider)
     assert asyncio.run(worker.run_once()) is True
+    assert asyncio.run(worker.run_once()) is True
+
+    final_summary_request = next(
+        request for request in provider.requests if request.purpose == "final-summary-v2"
+    )
+    assert final_summary_request.prompt_version == "final-summary-v2"
+    assert [message.role for message in final_summary_request.messages] == ["system", "user"]
+    system_prompt = final_summary_request.messages[0].content
+    assert "실제로 다룬 내용만 요약" in system_prompt
+    assert "추가 질문을 제안" in system_prompt
+    assert "이모지를 사용하지 마세요" in system_prompt
+    assert "<transcript>" in final_summary_request.messages[1].content
+
+    async def final_summary_rows() -> tuple[AIJob, LectureSummary]:
+        async with database.session_factory() as session:
+            job = await session.scalar(
+                select(AIJob).where(
+                    AIJob.session_id == UUID(session_id),
+                    AIJob.job_type == "FINAL_SUMMARY",
+                )
+            )
+            summary = await session.scalar(
+                select(LectureSummary).where(
+                    LectureSummary.session_id == UUID(session_id),
+                    LectureSummary.summary_type == "FINAL",
+                )
+            )
+            assert job is not None
+            assert summary is not None
+            return job, summary
+
+    summary_job, summary = asyncio.run(final_summary_rows())
+    assert summary_job.status == "SUCCEEDED"
+    assert summary_job.input_transcript_version_id == live_version_id
+    assert summary.source_transcript_version_id == live_version_id
+
+    async def remove_summary_ledger() -> None:
+        async with database.session_factory() as session:
+            async with session.begin():
+                await session.execute(
+                    delete(LectureSummary).where(LectureSummary.session_id == UUID(session_id))
+                )
+                await session.execute(
+                    delete(AIJob).where(
+                        AIJob.session_id == UUID(session_id),
+                        AIJob.job_type == "FINAL_SUMMARY",
+                    )
+                )
+
+    asyncio.run(remove_summary_ledger())
+    assert asyncio.run(worker.run_once()) is True
+    assert asyncio.run(worker.run_once()) is True
+    repaired_job, repaired_summary = asyncio.run(final_summary_rows())
+    assert repaired_job.status == "SUCCEEDED"
+    assert repaired_job.input_transcript_version_id == live_version_id
+    assert repaired_summary.source_transcript_version_id == live_version_id
     with TestClient(app) as client:
         detail = client.get(f"/api/v1/sessions/{session_id}")
         assert detail.json()["status"] == "COMPLETED"
