@@ -60,7 +60,7 @@ from tbd.services.knowledge import (
 )
 
 PERSONAL_AI_LEASE = timedelta(minutes=1)
-PERSONAL_AI_PROVIDER_TIMEOUT = timedelta(seconds=15)
+PERSONAL_AI_PROVIDER_TIMEOUT = timedelta(seconds=60)
 LIVE_SUMMARY_PROMPT_VERSION = "live-summary-v1"
 CHAT_PROMPT_VERSION = "rag-chat-v1"
 NO_EVIDENCE_RESPONSE = "저장된 강의 근거에서 확인할 수 없습니다."
@@ -786,11 +786,15 @@ class PersonalAIWorker:
         embedding_provider: EmbeddingProvider,
         *,
         jobs: JobRepository | None = None,
+        provider_timeout: timedelta = PERSONAL_AI_PROVIDER_TIMEOUT,
     ) -> None:
+        if provider_timeout.total_seconds() <= 0:
+            raise ValueError("provider_timeout must be positive")
         self.session_factory = session_factory
         self.llm_provider = llm_provider
         self.retrieval = KnowledgeRetrievalService(embedding_provider)
         self.jobs = jobs or JobRepository()
+        self.provider_timeout = provider_timeout
 
     async def run_once(self, *, now: datetime | None = None) -> bool:
         """Claim and process one requester-only Job, if a due Job exists."""
@@ -961,7 +965,7 @@ class PersonalAIWorker:
                     LLMMessage(role="user", content=source),
                 ),
             ),
-            timeout=PERSONAL_AI_PROVIDER_TIMEOUT,
+            timeout=self.provider_timeout,
         )
         content = result.content.strip()
         if not content:
@@ -1042,7 +1046,7 @@ class PersonalAIWorker:
                     ),
                 ),
             ),
-            timeout=PERSONAL_AI_PROVIDER_TIMEOUT,
+            timeout=self.provider_timeout,
         )
         content = result.content.strip()
         if not content:
