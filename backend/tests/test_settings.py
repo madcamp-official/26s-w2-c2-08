@@ -11,6 +11,7 @@ from tbd.providers.ai import (
     FakeLLMProvider,
     OllamaEmbeddingProvider,
     OllamaLLMProvider,
+    OllamaQuestionClusteringProvider,
     create_ai_providers,
 )
 
@@ -176,6 +177,7 @@ def test_ai_provider_factory_selects_ollama_models_from_settings() -> None:
 
     assert isinstance(providers.llm, OllamaLLMProvider)
     assert isinstance(providers.embedding, OllamaEmbeddingProvider)
+    assert isinstance(providers.question_clustering, OllamaQuestionClusteringProvider)
 
 
 def test_ollama_selection_rejects_unsafe_origin_and_blank_model() -> None:
