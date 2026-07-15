@@ -9,6 +9,7 @@ User=goal
 Group=goal
 WorkingDirectory=/opt/goal/current/backend
 EnvironmentFile=/etc/goal/goal.env
+Environment=LD_LIBRARY_PATH=/opt/goal/current/backend/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/opt/goal/current/backend/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/ollama/cuda_v12
 ExecStart=/opt/goal/current/backend/.venv/bin/python -m tbd.jobs.%i_worker
 Restart=on-failure
 RestartSec=3
