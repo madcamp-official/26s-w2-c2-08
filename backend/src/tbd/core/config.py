@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     knowledge_embedding_timeout_seconds: int = Field(default=60, ge=1, le=300)
     personal_ai_provider_timeout_seconds: int = Field(default=60, ge=1, le=300)
     postprocessing_ai_provider_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    question_clustering_provider_timeout_seconds: int = Field(default=120, ge=1, le=300)
     stt_provider: STTProviderRuntime = STTProviderRuntime.UNAVAILABLE
     stt_hq_model: str = "large-v3"
     stt_live_model: str = "large-v3-turbo"

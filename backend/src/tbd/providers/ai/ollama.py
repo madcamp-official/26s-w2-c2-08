@@ -31,7 +31,7 @@ from tbd.providers.ai.contracts import (
     invoke_provider,
 )
 
-CLUSTERING_TIMEOUT = timedelta(seconds=30)
+DEFAULT_CLUSTERING_TIMEOUT = timedelta(seconds=120)
 _CLUSTER_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -183,21 +183,30 @@ class OllamaQuestionClusteringProvider:
     """Request a complete Question partition as an Ollama structured output."""
 
     def __init__(
-        self, *, base_url: str, model: str, transport: httpx.AsyncBaseTransport | None = None
+        self,
+        *,
+        base_url: str,
+        model: str,
+        timeout: timedelta = DEFAULT_CLUSTERING_TIMEOUT,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = _normalize_base_url(base_url)
         self._model = _require_non_empty(model, field_name="model")
+        self._timeout = timeout
         self._transport = transport
 
     async def cluster(self, inputs: tuple[ClusteringInput, ...]) -> tuple[ClusterSuggestion, ...]:
         if not inputs:
             return ()
-        return await invoke_provider(lambda: self._cluster(inputs), timeout=CLUSTERING_TIMEOUT)
+        return await invoke_provider(lambda: self._cluster(inputs), timeout=self._timeout)
 
     async def _cluster(self, inputs: tuple[ClusteringInput, ...]) -> tuple[ClusterSuggestion, ...]:
         question_lines = "\n".join(f"- id={item.question_id}: {item.content}" for item in inputs)
         prompt = (
-            "Group semantically similar anonymous lecture questions. Return every supplied id "
+            "Group semantically similar anonymous lecture questions by the underlying learning "
+            "topic and intent, not by superficial wording. Merge paraphrases and questions that "
+            "can be answered together. Prefer a small number of useful groups; create a singleton "
+            "only when its topic or required answer is genuinely distinct. Return every supplied id "
             "exactly once; do not invent ids. Write each representative in Korean, under 300 "
             "characters. Return only this JSON schema: "
             f"{json.dumps(_CLUSTER_SCHEMA, ensure_ascii=False)}\nQuestions:\n{question_lines}"
@@ -212,7 +221,7 @@ class OllamaQuestionClusteringProvider:
                 "options": {"temperature": 0},
                 "stream": False,
             },
-            timeout=CLUSTERING_TIMEOUT,
+            timeout=self._timeout,
             transport=self._transport,
         )
         if data.get("done") is not True or not isinstance(data.get("message"), Mapping):

@@ -1,6 +1,7 @@
 """One runtime selection point for AI providers used by the API and workers."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from tbd.core.config import AIProviderRuntime, Settings
 from tbd.providers.ai.clustering import QuestionClusteringProvider
@@ -53,6 +54,7 @@ def create_ai_providers(settings: Settings) -> AIProviders:
             question_clustering=OllamaQuestionClusteringProvider(
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_llm_model,
+                timeout=timedelta(seconds=settings.question_clustering_provider_timeout_seconds),
             ),
         )
     raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")
