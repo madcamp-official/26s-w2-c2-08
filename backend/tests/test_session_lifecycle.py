@@ -183,16 +183,17 @@ def test_session_api_persists_lifecycle_and_never_uses_job_count_as_completion(
     async def final_summary_rows() -> tuple[AIJob, LectureSummary]:
         async with database.session_factory() as session:
             job = await session.scalar(
-                select(AIJob).where(
-                    AIJob.session_id == UUID(session_id),
-                    AIJob.job_type == "FINAL_SUMMARY",
-                )
+                select(AIJob)
+                .where(AIJob.session_id == UUID(session_id), AIJob.job_type == "FINAL_SUMMARY")
+                .order_by(AIJob.created_at.desc(), AIJob.id.desc())
             )
             summary = await session.scalar(
-                select(LectureSummary).where(
+                select(LectureSummary)
+                .where(
                     LectureSummary.session_id == UUID(session_id),
                     LectureSummary.summary_type == "FINAL",
                 )
+                .order_by(LectureSummary.created_at.desc(), LectureSummary.id.desc())
             )
             assert job is not None
             assert summary is not None
@@ -201,7 +202,32 @@ def test_session_api_persists_lifecycle_and_never_uses_job_count_as_completion(
     summary_job, summary = asyncio.run(final_summary_rows())
     assert summary_job.status == "SUCCEEDED"
     assert summary_job.input_transcript_version_id == live_version_id
+    assert summary_job.dedupe_key_hash is not None
     assert summary.source_transcript_version_id == live_version_id
+    assert summary.prompt_version == "final-summary-v2"
+
+    async def mark_summary_as_legacy() -> None:
+        async with database.session_factory() as session:
+            async with session.begin():
+                stored_job = await session.get(AIJob, summary_job.id)
+                stored_summary = await session.get(LectureSummary, summary.id)
+                assert stored_job is not None
+                assert stored_summary is not None
+                stored_job.dedupe_key_hash = None
+                stored_summary.prompt_version = "final-summary-v1"
+
+    asyncio.run(mark_summary_as_legacy())
+    assert asyncio.run(worker.run_once()) is True
+    assert asyncio.run(worker.run_once()) is True
+    regenerated_job, regenerated_summary = asyncio.run(final_summary_rows())
+    assert regenerated_job.id != summary_job.id
+    assert regenerated_job.dedupe_key_hash is not None
+    assert regenerated_summary.id != summary.id
+    assert regenerated_summary.prompt_version == "final-summary-v2"
+    assert (
+        len([request for request in provider.requests if request.purpose == "final-summary-v2"])
+        == 2
+    )
 
     async def remove_summary_ledger() -> None:
         async with database.session_factory() as session:
