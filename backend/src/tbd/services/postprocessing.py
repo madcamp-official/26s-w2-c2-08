@@ -47,7 +47,7 @@ from tbd.services.questions import QuestionService
 
 COORDINATOR_LEASE = timedelta(minutes=1)
 FINAL_AI_LEASE = timedelta(minutes=1)
-FINAL_AI_TIMEOUT = timedelta(seconds=15)
+DEFAULT_FINAL_AI_TIMEOUT = timedelta(seconds=60)
 PROCESSING_DEADLINE = timedelta(minutes=10)
 FINAL_SUMMARY_PROMPT_VERSION = "final-summary-v1"
 ANSWER_ORGANIZATION_PROMPT_VERSION = "answer-organization-v1"
@@ -231,11 +231,13 @@ class SessionPostprocessingWorker:
         *,
         kernel: JobKernel | None = None,
         outbox: OutboxRepository | None = None,
+        provider_timeout: timedelta = DEFAULT_FINAL_AI_TIMEOUT,
     ) -> None:
         self.session_factory = session_factory
         self.llm_provider = llm_provider
         self.outbox = outbox or OutboxRepository()
         self.kernel = kernel or JobKernel(outbox=self.outbox)
+        self.provider_timeout = provider_timeout
 
     async def run_once(self, *, now: datetime | None = None) -> bool:
         timestamp = now or datetime.now(UTC)
@@ -604,7 +606,7 @@ class SessionPostprocessingWorker:
                     prompt_version=ANSWER_ORGANIZATION_PROMPT_VERSION,
                     messages=(LLMMessage(role="user", content=text),),
                 ),
-                timeout=FINAL_AI_TIMEOUT,
+                timeout=self.provider_timeout,
             )
         except AIProviderError as exc:
             await self._fail_final_ai(
@@ -664,7 +666,7 @@ class SessionPostprocessingWorker:
                     prompt_version=FINAL_SUMMARY_PROMPT_VERSION,
                     messages=(LLMMessage(role="user", content=text),),
                 ),
-                timeout=FINAL_AI_TIMEOUT,
+                timeout=self.provider_timeout,
             )
         except AIProviderError as exc:
             await self._fail_final_ai(claimed, code=str(exc.code), retryable=exc.retryable, now=now)
