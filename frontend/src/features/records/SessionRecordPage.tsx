@@ -985,11 +985,13 @@ export function SessionRecordPage({
           sessionStatus={status}
           onFocusTranscript={setTranscriptFocus}
         />
-        <RecordJobsPanel
-          sessionId={data.session.id}
-          professor={professor}
-          sessionStatus={status}
-        />
+        {professor && (
+          <RecordJobsPanel
+            sessionId={data.session.id}
+            professor={professor}
+            sessionStatus={status}
+          />
+        )}
         {status === 'COMPLETED' && (
           <>
             <PersonalAiPanel sessionId={data.session.id} mode="REVIEW" />
