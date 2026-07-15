@@ -1008,6 +1008,7 @@ export function SessionRecordPage({
           </div>
           <div className="record-study-column record-study-column--questions">
             <RecordQuestionPanel
+              student={!professor}
               sessionId={data.session.id}
               sessionStatus="COMPLETED"
             />
