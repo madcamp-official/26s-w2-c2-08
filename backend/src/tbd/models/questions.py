@@ -212,8 +212,11 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
         CheckConstraint(
             "(job_type IN ('ANSWER_ORGANIZATION', 'LIVE_SUMMARY') "
             "AND input_transcript_version_id IS NOT NULL AND input_start_segment_id IS NOT NULL "
-            "AND input_end_segment_id IS NOT NULL) OR (job_type NOT IN "
-            "('ANSWER_ORGANIZATION', 'LIVE_SUMMARY') AND input_transcript_version_id IS NULL "
+            "AND input_end_segment_id IS NOT NULL) OR (job_type = 'FINAL_SUMMARY' "
+            "AND input_start_segment_id IS NULL AND input_end_segment_id IS NULL) "
+            "OR (job_type NOT IN "
+            "('ANSWER_ORGANIZATION', 'LIVE_SUMMARY', 'FINAL_SUMMARY') "
+            "AND input_transcript_version_id IS NULL "
             "AND input_start_segment_id IS NULL AND input_end_segment_id IS NULL)",
             name="ai_jobs_answer_input_ck",
         ),
@@ -222,7 +225,7 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             name="ai_jobs_input_segment_pair_ck",
         ),
         CheckConstraint(
-            "(input_transcript_version_id IS NULL) = (input_start_segment_id IS NULL)",
+            "input_start_segment_id IS NULL OR input_transcript_version_id IS NOT NULL",
             name="ai_jobs_input_version_segment_ck",
         ),
         CheckConstraint(
