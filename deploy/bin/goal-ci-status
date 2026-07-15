@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Classify the GitHub Actions CI run for one exact main commit."""
+
+from __future__ import annotations
+
+import json
+import sys
+
+TERMINAL_FAILURES = {
+    "action_required",
+    "cancelled",
+    "failure",
+    "neutral",
+    "skipped",
+    "stale",
+    "timed_out",
+}
+
+
+def classify(payload: object, expected_sha: str) -> str:
+    if not isinstance(payload, dict) or not isinstance(payload.get("workflow_runs"), list):
+        raise ValueError("GitHub response does not contain workflow_runs")
+
+    matches = [
+        run
+        for run in payload["workflow_runs"]
+        if isinstance(run, dict)
+        and run.get("head_sha") == expected_sha
+        and run.get("head_branch") == "main"
+        and run.get("event") == "push"
+    ]
+    if not matches:
+        return "missing"
+
+    matches.sort(key=lambda run: (run.get("run_attempt", 0), run.get("id", 0)), reverse=True)
+    run = matches[0]
+    if run.get("status") != "completed":
+        return "pending"
+    if run.get("conclusion") == "success":
+        return "success"
+    if run.get("conclusion") in TERMINAL_FAILURES:
+        return "failure"
+    return "pending"
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print(f"usage: {sys.argv[0]} <commit-sha>", file=sys.stderr)
+        return 2
+    try:
+        payload = json.load(sys.stdin)
+        print(classify(payload, sys.argv[1]))
+    except (json.JSONDecodeError, OSError, ValueError) as error:
+        print(f"invalid GitHub response: {error}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

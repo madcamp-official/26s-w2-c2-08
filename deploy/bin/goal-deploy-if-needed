@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+DEPLOY_ENV="${GOAL_DEPLOY_ENV:-/etc/goal/deploy.env}"
+if [[ -r "$DEPLOY_ENV" ]]; then
+  # deploy.env is root-managed and must contain shell-compatible KEY=value entries.
+  # shellcheck disable=SC1090
+  source "$DEPLOY_ENV"
+fi
+
+GOAL_ROOT="${GOAL_ROOT:-/opt/goal}"
+GOAL_REPOSITORY_URL="${GOAL_REPOSITORY_URL:-https://github.com/madcamp-official/26s-w2-c2-08.git}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-madcamp-official/26s-w2-c2-08}"
+GITHUB_WORKFLOW_FILE="${GITHUB_WORKFLOW_FILE:-ci.yml}"
+GITHUB_TOKEN_FILE="${GITHUB_TOKEN_FILE:-/etc/goal/secrets/github_deploy_token}"
+GOAL_DEPLOY_COMMAND="${GOAL_DEPLOY_COMMAND:-/usr/local/sbin/goal-deploy}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+remote_sha="$(git ls-remote "$GOAL_REPOSITORY_URL" refs/heads/main | awk 'NR == 1 {print $1}')"
+if [[ ! "$remote_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "origin/main did not resolve to one commit SHA" >&2
+  exit 1
+fi
+
+deployed_sha=""
+if [[ -r "$GOAL_ROOT/state/deployed-sha" ]]; then
+  read -r deployed_sha < "$GOAL_ROOT/state/deployed-sha"
+fi
+if [[ "$remote_sha" == "$deployed_sha" ]]; then
+  echo "GOAL is already deployed at $remote_sha"
+  exit 0
+fi
+if [[ -r "$GOAL_ROOT/state/failed-sha" ]]; then
+  read -r failed_sha < "$GOAL_ROOT/state/failed-sha"
+  if [[ "$remote_sha" == "$failed_sha" ]]; then
+    echo "deployment for main $remote_sha already failed; manual retry required" >&2
+    exit 0
+  fi
+fi
+
+api_url="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$GITHUB_WORKFLOW_FILE/runs?branch=main&event=push&head_sha=$remote_sha&per_page=20"
+curl_args=(--fail-with-body --silent --show-error --location
+  --header "Accept: application/vnd.github+json"
+  --header "X-GitHub-Api-Version: 2022-11-28")
+if [[ -s "$GITHUB_TOKEN_FILE" ]]; then
+  read -r github_token < "$GITHUB_TOKEN_FILE"
+  curl_args+=(--header "Authorization: Bearer $github_token")
+fi
+
+payload="$(curl "${curl_args[@]}" "$api_url")"
+ci_status="$(printf '%s' "$payload" | "$SCRIPT_DIR/goal-ci-status" "$remote_sha")"
+case "$ci_status" in
+  success)
+    exec "$GOAL_DEPLOY_COMMAND" "$remote_sha"
+    ;;
+  pending | missing)
+    echo "CI for main $remote_sha is $ci_status; deployment deferred"
+    ;;
+  failure)
+    echo "CI for main $remote_sha failed; deployment blocked" >&2
+    ;;
+  *)
+    echo "unexpected CI status: $ci_status" >&2
+    exit 1
+    ;;
+esac

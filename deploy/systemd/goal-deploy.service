@@ -1,0 +1,12 @@
+[Unit]
+Description=Deploy a CI-approved GOAL main commit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=goal-deploy
+Group=goal-deploy
+Environment=GOAL_DEPLOY_ENV=/etc/goal/deploy.env
+ExecStart=/usr/local/sbin/goal-deploy-if-needed
+PrivateTmp=true

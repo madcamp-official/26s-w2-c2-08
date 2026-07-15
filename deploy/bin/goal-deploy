@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ $# -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "usage: goal-deploy <40-character-main-commit-sha>" >&2
+  exit 2
+fi
+requested_sha="$1"
+
+DEPLOY_ENV="${GOAL_DEPLOY_ENV:-/etc/goal/deploy.env}"
+if [[ -r "$DEPLOY_ENV" ]]; then
+  # shellcheck disable=SC1090
+  source "$DEPLOY_ENV"
+fi
+
+GOAL_ROOT="${GOAL_ROOT:-/opt/goal}"
+GOAL_REPOSITORY_URL="${GOAL_REPOSITORY_URL:-https://github.com/madcamp-official/26s-w2-c2-08.git}"
+GOAL_APP_ENV="${GOAL_APP_ENV:-/etc/goal/goal.env}"
+GOAL_HEALTH_URL="${GOAL_HEALTH_URL:-http://127.0.0.1:8000/api/health/db}"
+GOAL_SERVICES="${GOAL_SERVICES:-goal-api.service goal-worker@material.service goal-worker@knowledge.service goal-worker@clustering.service goal-worker@personal_ai.service goal-worker@postprocessing.service goal-worker@lifecycle.service}"
+GOAL_SYSTEMCTL="${GOAL_SYSTEMCTL:-sudo systemctl}"
+
+repo_dir="$GOAL_ROOT/repo"
+releases_dir="$GOAL_ROOT/releases"
+state_dir="$GOAL_ROOT/state"
+backup_dir="$GOAL_ROOT/shared/backups"
+release_dir="$releases_dir/$requested_sha"
+staging_dir="$releases_dir/.${requested_sha}.staging"
+lock_file="$state_dir/deploy.lock"
+activated=0
+old_target=""
+
+mkdir -p "$releases_dir" "$state_dir" "$backup_dir"
+exec 9>"$lock_file"
+flock -n 9 || { echo "another GOAL deployment is running" >&2; exit 1; }
+
+cleanup_on_error() {
+  status=$?
+  trap - ERR
+  rm -rf "$staging_dir"
+  printf '%s\n' "$requested_sha" > "$state_dir/failed-sha"
+  if [[ "$activated" == 1 ]]; then
+    if [[ -n "$old_target" ]]; then
+      ln -sfn "$old_target" "$GOAL_ROOT/.current.rollback"
+      mv -Tf "$GOAL_ROOT/.current.rollback" "$GOAL_ROOT/current"
+      echo "deployment failed; application symlink rolled back to $old_target" >&2
+    else
+      rm -f "$GOAL_ROOT/current"
+      echo "initial deployment failed; failed application symlink removed" >&2
+    fi
+    $GOAL_SYSTEMCTL restart $GOAL_SERVICES || true
+  fi
+  exit "$status"
+}
+trap cleanup_on_error ERR
+
+if [[ ! -d "$repo_dir" ]]; then
+  git clone --mirror "$GOAL_REPOSITORY_URL" "$repo_dir"
+fi
+git --git-dir="$repo_dir" remote set-url origin "$GOAL_REPOSITORY_URL"
+git --git-dir="$repo_dir" fetch --prune origin refs/heads/main:refs/remotes/origin/main
+main_sha="$(git --git-dir="$repo_dir" rev-parse refs/remotes/origin/main)"
+if [[ "$main_sha" != "$requested_sha" ]]; then
+  echo "requested SHA is no longer the head of origin/main" >&2
+  exit 1
+fi
+
+if [[ ! -d "$release_dir" ]]; then
+  rm -rf "$staging_dir"
+  mkdir -p "$staging_dir"
+  git --git-dir="$repo_dir" archive "$requested_sha" | tar -x -C "$staging_dir"
+
+  (cd "$staging_dir/backend" && uv sync --frozen --no-dev)
+  (cd "$staging_dir/frontend" && corepack pnpm install --frozen-lockfile && corepack pnpm build)
+
+  if [[ ! -r "$GOAL_APP_ENV" ]]; then
+    echo "application environment file is missing: $GOAL_APP_ENV" >&2
+    false
+  fi
+  set -a
+  # goal.env is root-managed and must contain shell-compatible KEY=value entries.
+  # shellcheck disable=SC1090
+  source "$GOAL_APP_ENV"
+  set +a
+  (cd "$staging_dir/backend" && .venv/bin/python -c 'from tbd.core.config import get_settings; get_settings()')
+
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    echo "a PostgreSQL DATABASE_URL is required for backup and migration" >&2
+    false
+  fi
+  database_url="${DATABASE_URL/postgresql+psycopg:/postgresql:}"
+  if [[ "$database_url" != postgresql:* ]]; then
+    echo "DATABASE_URL must use a PostgreSQL scheme" >&2
+    false
+  fi
+  pg_dump --dbname="$database_url" --format=custom \
+    --file="$backup_dir/${requested_sha}-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  (cd "$staging_dir/backend" && .venv/bin/alembic upgrade head)
+  mv "$staging_dir" "$release_dir"
+fi
+
+if [[ -L "$GOAL_ROOT/current" ]]; then
+  old_target="$(readlink -f "$GOAL_ROOT/current")"
+  ln -sfn "$old_target" "$GOAL_ROOT/.previous.next"
+  mv -Tf "$GOAL_ROOT/.previous.next" "$GOAL_ROOT/previous"
+fi
+ln -sfn "$release_dir" "$GOAL_ROOT/.current.next"
+mv -Tf "$GOAL_ROOT/.current.next" "$GOAL_ROOT/current"
+activated=1
+
+$GOAL_SYSTEMCTL restart $GOAL_SERVICES
+curl --fail --silent --show-error --retry 10 --retry-delay 2 --retry-connrefused "$GOAL_HEALTH_URL" >/dev/null
+
+printf '%s\n' "$requested_sha" > "$state_dir/deployed-sha"
+rm -f "$state_dir/failed-sha"
+trap - ERR
+echo "GOAL deployment succeeded: $requested_sha"
