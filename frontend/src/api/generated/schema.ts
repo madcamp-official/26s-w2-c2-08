@@ -1821,8 +1821,11 @@ export interface paths {
          * 권한 재검증 녹음 playback
          * @description UPLOADED인 논리 Recording을 전체 또는 HTTP byte Range로 재생한다. 요청마다 현재 인증과
          *     Course 접근을 다시 확인한다. API는 final object를 proxy stream하며 audio/webm 또는
-         *     audio/mp4 MIME을 그대로 반환한다. 어느 방식도 내부 storage key, 서버 경로,
-         *     fragment key나 manifest를 공개하지 않는다.
+         *     audio/mp4 MIME을 그대로 반환한다. Frontend/API origin이 분리된 배포에서는
+         *     AUTH_ALLOWED_ORIGINS의 정확한 Frontend origin에만 credential CORS를 허용하고
+         *     Range 관련 응답 header를 노출한다. Cookie SameSite 경계 때문에 같은 site 배포를
+         *     권장한다. 어느 방식도 내부 storage key, 서버 경로, fragment key나 manifest를
+         *     공개하지 않는다.
          */
         get: operations["playSessionRecording"];
         put?: never;
