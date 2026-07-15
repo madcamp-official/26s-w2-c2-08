@@ -1,6 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { delay, http, HttpResponse } from 'msw'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 
 import { ToastProvider } from '../../components/feedback/ToastProvider'
@@ -158,16 +165,218 @@ function renderPage(professor = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/sessions/:sessionId',
+        element: (
+          <SessionRecordPage sessionId={sessionId} professor={professor} />
+        ),
+      },
+      { path: '/login', element: <p>로그인 목적지</p> },
+    ],
+    { initialEntries: [`/sessions/${sessionId}`] },
+  )
   render(
     <QueryClientProvider client={client}>
       <ToastProvider>
-        <SessionRecordPage sessionId={sessionId} professor={professor} />
+        <RouterProvider router={router} />
       </ToastProvider>
     </QueryClientProvider>,
   )
+  return router
 }
 
 describe('SessionRecordPage', () => {
+  it('clears the record shell and redirects when the manifest reports an expired login', async () => {
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'AUTHENTICATION_REQUIRED',
+              message: '로그인이 필요합니다.',
+              request_id: 'req-record-expired',
+              details: null,
+            },
+          },
+          { status: 401 },
+        ),
+      ),
+    )
+
+    const router = renderPage()
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
+    expect(router.state.location.search).toBe(
+      `?return_to=%2Fsessions%2F${sessionId}`,
+    )
+    expect(screen.queryByText('완료 기록')).not.toBeInTheDocument()
+  })
+
+  it('treats a FINALIZING Transcript in a completed record as a data-integrity error', async () => {
+    const completed = record('COMPLETED')
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json({
+          ...completed,
+          transcript: {
+            ...completed.transcript,
+            state: {
+              ...completed.transcript.state,
+              status: 'FINALIZING',
+            },
+          },
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: completed.question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    renderPage()
+
+    expect(
+      await screen.findByText(
+        '완료 기록의 Transcript 상태를 확인할 수 없습니다',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('고품질 Transcript와 녹음 위치를 정리하고 있습니다.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('opens the immutable source Transcript when canonical Answer mapping failed', async () => {
+    const sourceVersionId = '30000000-0000-0000-0000-000000000099'
+    const requestedVersions: string[] = []
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json(record('COMPLETED')),
+      ),
+      http.get('*/api/v1/sessions/:id/summaries', () =>
+        HttpResponse.json({
+          summary_status: 'AVAILABLE',
+          summary_reason: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/transcript', ({ request }) => {
+        const requestedVersion =
+          new URL(request.url).searchParams.get('transcript_version_id') ?? ''
+        requestedVersions.push(requestedVersion)
+        const source = requestedVersion === sourceVersionId
+        return HttpResponse.json({
+          transcript: record('COMPLETED').transcript.state,
+          selected_version: {},
+          segments: [
+            {
+              id: source ? 'source-segment-7' : 'canonical-segment-1',
+              session_id: sessionId,
+              transcript_version_id: requestedVersion,
+              item_type: 'SEGMENT',
+              sequence: source ? 7 : 1,
+              start_ms: source ? 7_000 : 1_000,
+              end_ms: source ? 8_000 : 2_000,
+              recording_start_ms: source ? 7_100 : 1_100,
+              recording_end_ms: source ? 8_100 : 2_100,
+              text: source
+                ? '원본 LIVE Answer 구간입니다.'
+                : '확정 Transcript 첫 문장입니다.',
+              created_at: '2026-07-14T02:10:00Z',
+            },
+          ],
+          gaps: [],
+          next_cursor: null,
+        })
+      }),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: record('COMPLETED').question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'answer-source-fallback',
+              session_id: sessionId,
+              answer_type: 'VOICE',
+              status: 'COMPLETED',
+              version: 2,
+              target: {
+                type: 'STUDENT_QUESTION',
+                question_id: 'question-source-fallback',
+              },
+              target_text_snapshot: '이 답변의 원본 구간은 어디인가요?',
+              text_content: null,
+              source_transcript_version_id: sourceVersionId,
+              canonical_transcript_mapping: {
+                target_transcript_version_id: versionId,
+                status: 'FAILED',
+                start_segment_id: null,
+                end_segment_id: null,
+                updated_at: '2026-07-14T02:10:00Z',
+              },
+              organization_state: {
+                status: 'NOT_STARTED',
+                job_id: null,
+                attempt: null,
+                retryable: false,
+                organization: null,
+              },
+              capture_started_after_sequence: 6,
+              start_sequence: 7,
+              end_sequence: 7,
+              started_at: '2026-07-14T01:20:00Z',
+              completed_at: '2026-07-14T01:21:00Z',
+              updated_at: '2026-07-14T02:10:00Z',
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    renderPage()
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '원본 Transcript 구간 보기',
+      }),
+    )
+    expect(
+      await screen.findByRole('button', {
+        name: '원본 LIVE Answer 구간입니다.',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '확정 구간을 사용할 수 없어 immutable 원본 LIVE Transcript 범위를 표시합니다.',
+      ),
+    ).toBeInTheDocument()
+    expect(requestedVersions).toContain(sourceVersionId)
+  })
+
   it('keeps processing record areas available without a recording or REVIEW Chat', async () => {
     let questionRequests = 0
     server.use(
@@ -417,6 +626,109 @@ describe('SessionRecordPage', () => {
     expect(
       screen.queryByRole('button', { name: /다시 시도$/ }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '녹음 삭제' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps one recording deletion idempotency key until a professor request succeeds', async () => {
+    let deleted = false
+    let requests = 0
+    const keys: string[] = []
+    server.use(
+      http.get('*/api/v1/sessions/:id/record', () =>
+        HttpResponse.json({
+          ...record('COMPLETED'),
+          recording: deleted ? null : record('COMPLETED').recording,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/summaries', () =>
+        HttpResponse.json({
+          summary_status: 'AVAILABLE',
+          summary_reason: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/transcript', () =>
+        HttpResponse.json({
+          transcript: record('COMPLETED').transcript.state,
+          selected_version: {},
+          segments: [],
+          gaps: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/materials', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/questions', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state: record('COMPLETED').question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:id/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/jobs', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:id/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.delete('*/api/v1/sessions/:id/recording', ({ request }) => {
+        requests += 1
+        keys.push(request.headers.get('Idempotency-Key') ?? '')
+        if (requests === 1) {
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'SERVICE_UNAVAILABLE',
+                message: '삭제 결과를 확인하지 못했습니다.',
+                request_id: 'req-recording-delete',
+                details: null,
+              },
+            },
+            { status: 503 },
+          )
+        }
+        deleted = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    renderPage(true)
+
+    fireEvent.click(await screen.findByRole('button', { name: '녹음 삭제' }))
+    let dialog = screen.getByRole('dialog', {
+      name: '수업 녹음을 삭제할까요?',
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: '녹음 삭제' }))
+    expect(
+      await within(dialog).findByText('수업 녹음을 삭제하지 못했습니다.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '녹음 삭제' }))
+    expect(await screen.findByText('수업 녹음을 삭제했습니다.')).toBeVisible()
+    await waitFor(() => expect(keys).toHaveLength(2))
+    expect(keys[0]).not.toBe('')
+    expect(keys[1]).toBe(keys[0])
+    dialog = screen.queryByRole('dialog', {
+      name: '수업 녹음을 삭제할까요?',
+    }) as HTMLElement
+    expect(dialog).not.toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        '이 수업에는 저장된 녹음이 없습니다. Transcript와 다른 기록은 계속 확인할 수 있습니다.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('shows every server-allowed shared-job retry to a professor', async () => {

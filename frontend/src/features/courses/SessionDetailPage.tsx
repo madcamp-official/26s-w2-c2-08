@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useRef } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
 import { PartialFailurePanel } from '../../components/feedback/PartialFailurePanel'
 import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
-import { Dialog } from '../../components/ui/Dialog'
 import {
   createVoiceAnswer,
   type AnswerListResponse,
@@ -30,30 +29,9 @@ import {
 } from '../live/LiveClassRoom'
 import { clearAudioPublisherClientState } from '../live/audio-publisher'
 import { ProcessingClassView } from '../records/ProcessingClassView'
-import { SessionRecordPage } from '../records/SessionRecordPage'
+import { ProfessorEndedClassView } from '../records/ProfessorEndedClassView'
+import { StudentEndedClassView } from '../records/StudentEndedClassView'
 import { ReadyClassView } from './ReadyClassView'
-
-function statusCopy(status: string) {
-  switch (status) {
-    case 'READY':
-      return ['시작 전', '강의자료를 준비한 뒤 수업을 시작할 수 있습니다.']
-    case 'LIVE':
-      return [
-        '진행 중',
-        '실시간 수업이 진행 중입니다. 종료하면 수업 기록 정리가 시작됩니다.',
-      ]
-    case 'PROCESSING':
-      return [
-        '정리 중',
-        '후처리 worker가 기록을 정리하고 있습니다. 완료 여부는 class 상태로만 확인합니다.',
-      ]
-    default:
-      return [
-        '완료',
-        '수업 기록이 완성되었습니다. 다음 class를 만들 수 있습니다.',
-      ]
-  }
-}
 
 export function SessionDetailPage() {
   const { sessionId = '' } = useParams()
@@ -70,8 +48,6 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
     ...courseDetailQueryOptions(session.data?.course_id ?? ''),
     enabled: Boolean(session.data),
   })
-  const [title, setTitle] = useState<string | null>(null)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const endKey = useRef<string | null>(null)
   const deleteKey = useRef<string | null>(null)
   const startAnswerKey = useRef<{
@@ -99,14 +75,9 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
   }
 
   const rename = useMutation({
-    mutationFn: (nextTitle?: string) =>
-      updateSessionTitle(
-        sessionId,
-        nextTitle ?? title ?? session.data?.title ?? '',
-      ),
+    mutationFn: (nextTitle: string) => updateSessionTitle(sessionId, nextTitle),
     onSuccess: (updated) => {
       queryClient.setQueryData(courseKeys.session(sessionId), updated)
-      setTitle(null)
       refreshCourse()
       showToast({ tone: 'success', message: 'class 제목을 저장했습니다.' })
     },
@@ -138,13 +109,13 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
     mutationFn: () =>
       deleteSession(sessionId, (deleteKey.current ??= crypto.randomUUID())),
     onSuccess: () => {
-      setDeleteOpen(false)
       deleteKey.current = null
       if (session.data) {
         void queryClient.invalidateQueries({
           queryKey: courseKeys.detail(session.data.course_id),
         })
       }
+      showToast({ tone: 'success', message: '완료 class를 삭제했습니다.' })
       navigate(`/courses/${session.data?.course_id ?? ''}`, { replace: true })
     },
   })
@@ -358,149 +329,39 @@ function SessionDetailContent({ sessionId }: { sessionId: string }) {
     )
   }
 
-  const [statusTitle, statusDescription] = statusCopy(data.status)
-  const canDelete = data.status === 'COMPLETED'
-  const isRecordView = data.status === 'COMPLETED'
+  if (!professor) {
+    return (
+      <StudentEndedClassView
+        key={data.id}
+        course={courseData}
+        session={data}
+        refreshWarning={canonicalRefreshWarning}
+      />
+    )
+  }
 
   return (
-    <section
-      className="course-form-page"
-      aria-labelledby="session-detail-title"
-    >
-      <header className="course-form-heading">
-        <p className="eyebrow">Class lifecycle</p>
-        <span
-          className={`status-chip status-chip--${data.status.toLowerCase()}`}
-        >
-          {statusTitle}
-        </span>
-        <h1 id="session-detail-title">{data.title}</h1>
-        <p>{statusDescription}</p>
-      </header>
-      {canonicalRefreshWarning}
-      <div className="panel course-form session-detail-card">
-        <dl className="session-meta">
-          <div>
-            <dt>수업 날짜</dt>
-            <dd>{data.lecture_date}</dd>
-          </div>
-          <div>
-            <dt>시작 시각</dt>
-            <dd>
-              {data.started_at
-                ? new Date(data.started_at).toLocaleString('ko-KR')
-                : '아직 시작 전'}
-            </dd>
-          </div>
-        </dl>
-
-        {professor ? (
-          <>
-            <label>
-              <span>class 제목</span>
-              <input
-                value={title ?? data.title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </label>
-            <p className="input-hint">
-              비워 저장하면 생성 시각 기준의 서버 자동 제목으로 돌아갑니다.
-            </p>
-            {rename.isError && (
-              <p className="form-error" role="alert">
-                제목을 저장하지 못했습니다.
-              </p>
-            )}
-            <div className="form-actions">
-              <Button
-                variant="secondary"
-                disabled={rename.isPending}
-                onClick={() => rename.mutate(title ?? data.title)}
-              >
-                {rename.isPending ? '저장 중…' : '제목 저장'}
-              </Button>
-              {canDelete && (
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    remove.reset()
-                    deleteKey.current = null
-                    setDeleteOpen(true)
-                  }}
-                >
-                  class 삭제
-                </Button>
-              )}
-              <Link
-                className="button button--ghost"
-                to={`/courses/${data.course_id}`}
-              >
-                Course로 돌아가기
-              </Link>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="input-hint">
-              학생은 class 상태와 수업 기록을 읽기 전용으로 확인합니다.
-            </p>
-            <div className="form-actions">
-              <Link
-                className="button button--ghost"
-                to={`/courses/${data.course_id}`}
-              >
-                Course로 돌아가기
-              </Link>
-            </div>
-          </>
-        )}
-        {professor && end.isError && (
-          <p className="form-error" role="alert">
-            상태를 변경하지 못했습니다. 현재 class를 다시 확인해 주세요.
-          </p>
-        )}
-      </div>
-      {isRecordView && (
-        <SessionRecordPage sessionId={data.id} professor={professor} />
-      )}
-      {professor && (
-        <Dialog
-          open={deleteOpen}
-          title="class를 삭제할까요?"
-          description="삭제 후에는 되돌릴 수 없습니다."
-          onOpenChange={(open) => {
-            if (!open && !remove.isPending) {
-              remove.reset()
-              deleteKey.current = null
-            }
-            setDeleteOpen(open)
-          }}
-          actions={
-            <>
-              <Button
-                variant="secondary"
-                disabled={remove.isPending}
-                onClick={() => {
-                  remove.reset()
-                  deleteKey.current = null
-                  setDeleteOpen(false)
-                }}
-              >
-                취소
-              </Button>
-              <Button
-                variant="danger"
-                disabled={remove.isPending}
-                onClick={() => remove.mutate()}
-              >
-                {remove.isPending ? '삭제 중…' : '삭제'}
-              </Button>
-            </>
-          }
-        >
-          {remove.isError && <p role="alert">class를 삭제하지 못했습니다.</p>}
-        </Dialog>
-      )}
-    </section>
+    <ProfessorEndedClassView
+      key={data.id}
+      course={courseData}
+      session={data}
+      refreshWarning={canonicalRefreshWarning}
+      onRename={(nextTitle) => rename.mutateAsync(nextTitle)}
+      renamePending={rename.isPending}
+      renameError={
+        rename.isError
+          ? rename.error instanceof ApiError
+            ? rename.error.message
+            : 'class 제목을 저장하지 못했습니다.'
+          : null
+      }
+      onDelete={() => remove.mutateAsync()}
+      deletePending={remove.isPending}
+      deleteError={remove.isError ? remove.error : undefined}
+      onResetDelete={() => {
+        remove.reset()
+        deleteKey.current = null
+      }}
+    />
   )
 }

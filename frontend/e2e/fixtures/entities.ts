@@ -189,33 +189,98 @@ export const processingStudentSession = {
   updated_at: '2026-07-15T04:50:00Z',
 } satisfies components['schemas']['LectureSession']
 
-function processingTime(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-  offsetMinutes: number,
-) {
+export const professorEndedCourse = {
+  id: '10000000-0000-0000-0000-000000000009',
+  title: '알고리즘 분석과 설계',
+  semester: '2026 여름학기',
+  role: 'PROFESSOR',
+  join_code: 'ENDED9',
+  current_session: null,
+  created_at: '2026-07-01T00:00:00Z',
+} satisfies components['schemas']['Course']
+
+export const studentEndedCourse = {
+  id: '20000000-0000-0000-0000-000000000010',
+  title: '운영체제 심화',
+  semester: '2026 여름학기',
+  role: 'STUDENT',
+  current_session: null,
+  created_at: '2026-07-01T00:00:00Z',
+} satisfies components['schemas']['Course']
+
+export const professorEndedSession = {
+  id: '30000000-0000-0000-0000-000000000009',
+  course_id: professorEndedCourse.id,
+  title: '동적 계획법과 최적 부분 구조',
+  lecture_date: '2026-07-14',
+  status: 'COMPLETED',
+  version: 5,
+  canonical_transcript_version_id: '60000000-0000-0000-0000-000000000029',
+  started_at: '2026-07-14T05:00:00Z',
+  ended_at: '2026-07-14T06:10:00Z',
+  completed_at: '2026-07-14T06:16:00Z',
+  created_at: '2026-07-14T04:55:00Z',
+  updated_at: '2026-07-14T06:16:00Z',
+} satisfies components['schemas']['LectureSession']
+
+export const studentEndedSession = {
+  id: '30000000-0000-0000-0000-000000000010',
+  course_id: studentEndedCourse.id,
+  title: '가상 메모리와 페이지 교체',
+  lecture_date: '2026-07-13',
+  status: 'COMPLETED',
+  version: 5,
+  canonical_transcript_version_id: '60000000-0000-0000-0000-000000000030',
+  started_at: '2026-07-13T04:00:00Z',
+  ended_at: '2026-07-13T05:02:00Z',
+  completed_at: '2026-07-13T05:08:00Z',
+  created_at: '2026-07-13T03:55:00Z',
+  updated_at: '2026-07-13T05:08:00Z',
+} satisfies components['schemas']['LectureSession']
+
+type VisualRecordSession =
+  | typeof processingProfessorSession
+  | typeof processingStudentSession
+  | typeof professorEndedSession
+  | typeof studentEndedSession
+
+function processingTime(session: VisualRecordSession, offsetMinutes: number) {
   return new Date(
     Date.parse(session.ended_at) + offsetMinutes * 60_000,
   ).toISOString()
 }
 
-function processingIds(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-) {
-  const student = session.id === processingStudentSession.id
+function processingIds(session: VisualRecordSession) {
+  const student =
+    session.id === processingStudentSession.id ||
+    session.id === studentEndedSession.id
+  const ended =
+    session.id === professorEndedSession.id ||
+    session.id === studentEndedSession.id
   return {
-    answerId: '71000000-0000-0000-0000-000000000001',
+    answerId: ended
+      ? student
+        ? '71000000-0000-0000-0000-000000000010'
+        : '71000000-0000-0000-0000-000000000009'
+      : '71000000-0000-0000-0000-000000000001',
     liveVersionId: student
-      ? '60000000-0000-0000-0000-000000000008'
-      : '60000000-0000-0000-0000-000000000007',
+      ? ended
+        ? '60000000-0000-0000-0000-000000000020'
+        : '60000000-0000-0000-0000-000000000008'
+      : ended
+        ? '60000000-0000-0000-0000-000000000019'
+        : '60000000-0000-0000-0000-000000000007',
     recordingId: student
-      ? '80000000-0000-0000-0000-000000000008'
-      : '80000000-0000-0000-0000-000000000007',
+      ? ended
+        ? '80000000-0000-0000-0000-000000000010'
+        : '80000000-0000-0000-0000-000000000008'
+      : ended
+        ? '80000000-0000-0000-0000-000000000009'
+        : '80000000-0000-0000-0000-000000000007',
   }
 }
 
-export function processingRecord(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-) {
+export function processingRecord(session: VisualRecordSession) {
   const { recordingId } = processingIds(session)
   const canonicalVersionId = session.canonical_transcript_version_id
   const currentVersion = {
@@ -316,9 +381,7 @@ export function processingRecord(
   }
 }
 
-export function processingTimeline(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-) {
+export function processingTimeline(session: VisualRecordSession) {
   const record = processingRecord(session)
   const state = record.transcript.state
   const selectedVersion = state.canonical_version
@@ -351,9 +414,7 @@ export function processingTimeline(
 const processingAnswerQuestion =
   '음수 가중치가 하나라도 있으면 다익스트라를 사용할 수 없나요?'
 
-export function processingQuestions(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-) {
+export function processingQuestions(session: VisualRecordSession) {
   return [
     {
       id: '70000000-0000-0000-0000-000000000001',
@@ -397,9 +458,7 @@ export function processingQuestions(
   ] satisfies components['schemas']['Question'][]
 }
 
-export function processingAnswer(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-) {
+export function processingAnswer(session: VisualRecordSession) {
   const { answerId, liveVersionId } = processingIds(session)
   return {
     id: answerId,
@@ -437,9 +496,7 @@ export function processingAnswer(
   } satisfies components['schemas']['Answer']
 }
 
-export function processingJobs(
-  session: typeof processingProfessorSession | typeof processingStudentSession,
-) {
+export function processingJobs(session: VisualRecordSession) {
   const sessionId = session.id
   const { answerId, recordingId } = processingIds(session)
   const job = (
@@ -564,6 +621,163 @@ export function processingJobs(
       null,
     ),
   ]
+}
+
+export function completedRecord(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  const base = processingRecord(session)
+  const completedAt = session.completed_at
+  return {
+    ...base,
+    materials: {
+      total_count: 2,
+      list_url: `/api/v1/sessions/${session.id}/materials`,
+    },
+    summary: {
+      state: { status: 'AVAILABLE' as const, reason: null },
+      summary_url: `/api/v1/summaries/${session.id}`,
+      summaries_url: `/api/v1/sessions/${session.id}/summaries?summary_type=FINAL`,
+    },
+    question_clusters: {
+      ...base.question_clusters,
+      state: {
+        pending: false,
+        requested_through_sequence: 3,
+        applied_through_sequence: 3,
+        current_revision: 3,
+        current_generation: 3,
+        final_generation: 3,
+        active_job_id: null,
+        retry_job_id: null,
+        last_job: {
+          id: '90000000-0000-0000-0000-000000000099',
+          attempt: 1,
+          status: 'SUCCEEDED' as const,
+          mode: 'FINAL' as const,
+        },
+      },
+      final: {
+        total_count: 0,
+        list_url: `/api/v1/sessions/${session.id}/question-clusters?scope=FINAL`,
+      },
+    },
+    jobs: {
+      total_count: 5,
+      list_url: `/api/v1/sessions/${session.id}/jobs`,
+    },
+    session: { ...session, completed_at: completedAt },
+  }
+}
+
+export function completedTimeline(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  return processingTimeline(session)
+}
+
+export function completedQuestions(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  return processingQuestions(session)
+}
+
+export function completedAnswer(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  const base = processingAnswer(session)
+  return {
+    ...base,
+    text_content:
+      '음수 가중치가 있으면 이미 확정한 최단 거리 가정이 깨질 수 있습니다.',
+    organization_state: {
+      status: 'SUCCEEDED' as const,
+      job_id: '90000000-0000-0000-0000-000000000098',
+      attempt: 1,
+      retryable: false,
+      organization: {
+        content:
+          '다익스트라는 음수 간선 때문에 확정된 최단 거리가 뒤늦게 작아질 수 있어 사용할 수 없습니다.',
+        source_transcript_version_id: session.canonical_transcript_version_id,
+        start_sequence: 3,
+        end_sequence: 4,
+        created_by_job_id: '90000000-0000-0000-0000-000000000098',
+        created_by_job_attempt: 1,
+        model_name: null,
+        prompt_version: 'answer-v1',
+        created_at: session.completed_at,
+      },
+    },
+  } satisfies components['schemas']['Answer']
+}
+
+export function completedJobs(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  return processingJobs(session).map((job) => ({
+    ...job,
+    status: 'SUCCEEDED' as const,
+    version: Math.max(job.version, 3),
+    retryable: false,
+    error: null,
+    started_at: job.started_at ?? session.ended_at,
+    finished_at: job.finished_at ?? session.completed_at,
+    updated_at: session.completed_at,
+  }))
+}
+
+export function completedMaterials(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  return [
+    {
+      id: `40000000-0000-0000-0000-${session.id.slice(-12)}`,
+      session_id: session.id,
+      display_name: '최단경로-핵심정리.pdf',
+      mime_type: 'application/pdf',
+      byte_size: 2_480_320,
+      page_count: 18,
+      processing_status: 'READY',
+      created_at: session.created_at,
+    },
+    {
+      id: `41000000-0000-0000-0000-${session.id.slice(-12)}`,
+      session_id: session.id,
+      display_name: '복습-연습문제.pdf',
+      mime_type: 'application/pdf',
+      byte_size: 1_120_640,
+      page_count: 12,
+      processing_status: 'READY',
+      created_at: session.created_at,
+    },
+  ] satisfies components['schemas']['LectureMaterial'][]
+}
+
+export function completedSummary(
+  session: typeof professorEndedSession | typeof studentEndedSession,
+) {
+  return {
+    summary_status: 'AVAILABLE' as const,
+    summary_reason: null,
+    items: [
+      {
+        id: `42000000-0000-0000-0000-${session.id.slice(-12)}`,
+        session_id: session.id,
+        job_id: '90000000-0000-0000-0000-000000000075',
+        summary_type: 'FINAL' as const,
+        visibility: 'COURSE_MEMBERS' as const,
+        content:
+          '최단 경로 탐색의 핵심 가정과 우선순위 큐 갱신 조건을 비교하고, 음수 가중치에서 다익스트라를 사용할 수 없는 이유를 예제로 정리했습니다.',
+        source_transcript_version_id: session.canonical_transcript_version_id,
+        source_start_sequence: 1,
+        source_end_sequence: 4,
+        model_name: null,
+        prompt_version: 'final-v1',
+        created_at: session.completed_at,
+      },
+    ],
+    next_cursor: null,
+  } satisfies components['schemas']['SummaryListResponse']
 }
 
 export function liveTimeline(sessionId: string, versionId: string) {

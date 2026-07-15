@@ -172,6 +172,96 @@ function processingRecordFor(session: ReturnType<typeof processingSessionFor>) {
   }
 }
 
+function completedSessionFor(courseId: string, suffix: string) {
+  return {
+    ...readySession,
+    id: `30000000-0000-0000-0000-${suffix}`,
+    course_id: courseId,
+    title:
+      courseId === professorCourse.id
+        ? '동적 계획법과 최적 부분 구조'
+        : '가상 메모리와 페이지 교체',
+    lecture_date: '2026-07-14',
+    status: 'COMPLETED' as const,
+    version: 4,
+    started_at: '2026-07-14T05:00:00Z',
+    ended_at: '2026-07-14T06:10:00Z',
+    completed_at: '2026-07-14T06:16:00Z',
+    updated_at: '2026-07-14T06:16:00Z',
+  }
+}
+
+function completedRecordFor(session: ReturnType<typeof completedSessionFor>) {
+  return {
+    session,
+    recording: null,
+    recording_url: `/api/v1/sessions/${session.id}/recording`,
+    materials: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/materials`,
+    },
+    transcript: {
+      state: {
+        session_id: session.id,
+        status: 'EMPTY',
+        current_version: null,
+        canonical_version_id: null,
+        canonical_version: null,
+        updated_at: session.completed_at,
+      },
+      selected_version_id: null,
+      segment_count: 0,
+      gap_count: 0,
+      timeline_url: `/api/v1/sessions/${session.id}/transcript`,
+      versions_url: `/api/v1/sessions/${session.id}/transcript/versions`,
+    },
+    summary: {
+      state: {
+        status: 'NOT_APPLICABLE',
+        reason: {
+          code: 'NO_FINAL_TRANSCRIPT',
+          message: '요약할 확정 강의 내용이 없습니다.',
+        },
+      },
+      summary_url: null,
+      summaries_url: `/api/v1/sessions/${session.id}/summaries?summary_type=FINAL`,
+    },
+    questions: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/questions?sort=RECENT`,
+    },
+    question_clusters: {
+      state: {
+        pending: false,
+        requested_through_sequence: 0,
+        applied_through_sequence: 0,
+        current_revision: 0,
+        current_generation: null,
+        final_generation: null,
+        active_job_id: null,
+        retry_job_id: null,
+        last_job: null,
+      },
+      current: {
+        total_count: 0,
+        list_url: `/api/v1/sessions/${session.id}/question-clusters?scope=CURRENT`,
+      },
+      final: {
+        total_count: 0,
+        list_url: `/api/v1/sessions/${session.id}/question-clusters?scope=FINAL`,
+      },
+    },
+    answers: {
+      total_count: 0,
+      list_url: `/api/v1/sessions/${session.id}/answers`,
+    },
+    jobs: {
+      total_count: 1,
+      list_url: `/api/v1/sessions/${session.id}/jobs`,
+    },
+  }
+}
+
 function installLiveRouteHandlers(
   course: typeof professorCourse | typeof studentCourse,
   session: ReturnType<typeof liveSessionFor>,
@@ -705,6 +795,177 @@ describe('Course role flows', () => {
       screen.queryByRole('textbox', { name: 'class 제목' }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Professor control')).not.toBeInTheDocument()
+  })
+
+  it('renders the completed professor production view with owner-only controls', async () => {
+    authenticate()
+    const completedSession = completedSessionFor(
+      professorCourse.id,
+      '000000000081',
+    )
+    const failedTranscriptJob = {
+      id: '90000000-0000-0000-0000-000000000081',
+      session_id: completedSession.id,
+      job_type: 'RECORDING_TRANSCRIPTION',
+      visibility: 'SHARED',
+      status: 'FAILED',
+      attempt: 1,
+      version: 2,
+      progress: null,
+      retryable: true,
+      blocks_session_completion: true,
+      clustering: null,
+      error: {
+        code: 'PROVIDER_UNAVAILABLE',
+        message: '고품질 Transcript를 만들지 못했습니다.',
+      },
+      target: {
+        resource_type: 'SESSION',
+        resource_id: completedSession.id,
+        resource_url: `/api/v1/sessions/${completedSession.id}`,
+      },
+      result: null,
+      result_unavailable_reason: null,
+      created_at: '2026-07-14T06:10:00Z',
+      updated_at: '2026-07-14T06:16:00Z',
+      started_at: '2026-07-14T06:10:00Z',
+      finished_at: '2026-07-14T06:16:00Z',
+    }
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId', () =>
+        HttpResponse.json(completedSession),
+      ),
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(professorCourse),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/record', () =>
+        HttpResponse.json(completedRecordFor(completedSession)),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/materials', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/questions', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state:
+            completedRecordFor(completedSession).question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/jobs', ({ request }) =>
+        HttpResponse.json({
+          items: new URL(request.url).searchParams.has('job_type')
+            ? []
+            : [failedTranscriptJob],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    renderAt(`/sessions/${completedSession.id}`)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: completedSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByText('복습할 수업 기록이 준비되었습니다')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'class 제목' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'class 삭제' })).toBeVisible()
+    expect(await screen.findByLabelText('PDF 파일 선택')).toBeInTheDocument()
+    expect(await screen.findByLabelText('보충 답변 내용')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', {
+        name: '고품질 Transcript 다시 시도',
+      }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', { level: 2, name: '복습 AI' }),
+    ).toBeVisible()
+  })
+
+  it('renders the completed student production view without owner controls', async () => {
+    authenticate()
+    const completedSession = completedSessionFor(
+      studentCourse.id,
+      '000000000082',
+    )
+    server.use(
+      http.get('*/api/v1/sessions/:sessionId', () =>
+        HttpResponse.json(completedSession),
+      ),
+      http.get('*/api/v1/courses/:courseId', () =>
+        HttpResponse.json(studentCourse),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/record', () =>
+        HttpResponse.json(completedRecordFor(completedSession)),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/materials', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/questions', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/question-clusters', () =>
+        HttpResponse.json({
+          scope: 'FINAL',
+          clustering_state:
+            completedRecordFor(completedSession).question_clusters.state,
+          generation: null,
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/answers', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/jobs', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+      http.get('*/api/v1/sessions/:sessionId/chats', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+
+    renderAt(`/sessions/${completedSession.id}`)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: completedSession.title,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByText('복습할 수업 기록이 준비되었습니다')).toBeVisible()
+    await screen.findByRole('heading', { level: 2, name: '강의자료' })
+    expect(screen.queryByText('Professor control')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'class 제목' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'class 삭제' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('PDF 파일 선택')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('보충 답변 내용')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /다시 시도$/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 2, name: '복습 AI' }),
+    ).toBeVisible()
   })
 
   it('clears cached Course data and preserves return_to after session expiry', async () => {

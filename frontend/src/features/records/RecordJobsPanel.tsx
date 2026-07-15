@@ -3,7 +3,7 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 import { ApiError } from '../../api/errors'
 import { JobStatusBadge } from '../../components/domain/LmsStatus'
@@ -73,6 +73,7 @@ export function RecordJobsPanel({
   const retryKeys = useRef<
     Record<string, { attempt: number; key: string; version: number }>
   >({})
+  const previousStatuses = useRef<Record<string, AIJob['status']>>({})
   const jobs = useInfiniteQuery({
     queryKey: recordKeys.jobs(sessionId),
     initialPageParam: null as string | null,
@@ -87,7 +88,41 @@ export function RecordJobsPanel({
       return hasActive ? 3_000 : false
     },
   })
-  const items = jobs.data?.pages.flatMap((page) => page.items) ?? []
+  const items = useMemo(
+    () => jobs.data?.pages.flatMap((page) => page.items) ?? [],
+    [jobs.data],
+  )
+
+  useEffect(() => {
+    let resultBecameTerminal = false
+    for (const job of items) {
+      const previous = previousStatuses.current[job.id]
+      if (
+        (previous === 'PENDING' || previous === 'RUNNING') &&
+        job.status !== 'PENDING' &&
+        job.status !== 'RUNNING'
+      ) {
+        resultBecameTerminal = true
+      }
+      previousStatuses.current[job.id] = job.status
+    }
+    if (!resultBecameTerminal) return
+    void queryClient.invalidateQueries({
+      queryKey: recordKeys.manifest(sessionId),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: recordKeys.finalClusters(sessionId),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: recordKeys.answers(sessionId),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: recordKeys.summary(sessionId),
+    })
+    void queryClient.invalidateQueries({
+      queryKey: ['records', 'timeline', sessionId],
+    })
+  }, [items, queryClient, sessionId])
   const retry = useMutation({
     mutationFn: (job: AIJob) => {
       const existing = retryKeys.current[job.id]
@@ -154,7 +189,7 @@ export function RecordJobsPanel({
       {jobs.isPending && (
         <StatePanel kind="loading" title="후처리 작업을 불러오는 중" />
       )}
-      {jobs.isError && (
+      {jobs.isError && !jobs.isFetchNextPageError && (
         <StatePanel
           kind="error"
           title="후처리 작업을 불러오지 못했습니다"
@@ -206,6 +241,15 @@ export function RecordJobsPanel({
             )
           })}
         </ol>
+      )}
+      {jobs.isFetchNextPageError && (
+        <StatePanel
+          kind="error"
+          title="다음 후처리 작업을 불러오지 못했습니다"
+          description="이미 불러온 작업은 유지합니다. 같은 위치부터 다시 시도합니다."
+          actionLabel="다음 작업 다시 시도"
+          onAction={() => void jobs.fetchNextPage()}
+        />
       )}
       {jobs.hasNextPage && (
         <Button

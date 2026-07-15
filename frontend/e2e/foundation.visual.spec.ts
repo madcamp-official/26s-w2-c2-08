@@ -8,6 +8,8 @@ import {
 import {
   professorCourse,
   professorDraftCourse,
+  professorEndedCourse,
+  professorEndedSession,
   professorProcessingCourse,
   liveProfessorSession,
   liveStudentSession,
@@ -15,6 +17,8 @@ import {
   processingStudentSession,
   readySession,
   studentCourse,
+  studentEndedCourse,
+  studentEndedSession,
   studentLiveCourse,
   studentProcessingCourse,
 } from './fixtures/entities'
@@ -219,6 +223,52 @@ const scenarios: FoundationScenario[] = [
       'POST /api/v1/realtime-tickets',
     ],
   },
+  {
+    screenId: 'ENDED_CLASS_PAGE_PROF',
+    path: `/sessions/${professorEndedSession.id}`,
+    auth: 'signed-in',
+    heading: professorEndedSession.title,
+    checkpoint: { level: 2, name: '복습할 수업 기록이 준비되었습니다' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/sessions/${professorEndedSession.id}`,
+      `GET /api/v1/courses/${professorEndedCourse.id}`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/record`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/materials?limit=100`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
+      `GET /api/v1/recordings/80000000-0000-0000-0000-000000000009/playback`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/summaries?summary_type=FINAL&limit=20`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/transcript?transcript_version_id=${professorEndedSession.canonical_transcript_version_id}&limit=100`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/questions?sort=RECENT&limit=20`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/questions?status=OPEN&sort=RECENT&limit=20`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/question-clusters?scope=FINAL&limit=20`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/answers?limit=20`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/jobs?limit=20`,
+      `GET /api/v1/sessions/${professorEndedSession.id}/chats?limit=20`,
+    ],
+  },
+  {
+    screenId: 'ENDED_CLASS_PAGE_STUD',
+    path: `/sessions/${studentEndedSession.id}`,
+    auth: 'signed-in',
+    heading: studentEndedSession.title,
+    checkpoint: { level: 2, name: '복습할 수업 기록이 준비되었습니다' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/sessions/${studentEndedSession.id}`,
+      `GET /api/v1/courses/${studentEndedCourse.id}`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/record`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/materials?limit=100`,
+      `GET /api/v1/recordings/80000000-0000-0000-0000-000000000010/playback`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/summaries?summary_type=FINAL&limit=20`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/transcript?transcript_version_id=${studentEndedSession.canonical_transcript_version_id}&limit=100`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/questions?sort=RECENT&limit=20`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/question-clusters?scope=FINAL&limit=20`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/answers?limit=20`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/jobs?limit=20`,
+      `GET /api/v1/sessions/${studentEndedSession.id}/chats?limit=20`,
+    ],
+  },
 ]
 
 for (const scenario of scenarios) {
@@ -410,6 +460,34 @@ test('CLASS_CREATE_PAGE READY delete dialog traps and returns keyboard focus', a
   await trigger.click()
   const dialog = page.getByRole('dialog', {
     name: 'READY class를 삭제할까요?',
+  })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator(':focus')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+  expect(runtimeErrors).toEqual([])
+})
+
+test('ENDED_CLASS_PAGE_PROF delete dialog traps and returns keyboard focus', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== '1440')
+  const runtimeErrors = collectRuntimeErrors(page)
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto(`/sessions/${professorEndedSession.id}`)
+  await expect(
+    page.getByRole('heading', {
+      level: 1,
+      name: professorEndedSession.title,
+    }),
+  ).toBeVisible()
+
+  const trigger = page.getByRole('button', { name: 'class 삭제' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', {
+    name: '완료 class를 삭제할까요?',
   })
   await expect(dialog).toBeVisible()
   await expect(dialog.locator(':focus')).toHaveCount(1)

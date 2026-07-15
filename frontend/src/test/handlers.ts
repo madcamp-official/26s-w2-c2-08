@@ -50,6 +50,18 @@ export const handlers = [
       next_cursor: null,
     }),
   ),
+  http.get(
+    '*/api/v1/recordings/:recordingId/playback',
+    () =>
+      new HttpResponse(new Uint8Array([0]), {
+        status: 206,
+        headers: {
+          'Accept-Ranges': 'bytes',
+          'Content-Range': 'bytes 0-0/1',
+          'Content-Type': 'audio/webm',
+        },
+      }),
+  ),
   http.post('*/api/v1/realtime-tickets', () =>
     HttpResponse.json(
       {

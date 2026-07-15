@@ -105,7 +105,7 @@ export function FinalQuestionMindmap({
       {clusters.isPending && (
         <StatePanel kind="loading" title="최종 질문 분류를 불러오는 중" />
       )}
-      {clusters.isError && (
+      {clusters.isError && !clusters.isFetchNextPageError && (
         <StatePanel
           kind="error"
           title="최종 질문 분류를 불러오지 못했습니다"
@@ -178,14 +178,16 @@ export function FinalQuestionMindmap({
               </p>
             )}
             {selectedCluster && members.isPending && <p>질문을 불러오는 중…</p>}
-            {selectedCluster && members.isError && (
-              <StatePanel
-                kind="error"
-                title="Cluster 질문을 불러오지 못했습니다"
-                actionLabel="다시 불러오기"
-                onAction={() => void members.refetch()}
-              />
-            )}
+            {selectedCluster &&
+              members.isError &&
+              !members.isFetchNextPageError && (
+                <StatePanel
+                  kind="error"
+                  title="Cluster 질문을 불러오지 못했습니다"
+                  actionLabel="다시 불러오기"
+                  onAction={() => void members.refetch()}
+                />
+              )}
             {selectedCluster && memberItems.length > 0 && (
               <ol
                 aria-label={`${selectedCluster.representative_question.content} Cluster 질문`}
@@ -209,6 +211,15 @@ export function FinalQuestionMindmap({
             {selectedCluster && members.data && memberItems.length === 0 && (
               <p className="input-hint">이 Cluster에 표시할 질문이 없습니다.</p>
             )}
+            {selectedCluster && members.isFetchNextPageError && (
+              <StatePanel
+                kind="error"
+                title="다음 Cluster 질문을 불러오지 못했습니다"
+                description="이미 불러온 질문은 유지합니다."
+                actionLabel="다음 Cluster 질문 다시 시도"
+                onAction={() => void members.fetchNextPage()}
+              />
+            )}
             {selectedCluster && members.hasNextPage && (
               <Button
                 variant="secondary"
@@ -222,6 +233,15 @@ export function FinalQuestionMindmap({
             )}
           </div>
         </div>
+      )}
+      {clusters.isFetchNextPageError && (
+        <StatePanel
+          kind="error"
+          title="다음 Cluster를 불러오지 못했습니다"
+          description="이미 불러온 Cluster는 유지합니다. 같은 위치부터 다시 시도합니다."
+          actionLabel="다음 Cluster 다시 시도"
+          onAction={() => void clusters.fetchNextPage()}
+        />
       )}
       {clusters.hasNextPage && (
         <Button

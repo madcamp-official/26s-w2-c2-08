@@ -91,16 +91,56 @@ function mappingCopy(answer: Answer) {
   return '확정 Transcript 구간을 연결하지 못했습니다. 원본 범위를 유지합니다.'
 }
 
+export interface TranscriptFocusTarget {
+  endSegmentId?: string
+  endSequence?: number
+  source: 'CANONICAL' | 'ORIGINAL'
+  startSegmentId?: string
+  startSequence?: number
+  versionId: string
+}
+
+function transcriptFocusTarget(answer: Answer): TranscriptFocusTarget | null {
+  if (answer.answer_type !== 'VOICE') return null
+  const mapping = answer.canonical_transcript_mapping
+  if (
+    mapping?.status === 'SUCCEEDED' &&
+    mapping.target_transcript_version_id &&
+    mapping.start_segment_id &&
+    mapping.end_segment_id
+  ) {
+    return {
+      endSegmentId: mapping.end_segment_id,
+      source: 'CANONICAL',
+      startSegmentId: mapping.start_segment_id,
+      versionId: mapping.target_transcript_version_id,
+    }
+  }
+  if (
+    answer.source_transcript_version_id &&
+    answer.start_sequence !== null &&
+    answer.end_sequence !== null
+  ) {
+    return {
+      endSequence: answer.end_sequence,
+      source: 'ORIGINAL',
+      startSequence: answer.start_sequence,
+      versionId: answer.source_transcript_version_id,
+    }
+  }
+  return null
+}
+
 export function RecordAnswerPanel({
   sessionId,
   professor,
   sessionStatus,
-  onFocusTranscriptRange,
+  onFocusTranscript,
 }: {
   sessionId: string
   professor: boolean
   sessionStatus: 'PROCESSING' | 'COMPLETED'
-  onFocusTranscriptRange: (startSequence: number, endSequence: number) => void
+  onFocusTranscript: (target: TranscriptFocusTarget) => void
 }) {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
@@ -243,6 +283,31 @@ export function RecordAnswerPanel({
               </option>
             ))}
           </select>
+          {openQuestions.isPending && (
+            <p className="input-hint" role="status">
+              미답변 질문을 불러오는 중…
+            </p>
+          )}
+          {openQuestions.isError && !openQuestions.isFetchNextPageError && (
+            <StatePanel
+              kind="error"
+              title="미답변 질문을 불러오지 못했습니다"
+              actionLabel="미답변 질문 다시 불러오기"
+              onAction={() => void openQuestions.refetch()}
+            />
+          )}
+          {openQuestions.data && unansweredQuestions.length === 0 && (
+            <p className="input-hint">답변을 추가할 미답변 질문이 없습니다.</p>
+          )}
+          {openQuestions.isFetchNextPageError && (
+            <StatePanel
+              kind="error"
+              title="다음 미답변 질문을 불러오지 못했습니다"
+              description="이미 불러온 질문은 유지합니다."
+              actionLabel="다음 미답변 질문 다시 시도"
+              onAction={() => void openQuestions.fetchNextPage()}
+            />
+          )}
           {openQuestions.hasNextPage && (
             <Button
               type="button"
@@ -255,7 +320,10 @@ export function RecordAnswerPanel({
                 : '미답변 질문 더 보기'}
             </Button>
           )}
+          <label htmlFor="record-answer-new-text">보충 답변 내용</label>
           <textarea
+            id="record-answer-new-text"
+            aria-describedby="record-answer-new-text-length"
             value={newText}
             maxLength={MAX_ANSWER_TEXT_LENGTH + 1}
             onChange={(event) => setNewText(event.target.value)}
@@ -264,6 +332,7 @@ export function RecordAnswerPanel({
           />
           <div className="question-composer__footer">
             <span
+              id="record-answer-new-text-length"
               className={
                 newTextLength > MAX_ANSWER_TEXT_LENGTH
                   ? 'form-error'
@@ -285,7 +354,7 @@ export function RecordAnswerPanel({
       {answers.isPending && (
         <StatePanel kind="loading" title="Answer를 불러오는 중" />
       )}
-      {answers.isError && (
+      {answers.isError && !answers.isFetchNextPageError && (
         <StatePanel
           kind="error"
           title="Answer를 불러오지 못했습니다"
@@ -301,6 +370,7 @@ export function RecordAnswerPanel({
           {items.map((answer) => {
             const organization = organizationCopy(answer)
             const mapping = mappingCopy(answer)
+            const focusTarget = transcriptFocusTarget(answer)
             return (
               <li key={answer.id}>
                 <span className="badge">{answerTargetLabel(answer)}</span>
@@ -311,21 +381,17 @@ export function RecordAnswerPanel({
                       원본 Transcript {answer.start_sequence ?? '-'}–
                       {answer.end_sequence ?? '-'} 구간 · {mapping}
                     </p>
-                    {answer.start_sequence !== null &&
-                      answer.end_sequence !== null && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
-                            onFocusTranscriptRange(
-                              answer.start_sequence!,
-                              answer.end_sequence!,
-                            )
-                          }
-                        >
-                          Transcript 구간 보기
-                        </Button>
-                      )}
+                    {focusTarget && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => onFocusTranscript(focusTarget)}
+                      >
+                        {focusTarget.source === 'CANONICAL'
+                          ? '확정 Transcript 구간 보기'
+                          : '원본 Transcript 구간 보기'}
+                      </Button>
+                    )}
                   </div>
                 )}
                 {answer.text_content && <p>{answer.text_content}</p>}
@@ -367,6 +433,15 @@ export function RecordAnswerPanel({
           })}
         </ol>
       )}
+      {answers.isFetchNextPageError && (
+        <StatePanel
+          kind="error"
+          title="다음 Answer를 불러오지 못했습니다"
+          description="이미 불러온 Answer는 유지합니다. 같은 위치부터 다시 시도합니다."
+          actionLabel="다음 Answer 다시 시도"
+          onAction={() => void answers.fetchNextPage()}
+        />
+      )}
       {answers.hasNextPage && (
         <Button
           variant="secondary"
@@ -388,7 +463,12 @@ export function RecordAnswerPanel({
           }}
         >
           <h3>교수자 텍스트 수정</h3>
+          <label htmlFor={`record-answer-edit-${editing.id}`}>
+            교수자 답변 내용
+          </label>
           <textarea
+            id={`record-answer-edit-${editing.id}`}
+            aria-describedby={`record-answer-edit-length-${editing.id}`}
             value={draft}
             maxLength={MAX_ANSWER_TEXT_LENGTH + 1}
             onChange={(event) => setDraft(event.target.value)}
@@ -396,6 +476,7 @@ export function RecordAnswerPanel({
           />
           <div className="question-composer__footer">
             <span
+              id={`record-answer-edit-length-${editing.id}`}
               className={
                 draftLength > MAX_ANSWER_TEXT_LENGTH
                   ? 'form-error'

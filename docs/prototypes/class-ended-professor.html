@@ -7,12 +7,13 @@
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/ended-class.css" />
     <script type="module" src="assets/js/class-ended-professor.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
-      Static prototype · 녹음 접근 정책은 미정 ·
+      Static prototype · 현재 Course 멤버 playback · 요청마다 권한 확인 ·
       <a href="?playback=checking">권한 확인</a> ·
       <a href="?playback=ready">재생 허용 fixture</a> ·
       <a href="?playback=forbidden">녹음만 거부</a>
@@ -33,7 +34,7 @@
       </div>
     </header>
 
-    <main class="container page-main" id="mainContent">
+    <main class="container page-main ended-class-page" id="mainContent">
       <header class="record-header">
         <div>
           <p class="eyebrow">ENDED_CLASS_PAGE_PROF · COMPLETED</p>
@@ -72,6 +73,38 @@
         >
       </header>
 
+      <section class="review-hero" aria-labelledby="profReviewHeroTitle">
+        <div class="review-hero__intro">
+          <span class="review-hero__icon" aria-hidden="true">✓</span>
+          <div>
+            <p class="eyebrow">Review workspace</p>
+            <h2 id="profReviewHeroTitle">복습할 수업 기록이 준비되었습니다</h2>
+            <p class="review-hero__description">
+              최종 Transcript와 질문·답변·요약을 영역별로 불러옵니다. 한 영역의
+              문제는 준비된 다른 기록과 복습 AI를 가리지 않습니다.
+            </p>
+          </div>
+        </div>
+        <dl class="review-hero__timeline">
+          <div>
+            <dt>수업 날짜</dt>
+            <dd>2026년 7월 12일</dd>
+          </div>
+          <div>
+            <dt>시작</dt>
+            <dd>2026. 7. 12. 오전 10:00</dd>
+          </div>
+          <div>
+            <dt>종료</dt>
+            <dd>2026. 7. 12. 오전 11:02</dd>
+          </div>
+          <div>
+            <dt>기록 확정</dt>
+            <dd>2026. 7. 12. 오전 11:02</dd>
+          </div>
+        </dl>
+      </section>
+
       <nav class="record-toc" aria-label="완료 기록 목차">
         <a href="#profMaterialsTitle">강의자료</a>
         <a href="#profRecordingTitle">녹음</a>
@@ -80,6 +113,7 @@
         <a href="#profQuestionsTitle">질문</a>
         <a href="#profClustersTitle">마인드맵</a>
         <a href="#profAnswersTitle">답변</a>
+        <a href="#profJobsTitle">작업 상태</a>
         <a href="#profReviewTitle">복습 AI</a>
       </nav>
 
@@ -143,6 +177,7 @@
                     id="completedMaterialInput"
                     type="file"
                     accept="application/pdf,.pdf"
+                    multiple
                   />
                 </div>
                 <p class="record-region-status" aria-live="polite">
@@ -269,8 +304,8 @@
                   <div>
                     <h2 id="profRecordingTitle">수업 녹음</h2>
                     <p>
-                      역할별 허용 정책은 미정이며 실제 재생 전에 권한을 다시
-                      확인합니다.
+                      현재 Course 멤버는 재생할 수 있으며 재생과 Transcript
+                      seek마다 현재 인증·멤버십을 다시 확인합니다.
                     </p>
                   </div>
                   <span class="record-region-status">다운로드 없음</span>
@@ -452,6 +487,22 @@
                     </button>
                   </div>
                 </div>
+                <div class="recording-delete-control">
+                  <p>
+                    조기 삭제는 녹음만 제거하며 Transcript·질문·답변 기록은
+                    유지합니다.
+                  </p>
+                  <button
+                    class="button button--ghost"
+                    type="button"
+                    data-dialog-open="recordingDeleteDialog"
+                  >
+                    완료 녹음 삭제
+                  </button>
+                </div>
+                <p data-recording-deleted hidden role="status">
+                  녹음을 삭제했습니다. Transcript·질문·답변 기록은 유지됩니다.
+                </p>
               </section>
 
               <section
@@ -678,13 +729,9 @@
                     <h2 id="profQuestionsTitle">원본 학생 질문</h2>
                     <p>최종 Cluster와 독립된 RECENT cursor 목록입니다.</p>
                   </div>
-                  <button
-                    class="button button--primary"
-                    type="button"
-                    data-dialog-open="textAnswerDialog"
-                  >
+                  <a class="button button--primary" href="#textAnswerComposer">
                     미답변 질문에 텍스트 답변
-                  </button>
+                  </a>
                 </div>
                 <ul
                   class="record-question-list"
@@ -1009,6 +1056,45 @@
                     >3 ANSWERS</span
                   >
                 </div>
+                <form
+                  class="ended-class-inline-form"
+                  id="textAnswerForm"
+                  novalidate
+                >
+                  <div id="textAnswerComposer">
+                    <h3>미답변 학생 질문에 텍스트 답변</h3>
+                    <p>
+                      학생 질문 하나를 target으로 선택하고 당시 문구 snapshot을
+                      보존합니다.
+                    </p>
+                  </div>
+                  <div class="field">
+                    <label for="textAnswerTarget">답변할 질문</label>
+                    <select id="textAnswerTarget">
+                      <option data-target-kind="STUDENT_QUESTION">
+                        힙 대신 배열을 쓰면 얼마나 느려지나요?
+                      </option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="textAnswerInput">교수자 답변</label>
+                    <textarea
+                      id="textAnswerInput"
+                      aria-describedby="textAnswerHelp textAnswerError"
+                      maxlength="2000"
+                    ></textarea>
+                    <p class="field__help" id="textAnswerHelp">
+                      trim·Unicode NFC 기준 1~2,000자로 저장합니다.
+                    </p>
+                    <p id="textAnswerError" role="alert" hidden></p>
+                  </div>
+                  <div class="ended-class-inline-form__footer">
+                    <span data-text-answer-count>0 / 2,000자</span>
+                    <button class="button button--primary" type="submit">
+                      텍스트 Answer 등록
+                    </button>
+                  </div>
+                </form>
                 <article class="record-answer">
                   <span class="badge">AI 대표질문 snapshot · VOICE</span>
                   <h3>음수 가중치가 있으면 왜 다시 봐야 하나요?</h3>
@@ -1017,13 +1103,22 @@
                     확정된 정점을 다시 줄여야 할 수 있어서 다익스트라의 전제가
                     깨집니다.
                   </p>
-                  <button
-                    class="button button--ghost"
-                    type="button"
-                    data-answer-text-edit
-                  >
-                    교수자 text 수정
-                  </button>
+                  <div class="record-admin-actions">
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-answer-text-edit
+                    >
+                      교수자 text 수정
+                    </button>
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-answer-text-withdraw
+                    >
+                      교수자 text 철회
+                    </button>
+                  </div>
                   <div class="record-answer__meta">
                     <button
                       class="range-link"
@@ -1058,13 +1153,22 @@
                   <p data-professor-answer-text>
                     정점 선택이 선형 탐색이 되어 전체 복잡도가 커집니다.
                   </p>
-                  <button
-                    class="button button--ghost"
-                    type="button"
-                    data-answer-text-edit
-                  >
-                    교수자 text 수정
-                  </button>
+                  <div class="record-admin-actions">
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-answer-text-edit
+                    >
+                      교수자 text 수정
+                    </button>
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-answer-text-withdraw
+                    >
+                      교수자 text 철회
+                    </button>
+                  </div>
                 </article>
                 <article
                   class="record-answer record-page-extra"
@@ -1077,13 +1181,22 @@
                   <p data-professor-answer-text>
                     모든 간선을 반복해 완화하므로 음수 간선도 다룹니다.
                   </p>
-                  <button
-                    class="button button--ghost"
-                    type="button"
-                    data-answer-text-edit
-                  >
-                    교수자 text 수정
-                  </button>
+                  <div class="record-admin-actions">
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-answer-text-edit
+                    >
+                      교수자 text 수정
+                    </button>
+                    <button
+                      class="button button--ghost"
+                      type="button"
+                      data-answer-text-withdraw
+                    >
+                      교수자 text 철회
+                    </button>
+                  </div>
                   <p class="notice notice--warning">
                     AI 답변 정리 실패 · immutable 원본 LIVE 범위와 교수자 text는
                     유지됩니다.
@@ -1150,23 +1263,41 @@
                   <div>
                     <h2 id="profJobsTitle">공유 후처리 Job</h2>
                     <p>
-                      공개 retry가 정의된 FINAL clustering·Summary·Answer만 같은
-                      행으로 재시도합니다. HQ 복구는 system이 조정합니다.
+                      실패했고 서버가 허용한 공용 Job만 같은 행·attempt로
+                      재시도합니다. 별도 HQ 전용 endpoint를 만들지 않습니다.
                     </p>
                   </div>
                 </div>
                 <ul class="record-job-list">
-                  <li class="record-job-card" data-recording-job>
+                  <li
+                    class="record-job-card"
+                    data-record-job
+                    data-recording-job
+                  >
                     <div>
                       <h3>
                         RECORDING_TRANSCRIPTION ·
-                        <span data-recording-job-status>SUCCEEDED</span>
+                        <span data-job-status data-recording-job-status
+                          >SUCCEEDED</span
+                        >
                       </h3>
-                      <p data-recording-job-meta>
-                        attempt 1 · blocks_session_completion=true · public
-                        retry control 없음
+                      <p
+                        data-job-attempt
+                        data-recording-job-meta
+                        data-attempt="1"
+                      >
+                        attempt 1 · blocks_session_completion=true
                       </p>
                     </div>
+                    <button
+                      class="button button--secondary"
+                      type="button"
+                      data-recording-job-retry
+                      data-shared-job-retry="고품질 Transcript"
+                      hidden
+                    >
+                      고품질 Transcript 재시도
+                    </button>
                   </li>
                   <li class="record-job-card" data-record-job data-cluster-job>
                     <div>
@@ -1603,19 +1734,19 @@
       </section>
     </div>
 
-    <div class="dialog-backdrop" id="textAnswerDialog" hidden>
+    <div class="dialog-backdrop" id="recordingDeleteDialog" hidden>
       <section
         class="dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="textAnswerTitle"
+        aria-labelledby="recordingDeleteTitle"
       >
         <div class="dialog__header">
           <div>
-            <h2 id="textAnswerTitle">텍스트 Answer 추가</h2>
+            <h2 id="recordingDeleteTitle">완료 녹음을 삭제할까요?</h2>
             <p>
-              미답변 학생 질문 하나를 target으로 선택하고 snapshot을 보존합니다.
-              AI 대표질문에는 새 text-only Answer를 만들지 않습니다.
+              녹음 metadata와 player를 즉시 숨기지만 Transcript·질문·답변은
+              유지합니다.
             </p>
           </div>
           <button
@@ -1627,35 +1758,18 @@
             ×
           </button>
         </div>
-        <form id="textAnswerForm">
-          <div class="field">
-            <label for="textAnswerTarget">답변할 질문</label>
-            <select id="textAnswerTarget">
-              <option data-target-kind="STUDENT_QUESTION">
-                힙 대신 배열을 쓰면 얼마나 느려지나요?
-              </option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="textAnswerInput">교수자 답변</label>
-            <textarea id="textAnswerInput" required></textarea>
-            <p class="field__help">
-              텍스트 Answer 최대 길이·삭제 정책은 아직 미정입니다.
-            </p>
-          </div>
-          <div class="dialog__actions">
-            <button
-              class="button button--ghost"
-              type="button"
-              data-dialog-close
-            >
-              취소
-            </button>
-            <button class="button button--primary" type="submit">
-              Answer 저장
-            </button>
-          </div>
-        </form>
+        <div class="dialog__actions">
+          <button class="button button--ghost" type="button" data-dialog-close>
+            취소
+          </button>
+          <button
+            class="button button--danger"
+            type="button"
+            data-recording-delete-confirm
+          >
+            완료 녹음 삭제
+          </button>
+        </div>
       </section>
     </div>
 

@@ -94,7 +94,7 @@ function syncRecordStatus() {
       meta: "latest RECORDING version 2 · FAILED · LIVE version 1 보존",
       count: "FINAL SEGMENT 0 · 보존 LIVE 1",
       job: "FAILED",
-      jobMeta: "attempt 1 · system recovery only · public retry 없음",
+      jobMeta: "attempt 1 · retryable · 교수자 공용 Job 재시도",
     },
     "data-error": {
       availability: "Transcript 상태 불일치",
@@ -121,6 +121,8 @@ function syncRecordStatus() {
     setText("[data-transcript-count]", transcriptCopy.count);
     setText("[data-recording-job-status]", transcriptCopy.job);
     setText("[data-recording-job-meta]", transcriptCopy.jobMeta);
+    const recordingRetry = document.querySelector("[data-recording-job-retry]");
+    if (recordingRetry) recordingRetry.hidden = transcriptCopy.job !== "FAILED";
   }
 
   const summaryCopy = {

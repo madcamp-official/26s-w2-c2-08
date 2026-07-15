@@ -2472,6 +2472,21 @@
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
 }
 
+.answer-text-composer,
+.answer-text-composer select,
+.answer-text-composer textarea,
+.answer-list,
+.answer-list li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.answer-text-composer select,
+.answer-text-composer textarea {
+  width: 100%;
+  min-height: 44px;
+}
+
 .answer-text-composer label {
   font-weight: 700;
 }
@@ -2494,6 +2509,7 @@
 
 .answer-list p {
   margin: 0;
+  overflow-wrap: anywhere;
   line-height: 1.6;
 }
 
@@ -2765,6 +2781,22 @@
   gap: var(--space-4);
   align-items: start;
   justify-content: space-between;
+}
+
+.record-transcript__focus-state {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid
+    color-mix(in srgb, var(--color-primary) 24%, var(--color-line));
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-soft);
+}
+
+.record-transcript__focus-state p {
+  margin: 0;
 }
 
 .record-summary h2,
@@ -3044,7 +3076,8 @@
 
   .record-page__header,
   .record-summary header,
-  .record-transcript__heading {
+  .record-transcript__heading,
+  .record-transcript__focus-state {
     align-items: stretch;
     flex-direction: column;
   }

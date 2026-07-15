@@ -45,7 +45,7 @@ export function RecordQuestionPanel({
       {questions.isPending && (
         <StatePanel kind="loading" title="질문을 불러오는 중" />
       )}
-      {questions.isError && (
+      {questions.isError && !questions.isFetchNextPageError && (
         <StatePanel
           kind="error"
           title="질문을 불러오지 못했습니다"
@@ -73,6 +73,15 @@ export function RecordQuestionPanel({
             </li>
           ))}
         </ol>
+      )}
+      {questions.isFetchNextPageError && (
+        <StatePanel
+          kind="error"
+          title="다음 질문을 불러오지 못했습니다"
+          description="이미 불러온 질문은 유지합니다. 같은 위치부터 다시 시도합니다."
+          actionLabel="다음 질문 다시 시도"
+          onAction={() => void questions.fetchNextPage()}
+        />
       )}
       {questions.hasNextPage && (
         <Button
