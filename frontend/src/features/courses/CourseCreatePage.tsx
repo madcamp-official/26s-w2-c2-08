@@ -160,7 +160,6 @@ export function CourseCreatePage() {
   return (
     <section className="course-onboarding-page">
       <PageHeader
-        eyebrow="COURSE_CREATE_PAGE · PRE-T-01"
         title="한 학기 Course 만들기"
         description={
           <p>
@@ -209,11 +208,6 @@ export function CourseCreatePage() {
             <Field
               htmlFor="course-semester"
               label="학기"
-              hint={
-                fieldErrors.semester
-                  ? undefined
-                  : '현재 API 계약의 표시용 문자열로 저장됩니다.'
-              }
               error={fieldErrors.semester}
             >
               <input
