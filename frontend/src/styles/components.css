@@ -636,7 +636,7 @@
 
 .personal-ai {
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: clip;
 }
 
 .personal-ai__summary,
@@ -662,9 +662,12 @@
 .personal-ai__messages {
   width: 100%;
   max-height: 440px;
+  align-content: start;
   overflow-x: hidden;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 0 4px 12px 0;
+  scroll-padding-bottom: 12px;
+  scrollbar-gutter: stable;
 }
 .personal-ai__message {
   min-width: 0;
