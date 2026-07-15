@@ -1428,6 +1428,8 @@ Range: bytes=<start>-<end>
 - `UPLOADED` Recording만 재생할 수 있다. 그 전에는 `409 RECORDING_NOT_READY`, 없거나 비가시면 `404 RECORDING_NOT_FOUND`를 반환한다.
 - 전체 재생은 `200 OK`, 유효한 byte Range 재생은 `206 Partial Content`를 사용한다. 범위가 유효하지 않으면 `416 RANGE_NOT_SATISFIABLE`을 반환한다.
 - API는 final object를 proxy stream한다. `audio/webm` 또는 `audio/mp4` MIME을 유지하고 `Accept-Ranges`, `Content-Length`, 필요한 경우 `Content-Range`를 반환한다. 내부 storage key와 서버 경로를 외부에 노출하지 않는다.
+- Browser는 same-origin Range 재생을 우선 사용한다. API origin을 분리한 배포에서는 `AUTH_ALLOWED_ORIGINS`에 등록된 **정확한 Frontend origin**에만 credential CORS를 허용하고 `Accept-Ranges`, `Content-Length`, `Content-Range`, `X-Request-ID`를 노출한다. `*` 또는 임의 Origin은 허용하지 않으며 Cookie `SameSite=Lax` 경계를 피하려면 Frontend와 API를 같은 site로 제공한다.
+- native media 요청이 이 경계에서 실패하면 UI는 현재 인증 Cookie를 포함한 단일 object fetch를 한 번만 fallback으로 사용해 Blob URL을 재생한다. 정상 경로의 Range streaming을 대체하거나 별도 download endpoint를 만드는 기능은 아니다.
 - Transcript 문장 seek는 9절의 nullable recording offset을 사용한다.
 
 ## 16. WebSocket과 음성 스트리밍

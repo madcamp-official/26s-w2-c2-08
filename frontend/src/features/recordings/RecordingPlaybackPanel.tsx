@@ -73,6 +73,7 @@ export function RecordingPlaybackPanel({
       </header>
       <audio
         ref={player}
+        crossOrigin="use-credentials"
         controls
         preload="metadata"
         src={apiUrl(recording.data.playback_url)}

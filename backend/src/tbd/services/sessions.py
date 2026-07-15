@@ -404,7 +404,11 @@ class SessionService:
             # same logical aggregate for PR-21's resumable browser upload while
             # immediately fencing further live PCM through Session PROCESSING.
             recording.status = "UPLOAD_PENDING"
-            recording.capture_ended_at = timestamp
+            # `timestamp` is captured when the end request begins. A publisher
+            # claim can commit a few milliseconds later while that request is
+            # waiting on its transaction lock, so never move the durable
+            # capture end before its server-generated capture start.
+            recording.capture_ended_at = max(timestamp, recording.capture_started_at)
             recording.live_audio_lease_expires_at = None
             recording.version += 1
         coordinator = AIJob(

@@ -195,6 +195,12 @@ make dev-web
 - API: <http://localhost:8000>
 - Swagger UI: <http://localhost:8000/docs>
 
+기본 개발 환경은 Vite proxy를 통해 같은 origin의 `/api`를 사용한다. Frontend와 API를
+다른 origin으로 배포하는 경우 backend `AUTH_ALLOWED_ORIGINS`에 **Frontend public
+origin**을 정확히 등록해야 한다. 이 allowlist는 state-changing 요청뿐 아니라
+credential을 포함한 녹음 playback CORS 응답에도 적용된다. Cookie가 `SameSite=Lax`이므로
+운영에서는 가능하면 하나의 public origin에서 UI와 `/api`를 reverse proxy로 제공한다.
+
 ### Background Worker 실행
 
 사용할 기능에 맞는 Worker를 별도 터미널에서 실행합니다.

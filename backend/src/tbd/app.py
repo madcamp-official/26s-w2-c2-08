@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from tbd.api.router import api_router
 from tbd.core.config import Settings, get_settings
@@ -78,6 +79,30 @@ def create_app(
         else None
     )
     app.add_middleware(RequestIdMiddleware)
+    # Media elements issue their own requests.  Keep their credentialed
+    # cross-origin playback boundary aligned with the exact frontend origins
+    # already trusted for browser state-changing requests; never use `*` here.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(runtime_settings.allowed_origins),
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=[
+            "Accept",
+            "Content-Type",
+            "Idempotency-Key",
+            "Range",
+            "Upload-Offset",
+            "X-Chunk-SHA256",
+            "X-Request-ID",
+        ],
+        expose_headers=[
+            "Accept-Ranges",
+            "Content-Length",
+            "Content-Range",
+            "X-Request-ID",
+        ],
+    )
     install_exception_handlers(app)
     app.include_router(api_router)
     return app
