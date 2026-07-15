@@ -35,7 +35,7 @@ import {
 } from './RecordAnswerPanel'
 import { RecordJobsPanel } from './RecordJobsPanel'
 import { RecordQuestionPanel } from './RecordQuestionPanel'
-import { seekRecordingPlayback } from './playback'
+import { seekAndPlayRecording } from './playback'
 import { recordKeys, recordManifestQueryOptions } from './queries'
 
 interface SessionRecordPageProps {
@@ -199,7 +199,6 @@ function RecordRecordingPanel({
   sessionStatus: 'PROCESSING' | 'COMPLETED'
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const allowNextPlay = useRef(false)
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -207,7 +206,7 @@ function RecordRecordingPanel({
     null,
   )
   const [playbackState, setPlaybackState] = useState<
-    'idle' | 'loading' | 'active' | 'seek-error' | 'seeking'
+    'idle' | 'active' | 'positioned' | 'seek-error' | 'seeking'
   >('idle')
   const deleteKey = useRef<string | null>(null)
   const playbackUrl = recording?.playback_url ?? null
@@ -278,13 +277,10 @@ function RecordRecordingPanel({
         return
       }
       try {
-        await seekRecordingPlayback(audio, seekRequest.offset)
+        const result = await seekAndPlayRecording(audio, seekRequest.offset)
         if (cancelled) return
-        allowNextPlay.current = true
-        await audio.play()
-        if (!cancelled) setPlaybackState('active')
+        setPlaybackState(result === 'playing' ? 'active' : 'positioned')
       } catch {
-        allowNextPlay.current = false
         if (!cancelled) setPlaybackState('seek-error')
       }
     })
@@ -406,42 +402,26 @@ function RecordRecordingPanel({
         onError={() => setPlaybackState('seek-error')}
         onPause={() =>
           setPlaybackState((current) =>
-            current === 'seeking' || current === 'loading' ? current : 'idle',
+            current === 'seeking' || current === 'positioned'
+              ? current
+              : 'idle',
           )
         }
-        onPlay={(event) => {
-          if (allowNextPlay.current) {
-            allowNextPlay.current = false
-            setPlaybackState('active')
-            return
-          }
-          event.currentTarget.pause()
-          setPlaybackState('loading')
-          void reauthorizePlayback().then(async (allowed) => {
-            if (!allowed || !audioRef.current) {
-              setPlaybackState('seek-error')
-              return
-            }
-            allowNextPlay.current = true
-            try {
-              await audioRef.current.play()
-            } catch {
-              allowNextPlay.current = false
-              setPlaybackState('seek-error')
-            }
-          })
-        }}
+        onPlay={() => setPlaybackState('active')}
       />
-      {(playbackState === 'loading' || playbackState === 'seeking') && (
+      {playbackState === 'seeking' && (
         <p className="input-hint" role="status">
-          {playbackState === 'seeking'
-            ? '재생 권한을 확인한 뒤 Transcript 위치로 이동하는 중…'
-            : '재생 승인을 다시 확인하는 중…'}
+          재생 권한을 확인한 뒤 Transcript 위치로 이동하는 중…
         </p>
       )}
       {playbackState === 'active' && (
         <p className="input-hint" role="status">
           녹음을 재생하고 있습니다.
+        </p>
+      )}
+      {playbackState === 'positioned' && (
+        <p className="input-hint" role="status">
+          요청한 녹음 위치로 이동했습니다. 재생 버튼을 눌러 이어서 들으세요.
         </p>
       )}
       {playbackState === 'seek-error' && accessReady && (
