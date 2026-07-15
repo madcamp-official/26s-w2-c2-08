@@ -7,7 +7,7 @@ import asyncio
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
-from tbd.providers.stt import UnavailableBatchSTTProvider
+from tbd.providers.stt import create_stt_providers
 from tbd.services.recording_transcription import RecordingTranscriptionWorker
 from tbd.storage import FilesystemStorage
 
@@ -19,10 +19,11 @@ async def run(*, once: bool = False, idle_poll_seconds: float = DEFAULT_IDLE_POL
 
     settings = get_settings()
     database = create_database(settings)
+    providers = create_stt_providers(settings)
     worker = RecordingTranscriptionWorker(
         database.session_factory,
         FilesystemStorage(settings.storage_root),
-        UnavailableBatchSTTProvider(),
+        providers.batch,
     )
     try:
         while True:

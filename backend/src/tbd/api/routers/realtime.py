@@ -21,6 +21,7 @@ from tbd.core.errors import ApiError
 from tbd.db import transaction
 from tbd.providers.stt import (
     StreamingSTTInvalidResultError,
+    StreamingSTTRequest,
     StreamingSTTUnavailableError,
     STTFinal,
     STTPartial,
@@ -61,7 +62,6 @@ CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 
 RESYNC_RESOURCES = ["SESSION", "TRANSCRIPT", "QUESTIONS", "CLUSTERS", "ANSWERS", "JOBS"]
-LIVE_STT_TIMEOUT_SECONDS = 5
 LIVE_AUDIO_MAX_IN_FLIGHT = 1
 
 
@@ -537,9 +537,17 @@ async def session_audio_websocket(
                 )
             if not accepted.duplicate:
                 try:
-                    async with asyncio.timeout(LIVE_STT_TIMEOUT_SECONDS):
+                    async with asyncio.timeout(
+                        websocket.app.state.settings.stt_live_timeout_seconds
+                    ):
                         results = validate_streaming_results(
-                            await websocket.app.state.streaming_stt_provider.transcribe(frame)
+                            await websocket.app.state.streaming_stt_provider.transcribe(
+                                StreamingSTTRequest(
+                                    session_id=session_id,
+                                    recording_id=claim.recording_id,
+                                    frame=frame,
+                                )
+                            )
                         )
                 except (StreamingSTTUnavailableError, StreamingSTTInvalidResultError, TimeoutError):
                     await _audio_error(

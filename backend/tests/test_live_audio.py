@@ -11,7 +11,6 @@ from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
 from tbd.api.dependencies import get_current_user_id
-from tbd.api.routers import realtime as realtime_router
 from tbd.app import create_app
 from tbd.core.config import AppEnvironment, Settings
 from tbd.db import create_database
@@ -416,16 +415,15 @@ def test_reconnect_rejects_unprocessed_audio_after_stt_state_is_lost(
 
 
 def test_stt_timeout_returns_a_safe_error_without_advancing_processed_ack(
-    migrated_database_url: str, monkeypatch: pytest.MonkeyPatch
+    migrated_database_url: str,
 ) -> None:
     class SlowStreamingSTTProvider:
         async def transcribe(self, _frame: object) -> tuple[object, ...]:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1.1)
             return ()
 
-    monkeypatch.setattr(realtime_router, "LIVE_STT_TIMEOUT_SECONDS", 0.001)
     user_id, session_id = asyncio.run(_seed_live_session(migrated_database_url))
-    settings = _settings(migrated_database_url)
+    settings = _settings(migrated_database_url).model_copy(update={"stt_live_timeout_seconds": 1})
     app = create_app(
         settings=settings,
         database=create_database(settings),

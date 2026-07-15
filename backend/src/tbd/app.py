@@ -12,7 +12,7 @@ from tbd.core.request_id import RequestIdMiddleware
 from tbd.db import Database, create_database
 from tbd.providers.ai import LLMProvider, create_ai_providers
 from tbd.providers.google_oidc import GoogleOIDCClient, GoogleOIDCProvider
-from tbd.providers.stt import StreamingSTTProvider, UnavailableStreamingSTTProvider
+from tbd.providers.stt import StreamingSTTProvider, create_stt_providers
 from tbd.realtime.hub import RealtimeHub
 from tbd.realtime.publisher import RealtimeOutboxPublisher
 from tbd.repositories.idempotency import IdempotencyRepository
@@ -49,6 +49,7 @@ def create_app(
     runtime_google_oidc_provider = google_oidc_provider or GoogleOIDCClient(runtime_settings)
     runtime_storage = storage or FilesystemStorage(runtime_settings.storage_root)
     runtime_ai_providers = create_ai_providers(runtime_settings)
+    runtime_stt_providers = create_stt_providers(runtime_settings)
     app = FastAPI(
         title=runtime_settings.app_name,
         version="0.1.0",
@@ -62,7 +63,7 @@ def create_app(
     # Every default comes from the same Settings-backed provider factory used
     # by the standalone workers.
     app.state.llm_provider = llm_provider or runtime_ai_providers.llm
-    app.state.streaming_stt_provider = streaming_stt_provider or UnavailableStreamingSTTProvider()
+    app.state.streaming_stt_provider = streaming_stt_provider or runtime_stt_providers.streaming
     cipher = runtime_settings.idempotency_response_cipher
     app.state.idempotency_repository = IdempotencyRepository(cipher) if cipher is not None else None
     app.state.course_join_code_codec = runtime_settings.course_join_code_codec
