@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import timedelta
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
@@ -19,7 +20,11 @@ async def run(*, once: bool = False, idle_poll_seconds: float = DEFAULT_IDLE_POL
     settings = get_settings()
     database = create_database(settings)
     providers = create_ai_providers(settings)
-    worker = SessionPostprocessingWorker(database.session_factory, providers.llm)
+    worker = SessionPostprocessingWorker(
+        database.session_factory,
+        providers.llm,
+        provider_timeout=timedelta(seconds=settings.postprocessing_ai_provider_timeout_seconds),
+    )
     try:
         while True:
             processed = await worker.run_once()
