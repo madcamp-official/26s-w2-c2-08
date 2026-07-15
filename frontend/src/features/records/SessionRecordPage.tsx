@@ -972,6 +972,7 @@ export function SessionRecordPage({
           onClearFocus={() => setTranscriptFocus(null)}
         />
         <RecordQuestionPanel
+          student={!professor}
           sessionId={data.session.id}
           sessionStatus={status}
         />
