@@ -775,7 +775,14 @@ describe('Course role flows', () => {
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(
-      screen.getByRole('textbox', { name: 'class 제목' }),
+      screen.queryByText('서버가 수업 기록을 정리하고 있습니다'),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'class 관리' }))
+    const management = screen.getByRole('dialog', {
+      name: '처리 중 class 관리',
+    })
+    expect(
+      within(management).getByRole('textbox', { name: 'class 제목' }),
     ).toBeInTheDocument()
     expect(await screen.findByText('수업 후처리 작업')).toBeInTheDocument()
     expect(

@@ -192,8 +192,6 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/sessions/${processingProfessorSession.id}`,
       `GET /api/v1/courses/${professorProcessingCourse.id}`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/record`,
-      `GET /api/v1/sessions/${processingProfessorSession.id}/materials?limit=100`,
-      `GET /api/v1/sessions/${processingProfessorSession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/transcript?transcript_version_id=${processingProfessorSession.canonical_transcript_version_id}&limit=100`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/questions?sort=RECENT&limit=20`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/question-clusters?scope=FINAL&limit=20`,
@@ -213,7 +211,6 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/sessions/${processingStudentSession.id}`,
       `GET /api/v1/courses/${studentProcessingCourse.id}`,
       `GET /api/v1/sessions/${processingStudentSession.id}/record`,
-      `GET /api/v1/sessions/${processingStudentSession.id}/materials?limit=100`,
       `GET /api/v1/sessions/${processingStudentSession.id}/transcript?transcript_version_id=${processingStudentSession.canonical_transcript_version_id}&limit=100`,
       `GET /api/v1/sessions/${processingStudentSession.id}/questions?sort=RECENT&limit=20`,
       `GET /api/v1/sessions/${processingStudentSession.id}/question-clusters?scope=FINAL&limit=20`,
@@ -450,9 +447,7 @@ test('CLASS_CREATE_PAGE READY delete dialog traps and returns keyboard focus', a
     page.getByRole('heading', { level: 1, name: readySession.title }),
   ).toBeVisible()
 
-  await page.getByRole('button', { name: 'class 관리' }).click()
-  const management = page.getByRole('dialog', { name: '완료 class 관리' })
-  const trigger = management.getByRole('button', { name: 'class 삭제' })
+  const trigger = page.getByRole('button', { name: 'class 삭제' })
   await trigger.click()
   const dialog = page.getByRole('dialog', {
     name: 'READY class를 삭제할까요?',
@@ -480,7 +475,10 @@ test('ENDED_CLASS_PAGE_PROF delete dialog traps and returns keyboard focus', asy
     }),
   ).toBeVisible()
 
-  const trigger = page.getByRole('button', { name: 'class 삭제' })
+  const managementTrigger = page.getByRole('button', { name: 'class 관리' })
+  await managementTrigger.click()
+  const management = page.getByRole('dialog', { name: '완료 class 관리' })
+  const trigger = management.getByRole('button', { name: 'class 삭제' })
   await trigger.click()
   const dialog = page.getByRole('dialog', {
     name: '완료 class를 삭제할까요?',

@@ -4,7 +4,6 @@ import {
   CourseRoleBadge,
   SessionStatusBadge,
 } from '../../components/domain/LmsStatus'
-import { PageHeader } from '../../components/layout/PageHeader'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { LinkButton } from '../../components/ui/LinkButton'
@@ -43,31 +42,27 @@ export function EndedClassLayout({
       data-ended-class-role={course.role}
       data-ended-class-screen={screenId}
     >
-      <PageHeader
-        eyebrow="COMPLETED · REVIEW"
-        title={session.title}
-        titleId="ended-class-title"
-        description={
-          <div className="ended-class-header__description">
+      <header className="ended-class-toolbar">
+        <div className="ended-class-toolbar__context">
+          <h1 id="ended-class-title">{session.title}</h1>
+          <div className="ended-class-toolbar__meta">
             <CourseRoleBadge role={course.role} />
             <SessionStatusBadge status="COMPLETED" />
             <span>{course.title}</span>
             <span>{formatDate(session.lecture_date)}</span>
           </div>
-        }
-        actions={
-          <div className="ended-class-header__actions">
-            {management && (
-              <Button variant="ghost" onClick={() => setManagementOpen(true)}>
-                class 관리
-              </Button>
-            )}
-            <LinkButton variant="ghost" to={`/courses/${session.course_id}`}>
-              Course로
-            </LinkButton>
-          </div>
-        }
-      />
+        </div>
+        <div className="ended-class-toolbar__actions">
+          {management && (
+            <Button variant="ghost" onClick={() => setManagementOpen(true)}>
+              class 관리
+            </Button>
+          )}
+          <LinkButton variant="ghost" to={`/courses/${session.course_id}`}>
+            Course로
+          </LinkButton>
+        </div>
+      </header>
 
       {refreshWarning}
 

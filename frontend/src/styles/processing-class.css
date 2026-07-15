@@ -1,21 +1,77 @@
 .processing-class-page {
   display: grid;
-  width: min(1200px, 100%);
-  margin-inline: auto;
-  gap: var(--space-6);
+  width: 100%;
+  gap: var(--space-4);
 }
 
-.processing-class-header__description {
+.processing-class-toolbar {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.processing-class-toolbar__context {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.processing-class-toolbar h1 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 820;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.processing-class-toolbar__meta {
   display: flex;
   gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
 }
 
-.processing-class-header__description > span:not(.ui-status) {
+.processing-class-toolbar__meta > span:not(.ui-status) {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.processing-class-toolbar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+.processing-class-management {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.processing-class-management h2,
+.processing-class-management p {
+  margin: 0;
+}
+
+.processing-class-management h2 {
+  margin-top: var(--space-2);
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.processing-class-management > div > p:last-child {
+  margin-top: var(--space-2);
   color: var(--color-muted);
   font-size: 13px;
-  font-weight: 700;
+  line-height: 1.6;
 }
 
 .processing-class-intro {
@@ -137,12 +193,6 @@
   margin-top: 0;
 }
 
-.record-page--processing .record-processing {
-  border-color: color-mix(in srgb, var(--color-brand) 16%, var(--color-line));
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
 .record-processing__heading,
 .record-job-list__title {
   display: flex;
@@ -153,25 +203,6 @@
 
 .record-processing__heading .eyebrow {
   margin: 0;
-}
-
-.record-page__content--processing {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-  align-items: start;
-}
-
-.record-page__content--processing > * {
-  min-width: 0;
-  border-radius: var(--radius-md);
-}
-
-.record-page__content--processing .record-transcript,
-.record-page__content--processing .record-questions,
-.record-page__content--processing .record-answers,
-.record-page__content--processing .record-jobs,
-.record-page__content--processing .final-mindmap {
-  grid-column: 1 / -1;
 }
 
 .record-page__content--processing .record-job-list__title .ui-status {
@@ -191,18 +222,6 @@
     grid-column: 2;
     width: 100%;
   }
-
-  .record-page__content--processing {
-    grid-template-columns: 1fr;
-  }
-
-  .record-page__content--processing .record-transcript,
-  .record-page__content--processing .record-questions,
-  .record-page__content--processing .record-answers,
-  .record-page__content--processing .record-jobs,
-  .record-page__content--processing .final-mindmap {
-    grid-column: auto;
-  }
 }
 
 @media (max-width: 620px) {
@@ -210,9 +229,24 @@
     gap: var(--space-5);
   }
 
-  .processing-class-page .ui-page-header__actions,
-  .processing-class-page .ui-page-header__actions .button {
+  .processing-class-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .processing-class-toolbar__context {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .processing-class-toolbar__actions,
+  .processing-class-toolbar__actions .button {
     width: 100%;
+  }
+
+  .processing-class-toolbar__actions > * {
+    flex: 1 1 0;
   }
 
   .processing-class-authority {
@@ -233,14 +267,6 @@
   .processing-class-authority dl div {
     grid-template-columns: 1fr;
     gap: 3px;
-  }
-
-  .record-page--processing .record-processing {
-    padding: var(--space-5);
-  }
-
-  .record-page--processing .record-overview li:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
   }
 
   .record-processing__heading,
