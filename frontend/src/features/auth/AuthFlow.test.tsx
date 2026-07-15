@@ -80,6 +80,49 @@ describe('authentication flow', () => {
     ).toBeInTheDocument()
   })
 
+  it('connects an invalid credential error to both login fields', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/login', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'INVALID_CREDENTIALS',
+              message: '인증 정보를 확인해 주세요.',
+              request_id: 'req_login',
+              details: null,
+            },
+          },
+          { status: 401 },
+        ),
+      ),
+    )
+    renderAt('/login')
+
+    const emailInput = await screen.findByLabelText('이메일')
+    const passwordInput = screen.getByLabelText('비밀번호')
+    fireEvent.change(emailInput, { target: { value: 'wrong@example.test' } })
+    fireEvent.change(passwordInput, { target: { value: 'wrong-password' } })
+    fireEvent.click(screen.getByRole('button', { name: '이메일로 로그인' }))
+
+    const error = await screen.findByText(
+      '이메일 또는 비밀번호가 올바르지 않습니다.',
+    )
+    expect(emailInput).toHaveAttribute('aria-invalid', 'true')
+    expect(passwordInput).toHaveAttribute('aria-invalid', 'true')
+    expect(emailInput).toHaveAttribute('aria-describedby', error.id)
+    expect(passwordInput).toHaveAttribute('aria-describedby', error.id)
+  })
+
+  it('shows a safe notice when Google login was cancelled', async () => {
+    renderAt('/login?auth_error=cancelled')
+
+    expect(
+      await screen.findByText(
+        'Google 로그인이 취소되었습니다. 준비되면 다시 시도해 주세요.',
+      ),
+    ).toHaveAttribute('role', 'alert')
+  })
+
   it('offers an email account creation screen', async () => {
     renderAt('/login?return_to=/courses/join')
 
@@ -93,6 +136,72 @@ describe('authentication flow', () => {
       }),
     ).toBeInTheDocument()
     expect(await screen.findByLabelText('표시 이름')).toBeInTheDocument()
+  })
+
+  it('creates an email account and restores the requested route', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/register', async ({ request }) => {
+        expect(await request.json()).toEqual({
+          display_name: '김도현',
+          email: 'dohyun@example.test',
+          password: 'correct horse battery staple',
+        })
+        return HttpResponse.json({ user })
+      }),
+    )
+    renderAt('/signup?return_to=/account')
+
+    fireEvent.change(await screen.findByLabelText('표시 이름'), {
+      target: { value: '김도현' },
+    })
+    fireEvent.change(screen.getByLabelText('이메일'), {
+      target: { value: 'dohyun@example.test' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'correct horse battery staple' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '이메일 계정 만들기' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '내 정보' }),
+    ).toBeInTheDocument()
+  })
+
+  it('connects an existing email error to the signup email field', async () => {
+    server.use(
+      http.post('*/api/v1/auth/email/register', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'EMAIL_ALREADY_REGISTERED',
+              message: '이미 사용 중인 이메일입니다.',
+              request_id: 'req_signup',
+              details: null,
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    renderAt('/signup')
+
+    fireEvent.change(await screen.findByLabelText('표시 이름'), {
+      target: { value: '김도현' },
+    })
+    const emailInput = screen.getByLabelText('이메일')
+    fireEvent.change(emailInput, {
+      target: { value: 'registered@example.test' },
+    })
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'correct horse battery staple' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '이메일 계정 만들기' }))
+
+    const error = await screen.findByText(
+      '이미 등록된 이메일입니다. 기존 로그인 방식을 사용해 주세요.',
+    )
+    expect(emailInput).toHaveAttribute('aria-invalid', 'true')
+    expect(emailInput).toHaveAttribute('aria-describedby', error.id)
   })
 
   it('navigates only after logout succeeds', async () => {

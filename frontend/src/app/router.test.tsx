@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -36,14 +36,52 @@ describe('application router', () => {
   it('offers login and email signup from the shared shell when signed out', async () => {
     renderAt('/')
 
-    expect(await screen.findByRole('link', { name: '로그인' })).toHaveAttribute(
-      'href',
-      '/login',
-    )
-    expect(screen.getByRole('link', { name: '이메일로 시작' })).toHaveAttribute(
-      'href',
-      '/signup',
-    )
+    expect(
+      await within(
+        screen.getByRole('navigation', { name: '주요 메뉴' }),
+      ).findByRole('link', { name: '로그인' }),
+    ).toHaveAttribute('href', '/login')
+    expect(
+      await screen.findByRole('link', { name: '이메일로 시작' }),
+    ).toHaveAttribute('href', '/signup')
+    expect(
+      screen.getByRole('link', { name: '로그인하고 시작하기' }),
+    ).toHaveAttribute('href', '/login?return_to=/')
+    expect(
+      screen.getByRole('link', { name: '이메일로 가입하기' }),
+    ).toHaveAttribute('href', '/signup?return_to=/')
+    expect(
+      screen.getByRole('heading', { name: '실시간 Transcript' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not repeat the current authentication route in the header', async () => {
+    renderAt('/login')
+
+    expect(
+      await screen.findByRole('heading', { name: '로그인', level: 2 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '로그인' })).toBeNull()
+    expect(
+      await screen.findByRole('link', { name: '이메일로 시작' }),
+    ).toHaveAttribute('href', '/signup')
+  })
+
+  it('shows only the login route action in the signup header', async () => {
+    renderAt('/signup')
+
+    expect(
+      await screen.findByRole('heading', {
+        name: '이메일 계정 만들기',
+        level: 2,
+      }),
+    ).toBeInTheDocument()
+    expect(
+      await within(
+        screen.getByRole('navigation', { name: '주요 메뉴' }),
+      ).findByRole('link', { name: '로그인' }),
+    ).toHaveAttribute('href', '/login')
+    expect(screen.queryByRole('link', { name: '이메일로 시작' })).toBeNull()
   })
 
   it('offers Course and account navigation from the shared shell when signed in', async () => {
@@ -107,5 +145,8 @@ describe('application router', () => {
     expect(
       screen.queryByRole('link', { name: '로그인' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '실시간 Transcript' }),
+    ).toBeInTheDocument()
   })
 })

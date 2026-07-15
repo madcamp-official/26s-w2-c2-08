@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
 import { currentUserQueryOptions } from '../../features/auth/queries'
@@ -13,6 +13,7 @@ interface AppShellProps {
 
 export function AppShell({ children, standalone = false }: AppShellProps) {
   const currentUser = useQuery(currentUserQueryOptions)
+  const location = useLocation()
   const unauthenticated =
     currentUser.error instanceof ApiError && currentUser.error.status === 401
 
@@ -60,15 +61,19 @@ export function AppShell({ children, standalone = false }: AppShellProps) {
                 )}
                 {unauthenticated && (
                   <>
-                    <NavLink className="header-nav__link" to="/login">
-                      로그인
-                    </NavLink>
-                    <Link
-                      className="button button--primary header-nav__cta"
-                      to="/signup"
-                    >
-                      이메일로 시작
-                    </Link>
+                    {location.pathname !== '/login' && (
+                      <NavLink className="header-nav__link" to="/login">
+                        로그인
+                      </NavLink>
+                    )}
+                    {location.pathname !== '/signup' && (
+                      <Link
+                        className="button button--primary header-nav__cta"
+                        to="/signup"
+                      >
+                        이메일로 시작
+                      </Link>
+                    )}
                   </>
                 )}
                 {currentUser.isError && !unauthenticated && (

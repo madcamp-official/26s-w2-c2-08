@@ -4,6 +4,9 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
 import { StatePanel } from '../../components/feedback/StatePanel'
+import { Button } from '../../components/ui/Button'
+import { Field } from '../../components/ui/Field'
+import { AuthPageLayout } from './AuthPageLayout'
 import { googleLoginUrl, loginWithEmailPassword } from './api'
 import { currentUserQueryKey, currentUserQueryOptions } from './queries'
 import { safeReturnTo } from './return-to'
@@ -19,6 +22,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const emailId = useId()
   const passwordId = useId()
+  const formErrorId = useId()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const login = useMutation({
@@ -38,24 +42,32 @@ export function LoginPage() {
 
   function submitEmailLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (login.isPending) return
     login.mutate({ email, password })
   }
 
-  return (
-    <div className="auth-grid">
-      <section className="auth-copy" aria-labelledby="login-title">
-        <p className="eyebrow">GOAL account</p>
-        <h1 className="page-title" id="login-title">
-          강의의 흐름으로 다시 들어오세요.
-        </h1>
-        <p className="page-description">
-          GOAL은 Google 또는 이메일 로그인 뒤 별도의 안전한 서버 Session을
-          발급합니다. 교수자와 학생 역할은 계정 전체가 아니라 Course마다
-          결정됩니다.
-        </p>
-      </section>
+  const invalidCredentials =
+    login.error instanceof ApiError &&
+    login.error.code === 'INVALID_CREDENTIALS'
+  const loginErrorMessage = invalidCredentials
+    ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+    : '로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.'
 
-      <section className="panel auth-card" aria-label="로그인">
+  return (
+    <AuthPageLayout
+      description="Google 또는 이메일 계정으로 로그인하고, Course마다 정해진 역할과 강의 기록을 이어서 확인하세요."
+      eyebrow="GOAL account"
+      formLabel="로그인"
+      title="강의의 흐름으로 다시 들어오세요."
+      titleId="login-title"
+    >
+      <div className="auth-panel__heading">
+        <p className="eyebrow">Welcome back</p>
+        <h2>로그인</h2>
+        <p>사용할 로그인 방식을 선택하세요.</p>
+      </div>
+
+      <div className="auth-panel__body">
         {currentUser.isPending && (
           <StatePanel
             kind="loading"
@@ -75,7 +87,7 @@ export function LoginPage() {
         )}
 
         {unauthenticated && (
-          <div className="auth-card__content">
+          <div className="auth-form-stack">
             {authError === 'cancelled' && (
               <p className="auth-notice auth-notice--warning" role="alert">
                 Google 로그인이 취소되었습니다. 준비되면 다시 시도해 주세요.
@@ -91,46 +103,63 @@ export function LoginPage() {
                 계정을 탈퇴했습니다. 다시 이용하려면 새 계정으로 로그인하세요.
               </p>
             )}
-            <form className="email-auth-form" onSubmit={submitEmailLogin}>
-              <div className="form-field">
-                <label htmlFor={emailId}>이메일</label>
+            <form
+              aria-busy={login.isPending}
+              className="auth-form"
+              onSubmit={submitEmailLogin}
+            >
+              <Field htmlFor={emailId} label="이메일">
                 <input
+                  aria-describedby={
+                    invalidCredentials ? formErrorId : undefined
+                  }
+                  aria-invalid={invalidCredentials}
                   autoComplete="email"
-                  id={emailId}
-                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={login.isPending}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                    if (login.isError) login.reset()
+                  }}
                   required
                   type="email"
                   value={email}
                 />
-              </div>
-              <div className="form-field">
-                <label htmlFor={passwordId}>비밀번호</label>
+              </Field>
+              <Field htmlFor={passwordId} label="비밀번호">
                 <input
+                  aria-describedby={
+                    invalidCredentials ? formErrorId : undefined
+                  }
+                  aria-invalid={invalidCredentials}
                   autoComplete="current-password"
-                  id={passwordId}
+                  disabled={login.isPending}
                   maxLength={128}
                   minLength={1}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                    if (login.isError) login.reset()
+                  }}
                   required
                   type="password"
                   value={password}
                 />
-              </div>
+              </Field>
               {login.isError && (
-                <p className="auth-notice auth-notice--warning" role="alert">
-                  {login.error instanceof ApiError &&
-                  login.error.code === 'INVALID_CREDENTIALS'
-                    ? '이메일 또는 비밀번호가 올바르지 않습니다.'
-                    : '로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.'}
+                <p
+                  className="auth-notice auth-notice--warning"
+                  id={formErrorId}
+                  role="alert"
+                >
+                  {loginErrorMessage}
                 </p>
               )}
-              <button
-                className="button button--primary"
+              <Button
+                className="auth-submit"
                 disabled={login.isPending}
                 type="submit"
               >
                 {login.isPending ? '로그인 중…' : '이메일로 로그인'}
-              </button>
+              </Button>
             </form>
             <p className="auth-switch">
               계정이 없나요?{' '}
@@ -145,14 +174,12 @@ export function LoginPage() {
               <span aria-hidden="true">G</span>
               Google 계정으로 계속하기
             </a>
-            <p>
-              로그인 후 <code>{returnTo}</code> 경로로 돌아갑니다. Google token,
-              비밀번호와 GOAL Session ID는 브라우저 JavaScript에 저장하지
-              않습니다.
+            <p className="auth-privacy-note">
+              로그인 정보는 브라우저 JavaScript에 저장하지 않습니다.
             </p>
           </div>
         )}
-      </section>
-    </div>
+      </div>
+    </AuthPageLayout>
   )
 }
