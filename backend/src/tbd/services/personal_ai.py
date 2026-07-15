@@ -343,7 +343,7 @@ class PersonalAIService:
                 AIJob.job_type == AIJobType.SESSION_POSTPROCESSING,
             )
         )
-        version = await session.scalar(
+        recording_version = await session.scalar(
             select(TranscriptVersion)
             .where(
                 TranscriptVersion.session_id == lecture_session.id,
@@ -351,6 +351,23 @@ class PersonalAIService:
             )
             .order_by(TranscriptVersion.version.desc())
         )
+        canonical_version = (
+            await session.get(TranscriptVersion, lecture_session.canonical_transcript_version_id)
+            if lecture_session.canonical_transcript_version_id is not None
+            else None
+        )
+        version = (
+            recording_version
+            if recording_version is not None
+            and recording_version.status == TranscriptStatus.FINALIZED
+            and recording_version.last_sequence > 0
+            else canonical_version or recording_version
+        )
+        if coordinator is not None and coordinator.status in (
+            AIJobStatus.PENDING,
+            AIJobStatus.RUNNING,
+        ):
+            return [], "PENDING", None
         if version is None:
             if coordinator is None or coordinator.status in (
                 AIJobStatus.PENDING,
