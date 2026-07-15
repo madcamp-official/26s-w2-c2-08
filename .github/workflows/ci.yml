@@ -27,6 +27,9 @@ jobs:
       - name: Validate Docker Compose
         run: make compose-check
 
+      - name: Validate deployment scripts
+        run: make deploy-check
+
       - name: Validate documentation links and structure
         run: make docs-check
 

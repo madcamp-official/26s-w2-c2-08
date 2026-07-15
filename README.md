@@ -194,6 +194,9 @@ make skills-sync
 # 파일을 수정하지 않고 공통 Skill 동기화 상태와 형식만 검사
 make skills-check
 
+# 자동 배포 shell 문법과 GitHub CI 상태 판정 단위 테스트
+make deploy-check
+
 # PostgreSQL을 포함한 로컬 검증 환경 준비
 make db-up
 

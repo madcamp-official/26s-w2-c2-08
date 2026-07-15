@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: setup compose-check db-up db-down db-logs migrate dev-api dev-web \
+.PHONY: setup compose-check deploy-check db-up db-down db-logs migrate dev-api dev-web \
 	skills-sync skills-check docs-check backend-lint backend-format frontend-lint \
 	frontend-format lint frontend-typecheck typecheck backend-unit backend-contract \
 	backend-integration migration-check frontend-test test frontend-contract-check \
@@ -12,6 +12,10 @@ setup:
 
 compose-check:
 	docker compose config --quiet
+
+deploy-check:
+	bash -n deploy/bin/goal-deploy deploy/bin/goal-deploy-if-needed
+	python3 -m unittest discover -s deploy/tests -p 'test_*.py'
 
 db-up:
 	docker compose up -d --wait db
@@ -89,4 +93,4 @@ frontend-visual:
 
 build: frontend-build
 
-check: skills-check compose-check docs-check lint typecheck frontend-contract-check test build
+check: skills-check compose-check deploy-check docs-check lint typecheck frontend-contract-check test build
