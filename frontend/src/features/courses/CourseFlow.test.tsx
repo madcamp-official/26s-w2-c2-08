@@ -882,10 +882,25 @@ describe('Course role flows', () => {
       }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByText('복습할 수업 기록이 준비되었습니다')).toBeVisible()
-    expect(screen.getByRole('textbox', { name: 'class 제목' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'class 삭제' })).toBeVisible()
-    expect(await screen.findByLabelText('PDF 파일 선택')).toBeInTheDocument()
+    expect(
+      screen.queryByText('복습할 수업 기록이 준비되었습니다'),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'class 관리' }))
+    const management = screen.getByRole('dialog', { name: '완료 class 관리' })
+    expect(
+      within(management).getByRole('textbox', { name: 'class 제목' }),
+    ).toBeVisible()
+    expect(
+      within(management).getByRole('button', { name: 'class 삭제' }),
+    ).toBeVisible()
+    fireEvent.click(
+      within(management).getByRole('button', { name: '대화상자 닫기' }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '자료·PDF' }))
+    const materials = screen.getByRole('dialog', { name: '강의자료와 PDF' })
+    expect(
+      await within(materials).findByLabelText('PDF 파일 선택'),
+    ).toBeInTheDocument()
     expect(await screen.findByLabelText('보충 답변 내용')).toBeInTheDocument()
     expect(
       await screen.findByRole('button', {
@@ -949,9 +964,19 @@ describe('Course role flows', () => {
       }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(screen.getByText('복습할 수업 기록이 준비되었습니다')).toBeVisible()
-    await screen.findByRole('heading', { level: 2, name: '강의자료' })
+    expect(
+      screen.queryByText('복습할 수업 기록이 준비되었습니다'),
+    ).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: '자료·PDF' }))
+    const materials = screen.getByRole('dialog', { name: '강의자료와 PDF' })
+    await within(materials).findByRole('heading', {
+      level: 2,
+      name: '강의자료',
+    })
     expect(screen.queryByText('Professor control')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'class 관리' }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('textbox', { name: 'class 제목' }),
     ).not.toBeInTheDocument()

@@ -226,14 +226,12 @@ const scenarios: FoundationScenario[] = [
     path: `/sessions/${professorEndedSession.id}`,
     auth: 'signed-in',
     heading: professorEndedSession.title,
-    checkpoint: { level: 2, name: '복습할 수업 기록이 준비되었습니다' },
+    checkpoint: { level: 2, name: 'AI 수업 요약' },
     requiredRequests: [
       'GET /api/v1/me',
       `GET /api/v1/sessions/${professorEndedSession.id}`,
       `GET /api/v1/courses/${professorEndedCourse.id}`,
       `GET /api/v1/sessions/${professorEndedSession.id}/record`,
-      `GET /api/v1/sessions/${professorEndedSession.id}/materials?limit=100`,
-      `GET /api/v1/sessions/${professorEndedSession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
       `GET /api/v1/recordings/80000000-0000-0000-0000-000000000009/playback`,
       `GET /api/v1/sessions/${professorEndedSession.id}/summaries?summary_type=FINAL&limit=20`,
       `GET /api/v1/sessions/${professorEndedSession.id}/transcript?transcript_version_id=${professorEndedSession.canonical_transcript_version_id}&limit=100`,
@@ -250,13 +248,12 @@ const scenarios: FoundationScenario[] = [
     path: `/sessions/${studentEndedSession.id}`,
     auth: 'signed-in',
     heading: studentEndedSession.title,
-    checkpoint: { level: 2, name: '복습할 수업 기록이 준비되었습니다' },
+    checkpoint: { level: 2, name: 'AI 수업 요약' },
     requiredRequests: [
       'GET /api/v1/me',
       `GET /api/v1/sessions/${studentEndedSession.id}`,
       `GET /api/v1/courses/${studentEndedCourse.id}`,
       `GET /api/v1/sessions/${studentEndedSession.id}/record`,
-      `GET /api/v1/sessions/${studentEndedSession.id}/materials?limit=100`,
       `GET /api/v1/recordings/80000000-0000-0000-0000-000000000010/playback`,
       `GET /api/v1/sessions/${studentEndedSession.id}/summaries?summary_type=FINAL&limit=20`,
       `GET /api/v1/sessions/${studentEndedSession.id}/transcript?transcript_version_id=${studentEndedSession.canonical_transcript_version_id}&limit=100`,
@@ -453,7 +450,9 @@ test('CLASS_CREATE_PAGE READY delete dialog traps and returns keyboard focus', a
     page.getByRole('heading', { level: 1, name: readySession.title }),
   ).toBeVisible()
 
-  const trigger = page.getByRole('button', { name: 'class 삭제' })
+  await page.getByRole('button', { name: 'class 관리' }).click()
+  const management = page.getByRole('dialog', { name: '완료 class 관리' })
+  const trigger = management.getByRole('button', { name: 'class 삭제' })
   await trigger.click()
   const dialog = page.getByRole('dialog', {
     name: 'READY class를 삭제할까요?',
