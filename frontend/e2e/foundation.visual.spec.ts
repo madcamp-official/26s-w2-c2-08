@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test'
 
-import { installApiFixture, type VisualAuth } from './fixtures/api'
+import {
+  installApiFixture,
+  installRealtimeSocketFixture,
+  type VisualAuth,
+} from './fixtures/api'
+import {
+  professorCourse,
+  professorDraftCourse,
+  readySession,
+  studentCourse,
+} from './fixtures/entities'
 import {
   collectRuntimeErrors,
   settleVisualPage,
@@ -82,6 +92,41 @@ const scenarios: FoundationScenario[] = [
     heading: '참여 코드로 들어가기',
     requiredRequests: ['GET /api/v1/me'],
   },
+  {
+    screenId: 'COURSE_PAGE_PROF',
+    path: `/courses/${professorCourse.id}`,
+    auth: 'signed-in',
+    heading: '데이터 구조와 알고리즘',
+    checkpoint: { level: 2, name: '수업 운영 개요' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/courses/${professorCourse.id}`,
+      `GET /api/v1/courses/${professorCourse.id}/sessions?status=COMPLETED&limit=20`,
+    ],
+  },
+  {
+    screenId: 'COURSE_PAGE_STUD',
+    path: `/courses/${studentCourse.id}`,
+    auth: 'signed-in',
+    heading: '운영체제',
+    checkpoint: { level: 2, name: '학생 학습 공간' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/courses/${studentCourse.id}`,
+      `GET /api/v1/courses/${studentCourse.id}/sessions?status=COMPLETED&limit=20`,
+    ],
+  },
+  {
+    screenId: 'CLASS_CREATE_PAGE',
+    path: `/courses/${professorDraftCourse.id}/sessions/new`,
+    auth: 'signed-in',
+    heading: '오늘의 class 준비',
+    checkpoint: { level: 2, name: '기본 정보 입력' },
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/courses/${professorDraftCourse.id}`,
+    ],
+  },
 ]
 
 for (const scenario of scenarios) {
@@ -162,6 +207,40 @@ test('COURSE_JOIN_PAGE success renders from its production mutation', async ({
   })
 })
 
+test('CLASS_CREATE_PAGE READY state renders from its production mutation', async ({
+  page,
+}, testInfo) => {
+  const runtimeErrors = collectRuntimeErrors(page)
+  await installRealtimeSocketFixture(page)
+  const api = await installApiFixture(page, 'signed-in')
+
+  await page.goto(`/courses/${professorDraftCourse.id}/sessions/new`)
+  await page.getByLabel('class 제목 (선택)').fill(readySession.title)
+  await page.getByLabel(/^수업 날짜/).fill(readySession.lecture_date)
+  await page.getByRole('button', { name: 'class 만들기' }).click()
+  await expect(
+    page.getByRole('heading', { level: 1, name: readySession.title }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('heading', { level: 2, name: '수업 시작 준비' }),
+  ).toBeVisible()
+  await settleVisualPage(page)
+  await verifyVisualPage(page, testInfo, runtimeErrors, {
+    requiredRequests: [
+      'GET /api/v1/me',
+      `GET /api/v1/courses/${professorDraftCourse.id}`,
+      `POST /api/v1/courses/${professorDraftCourse.id}/sessions`,
+      `GET /api/v1/sessions/${readySession.id}`,
+      `GET /api/v1/sessions/${readySession.id}/materials?limit=100`,
+      `GET /api/v1/sessions/${readySession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
+      'POST /api/v1/realtime-tickets',
+    ],
+    screenId: 'CLASS_CREATE_PAGE_READY',
+    unhandledRequests: api.unhandled,
+    requested: api.requested,
+  })
+})
+
 test('MY_INFO_PAGE keeps keyboard focus inside the logout dialog and returns it', async ({
   page,
 }) => {
@@ -183,4 +262,67 @@ test('MY_INFO_PAGE keeps keyboard focus inside the logout dialog and returns it'
   await expect(dialog).toBeHidden()
   await expect(trigger).toBeFocused()
   expect(api.unhandled).toEqual([])
+})
+
+test('COURSE_PAGE_PROF keeps the mobile class rail disclosure keyboard-operable', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== '375')
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto(`/courses/${professorCourse.id}`)
+
+  const trigger = page.getByText('class 목록 열기·닫기', { exact: true })
+  await expect(trigger).toBeVisible()
+  await expect(page.getByRole('link', { name: 'class 보기' })).toBeHidden()
+  await trigger.click()
+  await expect(page.getByRole('link', { name: 'class 보기' })).toBeVisible()
+  await trigger.click()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+})
+
+test('COURSE_PAGE_PROF returns focus after cancelling join-code rotation', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== '1440')
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto(`/courses/${professorCourse.id}`)
+
+  const trigger = page.getByRole('button', { name: '새 코드로 교체' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', {
+    name: '참여 코드를 새로 만들까요?',
+  })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator(':focus')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+})
+
+test('CLASS_CREATE_PAGE READY delete dialog traps and returns keyboard focus', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== '1440')
+  const runtimeErrors = collectRuntimeErrors(page)
+  await installRealtimeSocketFixture(page)
+  const api = await installApiFixture(page, 'signed-in')
+  await page.goto(`/sessions/${readySession.id}`)
+  await expect(
+    page.getByRole('heading', { level: 1, name: readySession.title }),
+  ).toBeVisible()
+
+  const trigger = page.getByRole('button', { name: 'class 삭제' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', {
+    name: 'READY class를 삭제할까요?',
+  })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator(':focus')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+  expect(api.unhandled).toEqual([])
+  expect(runtimeErrors).toEqual([])
 })

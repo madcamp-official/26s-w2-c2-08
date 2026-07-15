@@ -68,6 +68,18 @@ python3 -m http.server 4173 --directory docs/prototypes
 | PDF 10개·용량·형식 오류           | [`materials=full`](class-create.html?stage=ready&materials=full), [`materials=size-error`](class-create.html?stage=ready&materials=size-error), [`materials=mime-error`](class-create.html?stage=ready&materials=mime-error) |
 | Material 삭제 경합·이미 삭제      | [`materials=delete-conflict`](class-create.html?stage=ready&materials=delete-conflict), [`materials=delete-missing`](class-create.html?stage=ready&materials=delete-missing)                                                 |
 
+교수자 Course Prototype의 참여자 수·질문 수 같은 미계약 집계는 제거했으며,
+production과 마찬가지로 active class가 있으면 Course 삭제를 비활성화한다. class
+제목 수정과 허용 상태의 삭제는 production에서 class 상세 route로 이어진다.
+학생 Course도 같은 production workspace를 사용하며 READY에서는 입장 링크 없이
+대기하고, 참여자 집계나 브라우저 알림처럼 API에 없는 control을 제공하지 않는다.
+
+`CLASS_CREATE_PAGE` production 계약은 `/courses/:courseId/sessions/new`의 생성
+form과 생성 후 `/sessions/:sessionId`의 역할별 READY view로 나뉜다. Prototype의
+상태 switch는 검토용이며 production에는 포함하지 않는다. production은 typed
+Material·Job API로 복수 PDF의 파일별 업로드·부분 실패 재시도와 실패 Job 재시도를
+처리하고, 학생 DOM에는 교수자 제어를 포함하지 않는다.
+
 참여 코드는 trim·대문자화 뒤 `[A-Z]{6}`이며 자동 만료되지 않는다. READY Material은 active `N/10`, 파일당 100 MB(100,000,000 bytes), 동일 이름 suffix, 권한 확인 원본 열기와 즉시 detach 목 상태를 제공한다. `PROCESSING` Material만 class 시작을 막고 PDF가 없거나 `UPLOADED`, `READY`, `FAILED`만 있으면 시작 가능하다.
 
 ## Course workspace 정책 검토 경로

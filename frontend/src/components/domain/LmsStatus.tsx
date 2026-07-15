@@ -5,6 +5,7 @@ import { Status, type StatusTone } from '../ui/Status'
 type CourseRole = components['schemas']['CourseRole']
 type SessionStatus = components['schemas']['LectureSessionStatus']
 type JobStatus = components['schemas']['AIJobStatus']
+type MaterialStatus = components['schemas']['MaterialProcessingStatus']
 
 const sessionStatusCopy: Record<
   SessionStatus,
@@ -35,6 +36,16 @@ const connectionStatusCopy: Record<
   stopped: { label: '실시간 연결 종료', tone: 'neutral' },
 }
 
+const materialStatusCopy: Record<
+  MaterialStatus,
+  { label: string; tone: StatusTone }
+> = {
+  UPLOADED: { label: '처리 대기', tone: 'neutral' },
+  PROCESSING: { label: '처리 중', tone: 'warning' },
+  READY: { label: 'AI 참고 가능', tone: 'success' },
+  FAILED: { label: '처리 실패', tone: 'danger' },
+}
+
 export function CourseRoleBadge({ role }: { role: CourseRole }) {
   return (
     <Status
@@ -59,6 +70,15 @@ export function JobStatusBadge({ status }: { status: JobStatus }) {
   const copy = jobStatusCopy[status]
   return (
     <Status data-job-status={status} tone={copy.tone}>
+      {copy.label}
+    </Status>
+  )
+}
+
+export function MaterialStatusBadge({ status }: { status: MaterialStatus }) {
+  const copy = materialStatusCopy[status]
+  return (
+    <Status data-material-status={status} tone={copy.tone}>
       {copy.label}
     </Status>
   )

@@ -1,23 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../api/errors'
+import { PartialFailurePanel } from '../../components/feedback/PartialFailurePanel'
 import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { createVoiceAnswer, type AnswerTarget } from '../answers/api'
 import { answerKeys } from '../answers/queries'
+import { AuthenticationExpiredRedirect } from '../auth/AuthenticationExpiredRedirect'
 import { MaterialPanel } from '../materials/MaterialPanel'
-import { sessionMaterialsQueryOptions } from '../materials/queries'
 import { questionKeys } from '../questions/queries'
-import {
-  deleteSession,
-  endSession,
-  startSession,
-  updateSessionTitle,
-} from './api'
+import { deleteSession, endSession, updateSessionTitle } from './api'
 import {
   courseDetailQueryOptions,
   courseKeys,
@@ -27,6 +23,7 @@ import { useSessionRealtime } from '../realtime/useSessionRealtime'
 import { LiveClassRoom } from '../live/LiveClassRoom'
 import { LocalRecordingPanel } from '../recordings/LocalRecordingPanel'
 import { SessionRecordPage } from '../records/SessionRecordPage'
+import { ReadyClassView } from './ReadyClassView'
 
 function statusCopy(status: string) {
   switch (status) {
@@ -52,6 +49,7 @@ function statusCopy(status: string) {
 
 export function SessionDetailPage() {
   const { sessionId = '' } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showToast } = useToast()
@@ -60,7 +58,6 @@ export function SessionDetailPage() {
     ...courseDetailQueryOptions(session.data?.course_id ?? ''),
     enabled: Boolean(session.data),
   })
-  const materials = useQuery(sessionMaterialsQueryOptions(sessionId))
   const [title, setTitle] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const endKey = useRef<string | null>(null)
@@ -69,7 +66,9 @@ export function SessionDetailPage() {
   useSessionRealtime({
     sessionId,
     courseId: session.data?.course_id,
-    enabled: session.isSuccess && session.data.status !== 'LIVE',
+    enabled:
+      session.isSuccess &&
+      (session.data.status === 'READY' || session.data.status === 'PROCESSING'),
   })
 
   function refreshCourse() {
@@ -93,13 +92,6 @@ export function SessionDetailPage() {
       showToast({ tone: 'success', message: 'class 제목을 저장했습니다.' })
     },
   })
-  const start = useMutation({
-    mutationFn: () => startSession(sessionId),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(courseKeys.session(sessionId), updated)
-      refreshCourse()
-    },
-  })
   const end = useMutation({
     mutationFn: () =>
       endSession(sessionId, (endKey.current ??= crypto.randomUUID())),
@@ -117,6 +109,7 @@ export function SessionDetailPage() {
       deleteSession(sessionId, (deleteKey.current ??= crypto.randomUUID())),
     onSuccess: () => {
       setDeleteOpen(false)
+      deleteKey.current = null
       if (session.data) {
         void queryClient.invalidateQueries({
           queryKey: courseKeys.detail(session.data.course_id),
@@ -144,6 +137,13 @@ export function SessionDetailPage() {
 
   if (session.isPending)
     return <StatePanel kind="loading" title="class를 불러오는 중" />
+  if (session.error instanceof ApiError && session.error.status === 401) {
+    return (
+      <AuthenticationExpiredRedirect
+        returnTo={`${location.pathname}${location.search}${location.hash}`}
+      />
+    )
+  }
   if (session.error instanceof ApiError && session.error.status === 404) {
     return <StatePanel kind="not-found" title="class를 찾을 수 없습니다" />
   }
@@ -152,16 +152,80 @@ export function SessionDetailPage() {
       <StatePanel kind="forbidden" title="이 class에 접근할 권한이 없습니다" />
     )
   }
-  if (session.isError)
+  if (session.isError && !session.data)
     return <StatePanel kind="error" title="class를 불러오지 못했습니다" />
 
+  if (course.isPending) {
+    return <StatePanel kind="loading" title="Course 권한을 확인하는 중" />
+  }
+  if (course.error instanceof ApiError && course.error.status === 401) {
+    return (
+      <AuthenticationExpiredRedirect
+        returnTo={`${location.pathname}${location.search}${location.hash}`}
+      />
+    )
+  }
+  if (course.error instanceof ApiError && course.error.status === 403) {
+    return (
+      <StatePanel kind="forbidden" title="이 Course에 접근할 권한이 없습니다" />
+    )
+  }
+  if (course.error instanceof ApiError && course.error.status === 404) {
+    return <StatePanel kind="not-found" title="Course를 찾을 수 없습니다" />
+  }
+  if (course.isError && !course.data) {
+    return (
+      <StatePanel
+        kind="error"
+        title="Course 권한을 확인하지 못했습니다"
+        actionLabel="다시 시도"
+        onAction={() => void course.refetch()}
+      />
+    )
+  }
+
   const data = session.data
+  const courseData = course.data
+  if (!data) {
+    return <StatePanel kind="error" title="class를 불러오지 못했습니다" />
+  }
+
+  const canonicalRefreshFailed = session.isRefetchError || course.isRefetchError
+  const canonicalRefreshWarning = canonicalRefreshFailed ? (
+    <PartialFailurePanel
+      title="최신 class 상태를 확인하지 못했습니다"
+      description="마지막으로 확인한 화면과 입력은 유지합니다. 연결을 확인한 뒤 최신 상태만 다시 불러오세요."
+      actions={
+        <Button
+          variant="secondary"
+          disabled={session.isFetching || course.isFetching}
+          onClick={() => {
+            void session.refetch()
+            void course.refetch()
+          }}
+        >
+          {session.isFetching || course.isFetching
+            ? '상태 확인 중…'
+            : '최신 상태 다시 시도'}
+        </Button>
+      }
+    />
+  ) : null
+
+  if (data.status === 'READY') {
+    return (
+      <ReadyClassView
+        key={data.id}
+        course={courseData}
+        refreshWarning={canonicalRefreshWarning}
+        session={data}
+      />
+    )
+  }
+
   const [statusTitle, statusDescription] = statusCopy(data.status)
-  const canDelete = data.status === 'READY' || data.status === 'COMPLETED'
-  const professor = course.data?.role === 'PROFESSOR'
-  const hasProcessingMaterial = materials.data?.items.some(
-    (material) => material.processing_status === 'PROCESSING',
-  )
+  const canDelete = data.status === 'COMPLETED'
+  const professor = courseData.role === 'PROFESSOR'
   const isRecordView =
     data.status === 'PROCESSING' || data.status === 'COMPLETED'
 
@@ -180,6 +244,7 @@ export function SessionDetailPage() {
         <h1 id="session-detail-title">{data.title}</h1>
         <p>{statusDescription}</p>
       </header>
+      {canonicalRefreshWarning}
       <div className="panel course-form session-detail-card">
         <dl className="session-meta">
           <div>
@@ -221,24 +286,15 @@ export function SessionDetailPage() {
               >
                 {rename.isPending ? '저장 중…' : '제목 저장'}
               </Button>
-              {data.status === 'READY' && (
-                <>
-                  <Button
-                    disabled={start.isPending || Boolean(hasProcessingMaterial)}
-                    onClick={() => start.mutate()}
-                  >
-                    {start.isPending ? '시작 중…' : '수업 시작'}
-                  </Button>
-                  {hasProcessingMaterial && (
-                    <span className="input-hint">
-                      처리 중인 강의자료가 완료되거나 실패하면 수업을 시작할 수
-                      있습니다.
-                    </span>
-                  )}
-                </>
-              )}
               {canDelete && (
-                <Button variant="ghost" onClick={() => setDeleteOpen(true)}>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    remove.reset()
+                    deleteKey.current = null
+                    setDeleteOpen(true)
+                  }}
+                >
                   class 삭제
                 </Button>
               )}
@@ -265,12 +321,9 @@ export function SessionDetailPage() {
             </div>
           </>
         )}
-        {professor && (start.isError || end.isError) && (
+        {professor && end.isError && (
           <p className="form-error" role="alert">
-            {start.error instanceof ApiError &&
-            start.error.code === 'MATERIAL_PROCESSING_ACTIVE'
-              ? '처리 중인 강의자료가 있어 시작할 수 없습니다.'
-              : '상태를 변경하지 못했습니다. 현재 class를 다시 확인해 주세요.'}
+            상태를 변경하지 못했습니다. 현재 class를 다시 확인해 주세요.
           </p>
         )}
       </div>
@@ -314,13 +367,23 @@ export function SessionDetailPage() {
           open={deleteOpen}
           title="class를 삭제할까요?"
           description="삭제 후에는 되돌릴 수 없습니다."
-          onOpenChange={setDeleteOpen}
+          onOpenChange={(open) => {
+            if (!open && !remove.isPending) {
+              remove.reset()
+              deleteKey.current = null
+            }
+            setDeleteOpen(open)
+          }}
           actions={
             <>
               <Button
                 variant="secondary"
                 disabled={remove.isPending}
-                onClick={() => setDeleteOpen(false)}
+                onClick={() => {
+                  remove.reset()
+                  deleteKey.current = null
+                  setDeleteOpen(false)
+                }}
               >
                 취소
               </Button>

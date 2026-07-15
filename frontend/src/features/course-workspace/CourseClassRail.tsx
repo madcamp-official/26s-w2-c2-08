@@ -2,6 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
+import { Skeleton } from '../../components/ui/Skeleton'
 import type { Course } from '../courses/api'
 import { courseCompletedSessionsInfiniteQueryOptions } from '../courses/queries'
 
@@ -23,6 +24,7 @@ function sessionStartLabel(startedAt: string | null, lectureDate: string) {
   return new Intl.DateTimeFormat('ko-KR', {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: 'Asia/Seoul',
   }).format(new Date(startedAt))
 }
 
@@ -44,7 +46,8 @@ export function CourseClassRail({ course }: { course: Course }) {
           LIVE CLASS
         </p>
         <strong>{currentSessionCopy(currentSession?.status)}</strong>
-        {currentSession ? (
+        {currentSession &&
+        !(course.role === 'STUDENT' && currentSession.status === 'READY') ? (
           <>
             <span>{currentSession.title}</span>
             <Link
@@ -54,6 +57,10 @@ export function CourseClassRail({ course }: { course: Course }) {
               class 보기
             </Link>
           </>
+        ) : currentSession ? (
+          <span role="status">
+            교수자가 class를 시작하면 입장 동작이 열립니다.
+          </span>
         ) : (
           <span>진행 중인 class가 생기면 이곳에 표시됩니다.</span>
         )}
@@ -69,7 +76,7 @@ export function CourseClassRail({ course }: { course: Course }) {
         </div>
 
         {sessions.isPending ? (
-          <p aria-live="polite">class 목록을 불러오는 중입니다.</p>
+          <Skeleton label="지난 class 목록을 불러오는 중" lines={3} />
         ) : sessions.isError && completedSessions.length === 0 ? (
           <div role="alert" className="course-class-rail__state">
             <p>class 목록을 불러오지 못했습니다.</p>
@@ -100,6 +107,9 @@ export function CourseClassRail({ course }: { course: Course }) {
         {sessions.isError && completedSessions.length > 0 && (
           <div role="alert" className="course-class-rail__state">
             <p>다음 class를 불러오지 못했습니다. 표시된 목록은 유지됩니다.</p>
+            <Button variant="secondary" onClick={() => void sessions.refetch()}>
+              다시 시도
+            </Button>
           </div>
         )}
         {sessions.hasNextPage && (

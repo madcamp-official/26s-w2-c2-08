@@ -5,6 +5,7 @@ import {
   ConnectionStatus,
   CourseRoleBadge,
   JobStatusBadge,
+  MaterialStatusBadge,
   SessionStatusBadge,
 } from './LmsStatus'
 
@@ -53,6 +54,20 @@ describe('LMS status components', () => {
     render(<JobStatusBadge status={status} />)
 
     expect(screen.getByText(label)).toHaveAttribute('data-job-status', status)
+  })
+
+  it.each([
+    ['UPLOADED', '처리 대기'],
+    ['PROCESSING', '처리 중'],
+    ['READY', 'AI 참고 가능'],
+    ['FAILED', '처리 실패'],
+  ] as const)('maps Material %s to %s', (status, label) => {
+    render(<MaterialStatusBadge status={status} />)
+
+    expect(screen.getByText(label)).toHaveAttribute(
+      'data-material-status',
+      status,
+    )
   })
 
   it.each([
