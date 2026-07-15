@@ -2767,6 +2767,22 @@
   justify-content: space-between;
 }
 
+.record-transcript__focus-state {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid
+    color-mix(in srgb, var(--color-primary) 24%, var(--color-line));
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-soft);
+}
+
+.record-transcript__focus-state p {
+  margin: 0;
+}
+
 .record-summary h2,
 .record-transcript h2 {
   margin: var(--space-2) 0 0;
@@ -3044,7 +3060,8 @@
 
   .record-page__header,
   .record-summary header,
-  .record-transcript__heading {
+  .record-transcript__heading,
+  .record-transcript__focus-state {
     align-items: stretch;
     flex-direction: column;
   }

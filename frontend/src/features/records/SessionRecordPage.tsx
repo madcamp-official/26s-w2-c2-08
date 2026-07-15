@@ -1,46 +1,51 @@
 import {
   useInfiniteQuery,
+  useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { apiUrl } from '../../api/client'
 import { ApiError } from '../../api/errors'
 import { SessionStatusBadge } from '../../components/domain/LmsStatus'
 import { PartialFailurePanel } from '../../components/feedback/PartialFailurePanel'
 import { StatePanel } from '../../components/feedback/StatePanel'
+import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
+import { Dialog } from '../../components/ui/Dialog'
+import { AuthenticationExpiredRedirect } from '../auth/AuthenticationExpiredRedirect'
 import { MaterialPanel } from '../materials/MaterialPanel'
 import { PersonalAiPanel } from '../personal-ai/PersonalAiPanel'
 import { courseKeys } from '../courses/queries'
 import type { SessionRecording } from '../recordings/api'
+import {
+  deleteSessionRecording,
+  verifyRecordingPlayback,
+} from '../recordings/api'
 import {
   getRecordTranscriptTimeline,
   listFinalSummaries,
   type SessionRecord,
 } from './api'
 import { FinalQuestionMindmap } from './FinalQuestionMindmap'
-import { RecordAnswerPanel } from './RecordAnswerPanel'
+import {
+  RecordAnswerPanel,
+  type TranscriptFocusTarget,
+} from './RecordAnswerPanel'
 import { RecordJobsPanel } from './RecordJobsPanel'
 import { RecordQuestionPanel } from './RecordQuestionPanel'
 import { recordKeys, recordManifestQueryOptions } from './queries'
 
 interface SessionRecordPageProps {
-  presentation?: 'default' | 'processing'
+  presentation?: 'default' | 'ended' | 'processing'
   sessionId: string
   professor: boolean
 }
 
-interface TranscriptRange {
-  startSequence: number
-  endSequence: number
+interface RecordingSeekRequest {
+  id: number
+  offset: number
 }
 
 function formatTime(value: number) {
@@ -181,13 +186,113 @@ function RecordOverview({ record }: { record: SessionRecord }) {
 
 function RecordRecordingPanel({
   recording,
-  audioRef,
+  professor,
+  seekRequest,
+  sessionId,
   sessionStatus,
 }: {
   recording: SessionRecording | null
-  audioRef: MutableRefObject<HTMLAudioElement | null>
+  professor: boolean
+  seekRequest: RecordingSeekRequest | null
+  sessionId: string
   sessionStatus: 'PROCESSING' | 'COMPLETED'
 }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const allowNextPlay = useRef(false)
+  const queryClient = useQueryClient()
+  const { showToast } = useToast()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [authorizationError, setAuthorizationError] = useState<ApiError | null>(
+    null,
+  )
+  const [playbackState, setPlaybackState] = useState<
+    'idle' | 'loading' | 'active' | 'seek-error' | 'seeking'
+  >('idle')
+  const deleteKey = useRef<string | null>(null)
+  const playbackUrl = recording?.playback_url ?? null
+  const playbackAccess = useQuery({
+    queryKey: ['recording-playback-access', recording?.id ?? 'none'],
+    queryFn: ({ signal }) => verifyRecordingPlayback(playbackUrl!, signal),
+    enabled: sessionStatus === 'COMPLETED' && Boolean(playbackUrl),
+    retry: false,
+    staleTime: 0,
+  })
+  const remove = useMutation({
+    mutationFn: () =>
+      deleteSessionRecording(
+        sessionId,
+        (deleteKey.current ??= crypto.randomUUID()),
+      ),
+    onSuccess: () => {
+      deleteKey.current = null
+      setDeleteOpen(false)
+      void queryClient.invalidateQueries({
+        queryKey: recordKeys.manifest(sessionId),
+      })
+      showToast({ tone: 'success', message: '수업 녹음을 삭제했습니다.' })
+    },
+    onError: (error) => {
+      if (
+        error instanceof ApiError &&
+        (error.status === 404 || error.status === 409)
+      ) {
+        deleteKey.current = null
+        void queryClient.invalidateQueries({
+          queryKey: recordKeys.manifest(sessionId),
+        })
+      }
+    },
+  })
+
+  async function reauthorizePlayback() {
+    setAuthorizationError(null)
+    const result = await playbackAccess.refetch()
+    if (result.isError) {
+      setAuthorizationError(
+        result.error instanceof ApiError
+          ? result.error
+          : new ApiError('녹음 재생 권한을 확인하지 못했습니다.'),
+      )
+      return false
+    }
+    return true
+  }
+
+  useEffect(() => {
+    if (!seekRequest || !playbackUrl) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) setPlaybackState('seeking')
+    })
+    // The request id is an external transcript-button event synchronized with the player.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void reauthorizePlayback().then(async (allowed) => {
+      if (!allowed || cancelled) {
+        if (!cancelled) setPlaybackState('seek-error')
+        return
+      }
+      const audio = audioRef.current
+      if (!audio) {
+        setPlaybackState('seek-error')
+        return
+      }
+      audio.currentTime = seekRequest.offset / 1000
+      allowNextPlay.current = true
+      try {
+        await audio.play()
+        if (!cancelled) setPlaybackState('active')
+      } catch {
+        allowNextPlay.current = false
+        if (!cancelled) setPlaybackState('seek-error')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+    // A monotonically increasing request id intentionally triggers one check per seek.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seekRequest?.id])
+
   if (!recording)
     return (
       <section
@@ -235,6 +340,13 @@ function RecordRecordingPanel({
       </section>
     )
 
+  const accessError = authorizationError ?? playbackAccess.error
+  const accessReady = playbackAccess.isSuccess && !authorizationError
+
+  if (accessError instanceof ApiError && accessError.status === 401) {
+    return <AuthenticationExpiredRedirect returnTo={`/sessions/${sessionId}`} />
+  }
+
   return (
     <section
       className="panel recording-playback"
@@ -244,15 +356,166 @@ function RecordRecordingPanel({
         <p className="eyebrow">Recording playback</p>
         <h2 id="recording-playback-title">수업 녹음</h2>
       </header>
+      {playbackAccess.isPending && (
+        <StatePanel
+          kind="loading"
+          title="녹음 접근 권한을 확인하는 중"
+          description="현재 Course 접근 권한을 서버에서 다시 확인합니다. 다른 기록은 계속 확인할 수 있습니다."
+        />
+      )}
+      {accessError instanceof ApiError && accessError.status === 403 && (
+        <StatePanel
+          kind="forbidden"
+          title="녹음 접근 권한이 없습니다"
+          description="Transcript와 질문·답변 등 허용된 기록은 계속 확인할 수 있습니다."
+        />
+      )}
+      {accessError instanceof ApiError &&
+        (accessError.status === 404 ||
+          accessError.status === 409 ||
+          accessError.status === 416) && (
+          <StatePanel
+            kind="empty"
+            title="저장된 녹음을 재생할 수 없습니다"
+            description="Transcript와 질문·답변 등 준비된 다른 기록은 계속 확인할 수 있습니다."
+            actionLabel="재생 가능 여부 다시 확인"
+            onAction={() => void reauthorizePlayback()}
+          />
+        )}
+      {accessError &&
+        (!(accessError instanceof ApiError) ||
+          ![401, 403, 404, 409, 416].includes(accessError.status ?? 0)) && (
+          <StatePanel
+            kind="error"
+            title="녹음 접근 상태를 확인하지 못했습니다"
+            description="다른 기록은 유지합니다. 연결을 확인한 뒤 녹음 영역만 다시 시도하세요."
+            actionLabel="녹음 권한 다시 확인"
+            onAction={() => void reauthorizePlayback()}
+          />
+        )}
       <audio
         ref={audioRef}
-        controls
+        aria-label="수업 녹음 재생"
+        controls={accessReady}
+        hidden={!accessReady}
         preload="metadata"
-        src={apiUrl(recording.playback_url)}
+        src={accessReady ? apiUrl(recording.playback_url) : undefined}
+        onEnded={() => setPlaybackState('idle')}
+        onError={() => setPlaybackState('seek-error')}
+        onPause={() =>
+          setPlaybackState((current) =>
+            current === 'seeking' || current === 'loading' ? current : 'idle',
+          )
+        }
+        onPlay={(event) => {
+          if (allowNextPlay.current) {
+            allowNextPlay.current = false
+            setPlaybackState('active')
+            return
+          }
+          event.currentTarget.pause()
+          setPlaybackState('loading')
+          void reauthorizePlayback().then(async (allowed) => {
+            if (!allowed || !audioRef.current) {
+              setPlaybackState('seek-error')
+              return
+            }
+            allowNextPlay.current = true
+            try {
+              await audioRef.current.play()
+            } catch {
+              allowNextPlay.current = false
+              setPlaybackState('seek-error')
+            }
+          })
+        }}
       />
+      {(playbackState === 'loading' || playbackState === 'seeking') && (
+        <p className="input-hint" role="status">
+          {playbackState === 'seeking'
+            ? '재생 권한을 확인한 뒤 Transcript 위치로 이동하는 중…'
+            : '재생 승인을 다시 확인하는 중…'}
+        </p>
+      )}
+      {playbackState === 'active' && (
+        <p className="input-hint" role="status">
+          녹음을 재생하고 있습니다.
+        </p>
+      )}
+      {playbackState === 'seek-error' && accessReady && (
+        <StatePanel
+          kind="error"
+          title="요청한 녹음 위치를 재생하지 못했습니다"
+          description="재생 승인을 다시 확인해도 다른 기록과 현재 Transcript 위치는 유지됩니다."
+          actionLabel="재생 승인 다시 확인"
+          onAction={() => void reauthorizePlayback()}
+        />
+      )}
       <p className="input-hint">
         Transcript 문장을 선택하면 서버가 확정한 녹음 위치로 이동합니다.
       </p>
+      {professor && sessionStatus === 'COMPLETED' && (
+        <div className="recording-playback__danger">
+          <p className="input-hint">
+            녹음을 삭제해도 Transcript와 질문·답변 기록은 유지됩니다.
+          </p>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              remove.reset()
+              deleteKey.current = null
+              setDeleteOpen(true)
+            }}
+          >
+            녹음 삭제
+          </Button>
+        </div>
+      )}
+      {professor && sessionStatus === 'COMPLETED' && (
+        <Dialog
+          open={deleteOpen}
+          title="수업 녹음을 삭제할까요?"
+          description="원본 녹음은 복구할 수 없으며, Transcript와 다른 수업 기록은 유지됩니다."
+          onOpenChange={(open) => {
+            if (!open && !remove.isPending) {
+              remove.reset()
+              deleteKey.current = null
+            }
+            setDeleteOpen(open)
+          }}
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                disabled={remove.isPending}
+                onClick={() => setDeleteOpen(false)}
+              >
+                취소
+              </Button>
+              <Button
+                variant="danger"
+                disabled={remove.isPending}
+                onClick={() => remove.mutate()}
+              >
+                {remove.isPending ? '삭제 중…' : '녹음 삭제'}
+              </Button>
+            </>
+          }
+        >
+          {remove.isError ? (
+            <p role="alert">
+              {remove.error instanceof ApiError && remove.error.status === 409
+                ? '완료된 수업의 업로드 완료 녹음만 삭제할 수 있습니다.'
+                : '수업 녹음을 삭제하지 못했습니다.'}
+            </p>
+          ) : (
+            <p>
+              삭제 요청이 확정되면 재생 정보는 즉시 숨기고 저장 파일은 별도 정리
+              작업이 처리합니다.
+            </p>
+          )}
+        </Dialog>
+      )}
     </section>
   )
 }
@@ -309,14 +572,21 @@ function FinalSummaryPanel({ record }: { record: SessionRecord }) {
 function RecordTranscriptPanel({
   record,
   onSeek,
-  highlightRange,
+  focusTarget,
+  onClearFocus,
 }: {
   record: SessionRecord
   onSeek: (offset: number) => void
-  highlightRange: TranscriptRange | null
+  focusTarget: TranscriptFocusTarget | null
+  onClearFocus: () => void
 }) {
   const timelineRef = useRef<HTMLOListElement | null>(null)
-  const versionId = recordTranscriptVersionId(record)
+  const canonicalVersionId = recordTranscriptVersionId(record)
+  const versionId = focusTarget?.versionId ?? canonicalVersionId
+  const transcriptState = recordTranscriptState(record)
+  const completedWithFinalizingTranscript =
+    record.session.status === 'COMPLETED' &&
+    transcriptState?.status === 'FINALIZING'
   const timeline = useInfiniteQuery({
     queryKey: recordKeys.timeline(record.session.id, versionId ?? 'none'),
     initialPageParam: null as string | null,
@@ -328,7 +598,7 @@ function RecordTranscriptPanel({
         signal,
       ),
     getNextPageParam: (page) => page.next_cursor,
-    enabled: Boolean(versionId),
+    enabled: Boolean(versionId) && !completedWithFinalizingTranscript,
   })
   const items = useMemo(() => {
     const entries =
@@ -348,26 +618,50 @@ function RecordTranscriptPanel({
   }, [timeline.data])
 
   useEffect(() => {
-    if (!highlightRange || !timelineRef.current) return
-    const item = items.find(
-      (entry) =>
-        entry.kind === 'segment' &&
-        entry.value.sequence >= highlightRange.startSequence &&
-        entry.value.sequence <= highlightRange.endSequence,
-    )
-    if (!item || item.kind !== 'segment') return
+    if (!focusTarget || !timelineRef.current) return
+    const item = items.find((entry) => {
+      if (entry.kind !== 'segment') return false
+      if (focusTarget.startSegmentId)
+        return entry.value.id === focusTarget.startSegmentId
+      return (
+        focusTarget.startSequence !== undefined &&
+        entry.value.sequence >= focusTarget.startSequence &&
+        entry.value.sequence <=
+          (focusTarget.endSequence ?? focusTarget.startSequence)
+      )
+    })
+    if (!item || item.kind !== 'segment') {
+      if (timeline.hasNextPage && !timeline.isFetchingNextPage) {
+        void timeline.fetchNextPage()
+      }
+      return
+    }
     const target = timelineRef.current.querySelector<HTMLElement>(
       `[data-segment-id="${item.value.id}"]`,
     )
-    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)')
-      .matches
-      ? 'auto'
-      : 'smooth'
-    target?.scrollIntoView({ block: 'center', behavior })
+    const behavior =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth'
+    target?.scrollIntoView?.({ block: 'center', behavior })
     target?.focus({ preventScroll: true })
-  }, [highlightRange, items])
+  }, [focusTarget, items, timeline])
 
-  const transcriptState = recordTranscriptState(record)
+  const focusStartIndex = focusTarget?.startSegmentId
+    ? items.findIndex(
+        (item) =>
+          item.kind === 'segment' &&
+          item.value.id === focusTarget.startSegmentId,
+      )
+    : -1
+  const focusEndIndex = focusTarget?.endSegmentId
+    ? items.findIndex(
+        (item) =>
+          item.kind === 'segment' && item.value.id === focusTarget.endSegmentId,
+      )
+    : -1
+
   if (!transcriptState)
     return (
       <section
@@ -388,6 +682,23 @@ function RecordTranscriptPanel({
       </section>
     )
 
+  if (completedWithFinalizingTranscript) {
+    return (
+      <section
+        className="panel record-transcript"
+        aria-labelledby="record-transcript-title"
+      >
+        <p className="eyebrow">Final transcript</p>
+        <h2 id="record-transcript-title">강의 Transcript</h2>
+        <StatePanel
+          kind="error"
+          title="완료 기록의 Transcript 상태를 확인할 수 없습니다"
+          description="class 완료 상태를 되돌리거나 내용을 추측하지 않습니다. 다른 기록은 계속 확인할 수 있습니다."
+        />
+      </section>
+    )
+  }
+
   return (
     <section
       className="panel record-transcript"
@@ -400,6 +711,18 @@ function RecordTranscriptPanel({
         </div>
         <span className="input-hint">{transcriptState.status}</span>
       </header>
+      {focusTarget && (
+        <div className="record-transcript__focus-state" role="status">
+          <p className="input-hint">
+            {focusTarget.source === 'CANONICAL'
+              ? '음성 Answer가 연결된 확정 Transcript 구간을 표시합니다.'
+              : '확정 구간을 사용할 수 없어 immutable 원본 LIVE Transcript 범위를 표시합니다.'}
+          </p>
+          <Button variant="ghost" onClick={onClearFocus}>
+            최종 Transcript로 돌아가기
+          </Button>
+        </div>
+      )}
       {transcriptState.status === 'FINALIZING' && (
         <p className="input-hint" role="status">
           고품질 Transcript와 녹음 위치를 정리하고 있습니다.
@@ -422,7 +745,7 @@ function RecordTranscriptPanel({
       {versionId && timeline.isPending && (
         <p role="status">Transcript를 불러오는 중…</p>
       )}
-      {versionId && timeline.isError && (
+      {versionId && timeline.isError && !timeline.isFetchNextPageError && (
         <StatePanel
           kind="error"
           title="Transcript를 불러오지 못했습니다"
@@ -437,7 +760,7 @@ function RecordTranscriptPanel({
           className="record-transcript__timeline"
           aria-label="확정 Transcript 타임라인"
         >
-          {items.map((item) => (
+          {items.map((item, index) => (
             <li
               key={item.value.id}
               data-segment-id={
@@ -446,9 +769,16 @@ function RecordTranscriptPanel({
               tabIndex={item.kind === 'segment' ? -1 : undefined}
               className={`record-transcript__${item.kind}${
                 item.kind === 'segment' &&
-                highlightRange &&
-                item.value.sequence >= highlightRange.startSequence &&
-                item.value.sequence <= highlightRange.endSequence
+                focusTarget &&
+                ((focusStartIndex >= 0 &&
+                  focusEndIndex >= focusStartIndex &&
+                  index >= focusStartIndex &&
+                  index <= focusEndIndex) ||
+                  (focusStartIndex < 0 &&
+                    focusTarget.startSequence !== undefined &&
+                    item.value.sequence >= focusTarget.startSequence &&
+                    item.value.sequence <=
+                      (focusTarget.endSequence ?? focusTarget.startSequence)))
                   ? ' record-transcript__segment--highlighted'
                   : ''
               }`}
@@ -478,6 +808,15 @@ function RecordTranscriptPanel({
           ))}
         </ol>
       )}
+      {timeline.isFetchNextPageError && (
+        <StatePanel
+          kind="error"
+          title="다음 Transcript를 불러오지 못했습니다"
+          description="이미 불러온 문장과 누락 구간은 유지합니다. 같은 위치부터 다시 시도합니다."
+          actionLabel="다음 Transcript 다시 시도"
+          onAction={() => void timeline.fetchNextPage()}
+        />
+      )}
       {versionId &&
         timeline.data &&
         items.length === 0 &&
@@ -505,11 +844,12 @@ export function SessionRecordPage({
   presentation = 'default',
 }: SessionRecordPageProps) {
   const queryClient = useQueryClient()
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const previousStatus = useRef<'PROCESSING' | 'COMPLETED' | null>(null)
-  const [highlightRange, setHighlightRange] = useState<TranscriptRange | null>(
-    null,
-  )
+  const seekRequestId = useRef(0)
+  const [transcriptFocus, setTranscriptFocus] =
+    useState<TranscriptFocusTarget | null>(null)
+  const [recordingSeek, setRecordingSeek] =
+    useState<RecordingSeekRequest | null>(null)
   const record = useQuery({
     ...recordManifestQueryOptions(sessionId),
     refetchInterval: (query) =>
@@ -541,6 +881,8 @@ export function SessionRecordPage({
 
   if (record.isPending)
     return <StatePanel kind="loading" title="수업 기록을 준비하는 중" />
+  if (record.error instanceof ApiError && record.error.status === 401)
+    return <AuthenticationExpiredRedirect returnTo={`/sessions/${sessionId}`} />
   if (record.error instanceof ApiError && record.error.status === 403)
     return (
       <StatePanel
@@ -579,12 +921,8 @@ export function SessionRecordPage({
       }
     />
   ) : null
-  const seek = (offset: number) => {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.currentTime = offset / 1000
-    void audio.play().catch(() => undefined)
-  }
+  const seek = (offset: number) =>
+    setRecordingSeek({ id: ++seekRequestId.current, offset })
 
   return (
     <section
@@ -617,15 +955,19 @@ export function SessionRecordPage({
           sessionStatus={data.session.status}
         />
         <RecordRecordingPanel
+          key={data.recording?.id ?? 'no-recording'}
           recording={data.recording}
-          audioRef={audioRef}
+          professor={professor}
+          seekRequest={recordingSeek}
+          sessionId={data.session.id}
           sessionStatus={status}
         />
         <FinalSummaryPanel record={data} />
         <RecordTranscriptPanel
           record={data}
           onSeek={seek}
-          highlightRange={highlightRange}
+          focusTarget={transcriptFocus}
+          onClearFocus={() => setTranscriptFocus(null)}
         />
         <RecordQuestionPanel
           sessionId={data.session.id}
@@ -639,9 +981,7 @@ export function SessionRecordPage({
           sessionId={data.session.id}
           professor={professor}
           sessionStatus={status}
-          onFocusTranscriptRange={(startSequence, endSequence) =>
-            setHighlightRange({ startSequence, endSequence })
-          }
+          onFocusTranscript={setTranscriptFocus}
         />
         <RecordJobsPanel
           sessionId={data.session.id}

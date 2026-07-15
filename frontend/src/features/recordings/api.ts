@@ -34,6 +34,30 @@ export function getSessionRecording(sessionId: string, signal?: AbortSignal) {
   )
 }
 
+export async function verifyRecordingPlayback(
+  playbackUrl: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const response = await fetch(apiUrl(playbackUrl), {
+      credentials: 'include',
+      headers: { Range: 'bytes=0-0' },
+      signal,
+    })
+    if (!response.ok) {
+      const payload = await response
+        .clone()
+        .json()
+        .catch(() => null)
+      throw apiErrorFromResponse(response, payload)
+    }
+    await response.body?.cancel()
+    return { allowed: true as const }
+  } catch (error) {
+    throw normalizeApiError(error)
+  }
+}
+
 export async function deleteSessionRecording(
   sessionId: string,
   idempotencyKey: string,
