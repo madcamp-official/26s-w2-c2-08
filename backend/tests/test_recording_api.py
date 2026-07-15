@@ -349,12 +349,16 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
         )
         assert joined.status_code == 201
         partial = client.get(
-            complete.json()["recording"]["playback_url"], headers={"Range": "bytes=2-7"}
+            complete.json()["recording"]["playback_url"],
+            headers={"Range": "bytes=2-7", **TRUSTED_ORIGIN},
         )
         assert partial.status_code == 206
         assert partial.content == recording_bytes[2:8]
         assert partial.headers["content-range"] == f"bytes 2-7/{len(recording_bytes)}"
         assert partial.headers["content-type"].startswith("audio/webm")
+        assert partial.headers["access-control-allow-origin"] == TRUSTED_ORIGIN["Origin"]
+        assert partial.headers["access-control-allow-credentials"] == "true"
+        assert "Content-Range" in partial.headers["access-control-expose-headers"]
 
         current_user["id"] = outsider_id
         assert client.get(complete.json()["recording"]["playback_url"]).status_code == 404

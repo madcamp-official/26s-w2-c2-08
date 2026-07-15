@@ -23,6 +23,7 @@ import {
   deleteSessionRecording,
   verifyRecordingPlayback,
 } from '../recordings/api'
+import { fetchAuthenticatedPlaybackUrl } from '../recordings/authenticated-playback'
 import {
   getRecordTranscriptTimeline,
   listFinalSummaries,
@@ -200,6 +201,13 @@ function RecordRecordingPanel({
     'idle' | 'active' | 'positioned' | 'seek-error' | 'seeking'
   >('idle')
   const deleteKey = useRef<string | null>(null)
+  const fallbackPlaybackUrlRef = useRef<string | null>(null)
+  const recoveryPendingRef = useRef(false)
+  const pendingSeekOffsetRef = useRef<number | null>(null)
+  const [fallbackPlaybackUrl, setFallbackPlaybackUrl] = useState<string | null>(
+    null,
+  )
+  const [recoveringPlayback, setRecoveringPlayback] = useState(false)
   const Heading = embedded ? 'h3' : 'h2'
   const panelClassName = `panel recording-playback${
     embedded ? ' recording-playback--embedded' : ''
@@ -212,6 +220,15 @@ function RecordRecordingPanel({
     retry: false,
     staleTime: 0,
   })
+
+  useEffect(
+    () => () => {
+      if (fallbackPlaybackUrlRef.current) {
+        URL.revokeObjectURL(fallbackPlaybackUrlRef.current)
+      }
+    },
+    [],
+  )
   const remove = useMutation({
     mutationFn: () =>
       deleteSessionRecording(
@@ -253,6 +270,30 @@ function RecordRecordingPanel({
     return true
   }
 
+  async function recoverPlaybackSource() {
+    if (
+      !playbackUrl ||
+      fallbackPlaybackUrlRef.current ||
+      recoveryPendingRef.current
+    ) {
+      return false
+    }
+    recoveryPendingRef.current = true
+    setRecoveringPlayback(true)
+    try {
+      const fallbackUrl = await fetchAuthenticatedPlaybackUrl(playbackUrl)
+      fallbackPlaybackUrlRef.current = fallbackUrl
+      setFallbackPlaybackUrl(fallbackUrl)
+      return true
+    } catch {
+      setPlaybackState('seek-error')
+      return false
+    } finally {
+      recoveryPendingRef.current = false
+      setRecoveringPlayback(false)
+    }
+  }
+
   useEffect(() => {
     if (!seekRequest || !playbackUrl) return
     let cancelled = false
@@ -276,6 +317,9 @@ function RecordRecordingPanel({
         if (cancelled) return
         setPlaybackState(result === 'playing' ? 'active' : 'positioned')
       } catch {
+        pendingSeekOffsetRef.current = seekRequest.offset
+        const recovered = await recoverPlaybackSource()
+        if (recovered || cancelled) return
         if (!cancelled) setPlaybackState('seek-error')
       }
     })
@@ -389,12 +433,33 @@ function RecordRecordingPanel({
       <audio
         ref={audioRef}
         aria-label="수업 녹음 재생"
+        crossOrigin="use-credentials"
         controls={accessReady}
         hidden={!accessReady}
         preload="metadata"
-        src={accessReady ? apiUrl(recording.playback_url) : undefined}
+        src={
+          accessReady
+            ? (fallbackPlaybackUrl ?? apiUrl(recording.playback_url))
+            : undefined
+        }
         onEnded={() => setPlaybackState('idle')}
-        onError={() => setPlaybackState('seek-error')}
+        onLoadedMetadata={() => {
+          const pendingOffset = pendingSeekOffsetRef.current
+          if (pendingOffset === null || !fallbackPlaybackUrlRef.current) return
+          pendingSeekOffsetRef.current = null
+          void seekAndPlayRecording(audioRef.current!, pendingOffset)
+            .then((result) =>
+              setPlaybackState(result === 'playing' ? 'active' : 'positioned'),
+            )
+            .catch(() => setPlaybackState('seek-error'))
+        }}
+        onError={() => {
+          if (!fallbackPlaybackUrlRef.current) {
+            void recoverPlaybackSource()
+            return
+          }
+          setPlaybackState('seek-error')
+        }}
         onPause={() =>
           setPlaybackState((current) =>
             current === 'seeking' || current === 'positioned'
@@ -417,6 +482,17 @@ function RecordRecordingPanel({
       {playbackState === 'positioned' && (
         <p className="input-hint" role="status">
           요청한 녹음 위치로 이동했습니다. 재생 버튼을 눌러 이어서 들으세요.
+        </p>
+      )}
+      {recoveringPlayback && (
+        <p className="input-hint" role="status">
+          브라우저 재생 요청을 다시 확인하고 있습니다.
+        </p>
+      )}
+      {fallbackPlaybackUrl && !recoveringPlayback && (
+        <p className="input-hint" role="status">
+          보호된 녹음 원본을 다시 불러왔습니다. 재생 버튼을 눌러 이어서
+          들으세요.
         </p>
       )}
       {playbackState === 'seek-error' && accessReady && (
