@@ -28,7 +28,11 @@ from tbd.providers.ai.fake import (
     FakeProviderBehavior,
     FakeQuestionClusteringProvider,
 )
-from tbd.providers.ai.ollama import OllamaEmbeddingProvider, OllamaLLMProvider
+from tbd.providers.ai.ollama import (
+    OllamaEmbeddingProvider,
+    OllamaLLMProvider,
+    OllamaQuestionClusteringProvider,
+)
 
 __all__ = [
     "AIProviderError",
@@ -48,6 +52,7 @@ __all__ = [
     "LLMProvider",
     "OllamaEmbeddingProvider",
     "OllamaLLMProvider",
+    "OllamaQuestionClusteringProvider",
     "QuestionClusteringProvider",
     "ProviderErrorCode",
     "ProviderInvalidResponseError",

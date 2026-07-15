@@ -1,0 +1,18 @@
+[Unit]
+Description=GOAL %i worker
+After=network-online.target goal-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goal
+Group=goal
+WorkingDirectory=/srv/goal
+EnvironmentFile=/etc/goal/goal.env
+ExecStart=/srv/goal/backend/.venv/bin/python -m tbd.jobs.%i_worker
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

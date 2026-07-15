@@ -8,14 +8,17 @@ local development can continue to use deterministic fakes by default.
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import UUID
 
 import httpx
 
+from tbd.providers.ai.clustering import ClusteringInput, ClusterSuggestion
 from tbd.providers.ai.contracts import (
     EmbeddingRequest,
     EmbeddingResult,
@@ -27,6 +30,27 @@ from tbd.providers.ai.contracts import (
     ProviderUnavailableError,
     invoke_provider,
 )
+
+CLUSTERING_TIMEOUT = timedelta(seconds=30)
+_CLUSTER_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "clusters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "representative": {"type": "string"},
+                    "question_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["representative", "question_ids"],
+            },
+        }
+    },
+    "required": ["clusters"],
+}
 
 
 class OllamaLLMProvider:
@@ -153,6 +177,79 @@ class OllamaEmbeddingProvider:
             )
         except ValueError as exc:
             raise ProviderInvalidResponseError from exc
+
+
+class OllamaQuestionClusteringProvider:
+    """Request a complete Question partition as an Ollama structured output."""
+
+    def __init__(
+        self, *, base_url: str, model: str, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
+        self._base_url = _normalize_base_url(base_url)
+        self._model = _require_non_empty(model, field_name="model")
+        self._transport = transport
+
+    async def cluster(self, inputs: tuple[ClusteringInput, ...]) -> tuple[ClusterSuggestion, ...]:
+        if not inputs:
+            return ()
+        return await invoke_provider(lambda: self._cluster(inputs), timeout=CLUSTERING_TIMEOUT)
+
+    async def _cluster(self, inputs: tuple[ClusteringInput, ...]) -> tuple[ClusterSuggestion, ...]:
+        question_lines = "\n".join(f"- id={item.question_id}: {item.content}" for item in inputs)
+        prompt = (
+            "Group semantically similar anonymous lecture questions. Return every supplied id "
+            "exactly once; do not invent ids. Write each representative in Korean, under 300 "
+            "characters. Return only this JSON schema: "
+            f"{json.dumps(_CLUSTER_SCHEMA, ensure_ascii=False)}\nQuestions:\n{question_lines}"
+        )
+        data = await _post_json(
+            base_url=self._base_url,
+            path="/api/chat",
+            payload={
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "format": _CLUSTER_SCHEMA,
+                "options": {"temperature": 0},
+                "stream": False,
+            },
+            timeout=CLUSTERING_TIMEOUT,
+            transport=self._transport,
+        )
+        if data.get("done") is not True or not isinstance(data.get("message"), Mapping):
+            raise ProviderInvalidResponseError
+        content = data["message"].get("content")
+        if not isinstance(content, str):
+            raise ProviderInvalidResponseError
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise ProviderInvalidResponseError from exc
+        if not isinstance(parsed, Mapping) or not isinstance(parsed.get("clusters"), list):
+            raise ProviderInvalidResponseError
+        suggestions: list[ClusterSuggestion] = []
+        for raw in parsed["clusters"]:
+            if not isinstance(raw, Mapping):
+                raise ProviderInvalidResponseError
+            representative = raw.get("representative")
+            raw_ids = raw.get("question_ids")
+            if (
+                not isinstance(representative, str)
+                or not representative.strip()
+                or len(representative.strip()) > 300
+                or not isinstance(raw_ids, list)
+                or not raw_ids
+            ):
+                raise ProviderInvalidResponseError
+            try:
+                question_ids = tuple(UUID(value) for value in raw_ids if isinstance(value, str))
+            except ValueError as exc:
+                raise ProviderInvalidResponseError from exc
+            if len(question_ids) != len(raw_ids):
+                raise ProviderInvalidResponseError
+            suggestions.append(
+                ClusterSuggestion(representative=representative.strip(), question_ids=question_ids)
+            )
+        return tuple(suggestions)
 
 
 async def _post_json(

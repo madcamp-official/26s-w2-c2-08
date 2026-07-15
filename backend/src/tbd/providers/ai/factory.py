@@ -10,7 +10,11 @@ from tbd.providers.ai.fake import (
     FakeLLMProvider,
     FakeQuestionClusteringProvider,
 )
-from tbd.providers.ai.ollama import OllamaEmbeddingProvider, OllamaLLMProvider
+from tbd.providers.ai.ollama import (
+    OllamaEmbeddingProvider,
+    OllamaLLMProvider,
+    OllamaQuestionClusteringProvider,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,10 +29,8 @@ class AIProviders:
 def create_ai_providers(settings: Settings) -> AIProviders:
     """Build the configured LLM and embedding adapters without changing API contracts.
 
-    Question clustering has its own structured provider boundary.  It remains a
-    deterministic fake until its Mistral JSON adapter is implemented, but it is
-    included here so every AI worker obtains its runtime dependencies from one
-    place.
+    Question clustering has its own structured provider boundary and shares the
+    configured Ollama LLM model only in the Ollama runtime profile.
     """
 
     clustering = FakeQuestionClusteringProvider()
@@ -48,6 +50,9 @@ def create_ai_providers(settings: Settings) -> AIProviders:
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_embedding_model,
             ),
-            question_clustering=clustering,
+            question_clustering=OllamaQuestionClusteringProvider(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_llm_model,
+            ),
         )
     raise ValueError(f"Unsupported AI provider: {settings.ai_provider}")

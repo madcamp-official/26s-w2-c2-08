@@ -1,0 +1,18 @@
+[Unit]
+Description=GOAL FastAPI service
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goal
+Group=goal
+WorkingDirectory=/srv/goal
+EnvironmentFile=/etc/goal/goal.env
+ExecStart=/srv/goal/backend/.venv/bin/uvicorn tbd.app:create_app --factory --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
