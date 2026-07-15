@@ -630,7 +630,13 @@
 .personal-ai__chat,
 .personal-ai__messages {
   display: grid;
+  min-width: 0;
   gap: var(--space-4);
+}
+
+.personal-ai {
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .personal-ai__summary,
@@ -654,14 +660,19 @@
   white-space: pre-wrap;
 }
 .personal-ai__messages {
+  width: 100%;
   max-height: 440px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-right: 4px;
 }
 .personal-ai__message {
+  min-width: 0;
+  max-width: 100%;
   padding: 12px 14px;
   border-radius: var(--radius-md);
   background: var(--color-surface-soft);
+  overflow-wrap: anywhere;
 }
 .personal-ai__message--user {
   margin-left: clamp(24px, 10vw, 110px);
@@ -679,19 +690,34 @@
   list-style: none;
 }
 .chat-evidence li {
+  min-width: 0;
+  max-width: 100%;
   font-size: 12px;
 }
 .chat-evidence a,
 .chat-evidence span {
   display: inline-flex;
+  max-width: 100%;
   padding: 6px 8px;
   border-radius: var(--radius-pill);
   color: var(--color-brand-dark);
   background: var(--color-brand-soft);
+  overflow-wrap: anywhere;
 }
 .chat-evidence span {
   color: var(--color-muted);
   background: var(--color-surface-soft);
+}
+
+.personal-ai form,
+.personal-ai textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.personal-ai textarea {
+  width: 100%;
+  resize: vertical;
 }
 .ai-job-state {
   margin: 0;
