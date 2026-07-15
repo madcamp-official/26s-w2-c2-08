@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useState } from 'react'
 
 import { ApiError } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
@@ -10,11 +11,24 @@ import { Dashboard } from '../../features/courses/Dashboard'
 
 export function FoundationPage() {
   const currentUser = useQuery(currentUserQueryOptions)
+  const queryClient = useQueryClient()
+  const [courseAuthenticationExpired, setCourseAuthenticationExpired] =
+    useState(false)
   const unauthenticated =
-    currentUser.error instanceof ApiError && currentUser.error.status === 401
+    courseAuthenticationExpired ||
+    (currentUser.error instanceof ApiError && currentUser.error.status === 401)
+  const handleCourseAuthenticationExpired = useCallback(() => {
+    setCourseAuthenticationExpired(true)
+    queryClient.clear()
+  }, [queryClient])
 
-  if (currentUser.isSuccess) {
-    return <Dashboard displayName={currentUser.data.display_name} />
+  if (currentUser.isSuccess && !courseAuthenticationExpired) {
+    return (
+      <Dashboard
+        displayName={currentUser.data.display_name}
+        onAuthenticationExpired={handleCourseAuthenticationExpired}
+      />
+    )
   }
 
   return (
@@ -41,7 +55,7 @@ export function FoundationPage() {
                 </LinkButton>
               </>
             )}
-            {currentUser.isPending && (
+            {currentUser.isPending && !courseAuthenticationExpired && (
               <div className="public-session-status">
                 <Skeleton label="로그인 상태 확인 중" lines={1} />
               </div>

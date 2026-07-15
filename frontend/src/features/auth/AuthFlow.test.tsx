@@ -20,6 +20,25 @@ const user = {
   avatar_url: null,
 }
 
+const accountProfessorCourse = {
+  id: '10000000-0000-0000-0000-000000000001',
+  title: '알고리즘',
+  semester: '2026 여름학기',
+  role: 'PROFESSOR' as const,
+  join_code: 'ABCXYZ',
+  current_session: null,
+  created_at: '2026-07-14T00:00:00Z',
+}
+
+const accountStudentCourse = {
+  id: '20000000-0000-0000-0000-000000000001',
+  title: '운영체제',
+  semester: '2026 여름학기',
+  role: 'STUDENT' as const,
+  current_session: null,
+  created_at: '2026-07-13T00:00:00Z',
+}
+
 function renderAt(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
   render(
@@ -54,6 +73,40 @@ describe('authentication flow', () => {
       await screen.findByRole('heading', { name: '내 정보' }),
     ).toBeInTheDocument()
     expect(screen.getByText('dohyun@example.test')).toBeInTheDocument()
+  })
+
+  it('hides account and Course data when the current-user request fails', async () => {
+    let courseRequests = 0
+    server.use(
+      http.get('*/api/v1/me', () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'DEPENDENCY_UNAVAILABLE',
+              message: '잠시 후 다시 시도해 주세요.',
+              request_id: 'req_account_me',
+              details: null,
+            },
+          },
+          { status: 503 },
+        ),
+      ),
+      http.get('*/api/v1/courses', () => {
+        courseRequests += 1
+        return HttpResponse.json({ items: [], next_cursor: null })
+      }),
+    )
+    renderAt('/account')
+
+    expect(
+      await screen.findByRole(
+        'heading',
+        { name: '내 정보를 불러오지 못했습니다' },
+        { timeout: 3_000 },
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('dohyun@example.test')).not.toBeInTheDocument()
+    expect(courseRequests).toBe(0)
   })
 
   it('logs in with email and restores the requested route', async () => {
@@ -204,6 +257,97 @@ describe('authentication flow', () => {
     expect(emailInput).toHaveAttribute('aria-describedby', error.id)
   })
 
+  it('shows independent Course role summaries without inventing a total count', async () => {
+    server.use(
+      http.get('*/api/v1/me', () => HttpResponse.json(user)),
+      http.get('*/api/v1/courses', ({ request }) => {
+        const role = new URL(request.url).searchParams.get('role')
+        return HttpResponse.json({
+          items:
+            role === 'PROFESSOR'
+              ? [accountProfessorCourse]
+              : [accountStudentCourse],
+          next_cursor: role === 'PROFESSOR' ? 'next-owned-page' : null,
+        })
+      }),
+    )
+    renderAt('/account')
+
+    expect(
+      await screen.findByLabelText('관리 중인 Course 1개 이상'),
+    ).toHaveTextContent('1')
+    expect(screen.getByLabelText('참여 중인 Course 1개')).toHaveTextContent('1')
+    expect(
+      screen.getByRole('link', { name: '전체 Course 보기' }),
+    ).toHaveAttribute('href', '/')
+  })
+
+  it('keeps the successful Course role summary visible when the other role fails', async () => {
+    server.use(
+      http.get('*/api/v1/me', () => HttpResponse.json(user)),
+      http.get('*/api/v1/courses', ({ request }) => {
+        const role = new URL(request.url).searchParams.get('role')
+        if (role === 'PROFESSOR') {
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'DEPENDENCY_UNAVAILABLE',
+                message: '잠시 후 다시 시도해 주세요.',
+                request_id: 'req_account_courses',
+                details: null,
+              },
+            },
+            { status: 503 },
+          )
+        }
+        return HttpResponse.json({
+          items: [accountStudentCourse],
+          next_cursor: null,
+        })
+      }),
+    )
+    renderAt('/account')
+
+    expect(
+      await screen.findByText('개수를 확인하지 못했습니다', undefined, {
+        timeout: 3_000,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('참여 중인 Course 1개')).toHaveTextContent('1')
+    expect(screen.queryByText('운영체제')).not.toBeInTheDocument()
+  })
+
+  it('blocks withdrawal before the request when an owned Course is known', async () => {
+    let withdrawalRequests = 0
+    server.use(
+      http.get('*/api/v1/me', () => HttpResponse.json(user)),
+      http.get('*/api/v1/courses', ({ request }) => {
+        const role = new URL(request.url).searchParams.get('role')
+        return HttpResponse.json({
+          items: role === 'PROFESSOR' ? [accountProfessorCourse] : [],
+          next_cursor: null,
+        })
+      }),
+      http.delete('*/api/v1/me', () => {
+        withdrawalRequests += 1
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    renderAt('/account')
+
+    await screen.findByLabelText('관리 중인 Course 1개')
+    fireEvent.click(screen.getByRole('button', { name: '계정 탈퇴 검토' }))
+    const dialog = screen.getByRole('dialog')
+    const submit = within(dialog).getByRole('button', { name: '계정 탈퇴' })
+
+    expect(submit).toBeDisabled()
+    expect(
+      within(dialog).getByText('관리 중인 Course가 남아 있습니다'),
+    ).toBeInTheDocument()
+    fireEvent.click(submit)
+    expect(withdrawalRequests).toBe(0)
+  })
+
   it('navigates only after logout succeeds', async () => {
     let authenticated = true
     server.use(
@@ -318,7 +462,9 @@ describe('authentication flow', () => {
     )
     const router = renderAt('/account')
 
-    fireEvent.click(await screen.findByRole('button', { name: '계정 탈퇴' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '계정 탈퇴 검토' }),
+    )
     fireEvent.click(
       within(screen.getByRole('dialog')).getByRole('button', {
         name: '계정 탈퇴',
@@ -357,7 +503,9 @@ describe('authentication flow', () => {
     )
     renderAt('/account')
 
-    fireEvent.click(await screen.findByRole('button', { name: '계정 탈퇴' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '계정 탈퇴 검토' }),
+    )
     fireEvent.click(
       within(screen.getByRole('dialog')).getByRole('button', {
         name: '계정 탈퇴',
@@ -365,7 +513,7 @@ describe('authentication flow', () => {
     )
 
     expect(
-      await screen.findByText(
+      await within(screen.getByRole('dialog')).findByText(
         '생성한 Course를 먼저 삭제한 뒤 계정을 탈퇴할 수 있습니다.',
       ),
     ).toBeInTheDocument()

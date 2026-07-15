@@ -59,8 +59,8 @@
               <p class="eyebrow">Account</p>
               <h1 class="page-title">내 정보</h1>
               <p class="page-description">
-                기본 계정 정보와 Course별 역할을 확인합니다. GOAL
-                계정에는 고정된 교수자·학생 역할이 없습니다.
+                기본 계정 정보와 Course별 역할을 확인합니다. GOAL 계정에는
+                고정된 교수자·학생 역할이 없습니다.
               </p>
             </div>
             <div
@@ -98,31 +98,21 @@
                     >김</span
                   >
                   <div>
-                    <span class="status-chip status-chip--success"
-                      >인증됨</span
-                    >
+                    <span class="status-chip status-chip--success">인증됨</span>
                     <h2>김도현</h2>
                     <p>dohyun@example.com</p>
                   </div>
                 </div>
                 <dl class="account-details">
                   <div>
-                    <dt>로그인 방식</dt>
+                    <dt>현재 인증</dt>
                     <dd>GOAL 서버 Session</dd>
                   </div>
                   <div>
-                    <dt>가입일</dt>
-                    <dd><time datetime="2026-07-02">2026년 7월 2일</time></dd>
-                  </div>
-                  <div>
-                    <dt>계정 역할</dt>
-                    <dd>고정 역할 없음</dd>
+                    <dt>역할 기준</dt>
+                    <dd>고정 역할 없음 · Course별 역할 사용</dd>
                   </div>
                 </dl>
-                <p class="notice notice--info">
-                  이름과 이메일 수정은 1차 MVP 선택 기능입니다. 이
-                  Prototype에서는 조회만 제공합니다.
-                </p>
               </article>
 
               <div class="stack account-side">
@@ -165,6 +155,22 @@
                     로그아웃
                   </button>
                 </article>
+                <article class="panel account-security">
+                  <div>
+                    <h2>계정 탈퇴</h2>
+                    <p>
+                      직접 만든 Course를 모두 삭제한 뒤에만 영구 탈퇴할 수
+                      있습니다.
+                    </p>
+                  </div>
+                  <button
+                    class="button button--secondary"
+                    type="button"
+                    data-dialog-open="withdrawDialog"
+                  >
+                    계정 탈퇴 검토
+                  </button>
+                </article>
               </div>
             </div>
 
@@ -202,9 +208,7 @@
                     >김</span
                   >
                   <div>
-                    <span class="status-chip status-chip--success"
-                      >인증됨</span
-                    >
+                    <span class="status-chip status-chip--success">인증됨</span>
                     <h2>김도현</h2>
                     <p>dohyun@example.com</p>
                   </div>
@@ -324,6 +328,55 @@
           >
             로그아웃
           </a>
+        </footer>
+      </section>
+    </div>
+
+    <div class="dialog-backdrop" id="withdrawDialog" hidden>
+      <section
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="withdrawDialogTitle"
+        aria-describedby="withdrawDialogDescription"
+      >
+        <header class="dialog__header">
+          <div>
+            <h2 id="withdrawDialogTitle">GOAL 계정을 탈퇴할까요?</h2>
+            <p id="withdrawDialogDescription">
+              탈퇴 후에는 현재 Session이 종료되며 계정을 복구할 수 없습니다.
+            </p>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-dialog-close
+            aria-label="닫기"
+          >
+            ×
+          </button>
+        </header>
+        <p class="notice notice--warning" role="alert">
+          관리 중인 Course가 남아 있습니다. 생성한 Course를 먼저 삭제한 뒤
+          계정을 탈퇴할 수 있습니다.
+        </p>
+        <footer class="dialog__actions">
+          <button
+            class="button button--secondary"
+            type="button"
+            data-dialog-close
+          >
+            취소
+          </button>
+          <a
+            class="button button--secondary"
+            href="dashboard.html#ownedCoursesTitle"
+          >
+            관리 Course 확인
+          </a>
+          <button class="button button--danger" type="button" disabled>
+            계정 탈퇴
+          </button>
         </footer>
       </section>
     </div>

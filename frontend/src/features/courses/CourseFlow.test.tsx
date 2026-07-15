@@ -39,6 +39,14 @@ const studentCourse = {
   created_at: '2026-07-13T00:00:00Z',
 }
 
+const liveSessionSummary = {
+  id: '30000000-0000-0000-0000-000000000099',
+  title: '그래프 탐색과 최단 경로',
+  lecture_date: '2026-07-15',
+  status: 'LIVE' as const,
+  started_at: '2026-07-15T06:00:00Z',
+}
+
 const readySession = {
   id: '30000000-0000-0000-0000-000000000001',
   course_id: professorCourse.id,
@@ -75,7 +83,15 @@ describe('Course role flows', () => {
       http.get('*/api/v1/courses', ({ request }) => {
         const role = new URL(request.url).searchParams.get('role')
         return HttpResponse.json({
-          items: role === 'PROFESSOR' ? [professorCourse] : [studentCourse],
+          items:
+            role === 'PROFESSOR'
+              ? [
+                  {
+                    ...professorCourse,
+                    current_session: liveSessionSummary,
+                  },
+                ]
+              : [{ ...studentCourse, join_code: 'SHOULD_NOT_RENDER' }],
           next_cursor: null,
         })
       }),
@@ -89,8 +105,173 @@ describe('Course role flows', () => {
       screen.getByRole('heading', { name: '내가 참여 중인 Course' }),
     ).toBeInTheDocument()
     expect(await screen.findByText('ABCXYZ')).toBeInTheDocument()
-    expect(screen.getByText('알고리즘')).toBeInTheDocument()
+    expect(screen.getAllByText('알고리즘')).not.toHaveLength(0)
     expect(screen.getByText('운영체제')).toBeInTheDocument()
+    expect(screen.queryByText('SHOULD_NOT_RENDER')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '그래프 탐색과 최단 경로' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '실시간 class 들어가기' }),
+    ).toHaveAttribute('href', `/sessions/${liveSessionSummary.id}`)
+    expect(screen.getAllByText('진행 중')).not.toHaveLength(0)
+  })
+
+  it('keeps each dashboard empty state connected to its production flow', async () => {
+    authenticate()
+    server.use(
+      http.get('*/api/v1/courses', () =>
+        HttpResponse.json({ items: [], next_cursor: null }),
+      ),
+    )
+    renderAt('/')
+
+    expect(
+      await screen.findByRole('heading', {
+        name: '아직 만든 Course가 없습니다',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '아직 참여한 Course가 없습니다' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '첫 Course 만들기' }),
+    ).toHaveAttribute('href', '/courses/new')
+    expect(
+      screen.getByRole('link', { name: '참여 코드 입력하기' }),
+    ).toHaveAttribute('href', '/courses/join')
+  })
+
+  it('keeps a successful dashboard role visible while retrying the failed role', async () => {
+    authenticate()
+    let professorRequests = 0
+    server.use(
+      http.get('*/api/v1/courses', ({ request }) => {
+        const role = new URL(request.url).searchParams.get('role')
+        if (role === 'STUDENT') {
+          return HttpResponse.json({
+            items: [studentCourse],
+            next_cursor: null,
+          })
+        }
+
+        professorRequests += 1
+        if (professorRequests <= 2) {
+          return HttpResponse.json(
+            {
+              error: {
+                code: 'DEPENDENCY_UNAVAILABLE',
+                message: '잠시 후 다시 시도해 주세요.',
+                request_id: 'req_professor_courses',
+                details: null,
+              },
+            },
+            { status: 503 },
+          )
+        }
+        return HttpResponse.json({
+          items: [professorCourse],
+          next_cursor: null,
+        })
+      }),
+    )
+    renderAt('/')
+
+    expect(await screen.findByText('운영체제')).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        '내가 관리 중인 Course를 불러오지 못했습니다',
+        undefined,
+        { timeout: 3_000 },
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '이 목록 다시 시도' }))
+
+    expect(await screen.findByText('ABCXYZ')).toBeInTheDocument()
+    expect(screen.getByText('운영체제')).toBeInTheDocument()
+    expect(professorRequests).toBe(3)
+  })
+
+  it('loads the next dashboard Course page with the documented cursor', async () => {
+    authenticate()
+    const secondProfessorCourse = {
+      ...professorCourse,
+      id: '10000000-0000-0000-0000-000000000002',
+      title: '컴퓨터 네트워크',
+      join_code: 'NETWRK',
+    }
+    server.use(
+      http.get('*/api/v1/courses', ({ request }) => {
+        const url = new URL(request.url)
+        if (url.searchParams.get('role') === 'STUDENT') {
+          return HttpResponse.json({ items: [], next_cursor: null })
+        }
+        if (url.searchParams.get('cursor') === 'next-professor-page') {
+          return HttpResponse.json({
+            items: [secondProfessorCourse],
+            next_cursor: null,
+          })
+        }
+        return HttpResponse.json({
+          items: [professorCourse],
+          next_cursor: 'next-professor-page',
+        })
+      }),
+    )
+    renderAt('/')
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Course 더 보기' }),
+    )
+
+    expect(await screen.findByText('컴퓨터 네트워크')).toBeInTheDocument()
+    expect(screen.getByText('NETWRK')).toBeInTheDocument()
+  })
+
+  it('hides cached Course data when a dashboard list reports an expired session', async () => {
+    let expired = false
+    server.use(
+      http.get('*/api/v1/me', () =>
+        expired
+          ? HttpResponse.json(
+              {
+                error: {
+                  code: 'AUTHENTICATION_REQUIRED',
+                  message: '로그인이 필요합니다.',
+                  request_id: 'req_expired_me',
+                  details: null,
+                },
+              },
+              { status: 401 },
+            )
+          : HttpResponse.json(user),
+      ),
+      http.get('*/api/v1/courses', () => {
+        expired = true
+        return HttpResponse.json(
+          {
+            error: {
+              code: 'AUTHENTICATION_REQUIRED',
+              message: '로그인이 필요합니다.',
+              request_id: 'req_expired_courses',
+              details: null,
+            },
+          },
+          { status: 401 },
+        )
+      }),
+    )
+    renderAt('/')
+
+    expect(
+      await screen.findByRole('heading', {
+        name: '강의의 흐름을 놓치지 않도록',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('ABCXYZ')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: '로그인하고 시작하기' }),
+    ).toHaveAttribute('href', '/login?return_to=/')
   })
 
   it('does not render professor controls anywhere in a student Course DOM', async () => {
