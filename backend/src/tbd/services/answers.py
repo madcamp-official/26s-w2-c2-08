@@ -321,7 +321,10 @@ class AnswerService:
         answer.start_segment_id = start.id
         answer.end_segment_id = end.id
         answer.status = "COMPLETED"
-        answer.completed_at = now or datetime.now(UTC)
+        completed_at = now or datetime.now(UTC)
+        if completed_at < answer.started_at:
+            completed_at = answer.started_at
+        answer.completed_at = completed_at
         answer.version += 1
         target, _ = await self._lock_answer_target(session, answer)
         target.status = "ANSWERED"

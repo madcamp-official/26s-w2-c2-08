@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -78,6 +79,23 @@ async def _add_final_segment(database_url: str, session_id: str) -> None:
                     )
                 )
                 version.last_sequence = 1
+    finally:
+        await database.dispose()
+
+
+async def _move_answer_start_forward(database_url: str, answer_id: str) -> datetime:
+    database = create_database(_settings(database_url))
+    try:
+        async with database.engine.begin() as connection:
+            started_at = await connection.scalar(
+                text(
+                    "UPDATE answers SET started_at = started_at + :offset "
+                    "WHERE id = :answer_id RETURNING started_at"
+                ),
+                {"answer_id": UUID(answer_id), "offset": timedelta(seconds=1)},
+            )
+            assert isinstance(started_at, datetime)
+            return started_at
     finally:
         await database.dispose()
 
@@ -227,6 +245,9 @@ def test_answer_capture_completion_cancellation_and_record_text_conflict(
             assert client.get(f"/api/v1/sessions/{session_id}").json()["status"] == "LIVE"
 
             asyncio.run(_add_final_segment(migrated_database_url, session_id))
+            started_at = asyncio.run(
+                _move_answer_start_forward(migrated_database_url, voice.json()["id"])
+            )
             completed = client.post(
                 f"/api/v1/answers/{voice.json()['id']}/complete",
                 headers={**TRUSTED_ORIGIN, "Idempotency-Key": "answer-complete-001"},
@@ -241,6 +262,7 @@ def test_answer_capture_completion_cancellation_and_record_text_conflict(
             assert completed.json()["status"] == "COMPLETED"
             assert completed.json()["start_sequence"] == 1
             assert completed.json()["end_sequence"] == 1
+            assert datetime.fromisoformat(completed.json()["completed_at"]) >= started_at
 
             cancelling = client.post(
                 f"/api/v1/sessions/{session_id}/answers",
