@@ -1101,7 +1101,8 @@
 
 .dashboard-page,
 .course-detail-page,
-.course-form-page {
+.course-form-page,
+.course-onboarding-page {
   display: grid;
   gap: var(--space-8);
 }
@@ -1233,6 +1234,262 @@
 .course-form-page {
   width: min(820px, 100%);
   margin-inline: auto;
+}
+
+.course-onboarding-page {
+  width: min(1060px, 100%);
+  margin-inline: auto;
+}
+
+.course-onboarding-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.course-onboarding-form {
+  display: grid;
+  min-width: 0;
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  gap: var(--space-6);
+}
+
+.course-onboarding-form__header {
+  display: grid;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.course-onboarding-form__header h2,
+.course-onboarding-form__header p,
+.course-onboarding-guide h2,
+.course-onboarding-guide p,
+.course-flow-result h1,
+.course-flow-result p {
+  margin: 0;
+}
+
+.course-onboarding-form__header h2 {
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1.3;
+  letter-spacing: -0.035em;
+}
+
+.course-onboarding-form__header p,
+.course-onboarding-form__footer > p,
+.course-onboarding-guide p,
+.course-flow-result__copy p {
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.course-onboarding-fields {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.course-code-field input {
+  min-height: 64px;
+  padding-inline: var(--space-4);
+  color: var(--color-brand-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(24px, 4vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.course-code-field input::placeholder {
+  color: var(--color-line-strong);
+}
+
+.course-onboarding-form__footer {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-line);
+}
+
+.course-onboarding-form__footer > p {
+  max-width: 300px;
+  margin: 0;
+}
+
+.course-form-alert {
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 24%, white);
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.course-form-alert strong,
+.course-form-alert p {
+  margin: 0;
+}
+
+.course-form-alert p {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.course-onboarding-guide {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.course-onboarding-guide .ui-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.course-onboarding-guide h2 {
+  font-size: 19px;
+  letter-spacing: -0.025em;
+}
+
+.course-onboarding-steps {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.course-onboarding-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.course-onboarding-steps li > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-brand) 24%, white);
+  border-radius: 50%;
+  color: var(--color-brand);
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--color-brand-soft);
+}
+
+.course-onboarding-note {
+  border-color: color-mix(in srgb, var(--color-info) 22%, white);
+  background: var(--color-info-soft);
+}
+
+.course-onboarding-note strong {
+  color: var(--color-accent-ink);
+  font-size: 13px;
+}
+
+.course-flow-result {
+  display: grid;
+  width: min(760px, 100%);
+  margin-inline: auto;
+  padding: clamp(24px, 4vw, 40px);
+  gap: var(--space-6);
+}
+
+.course-flow-result__copy {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.course-flow-result h1 {
+  font-size: clamp(30px, 5vw, 42px);
+  line-height: 1.16;
+  letter-spacing: -0.045em;
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
+}
+
+.course-flow-result h1:focus {
+  outline: none;
+}
+
+.course-flow-result__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-line);
+  gap: 1px;
+}
+
+.course-flow-result__summary div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.course-flow-result__summary dt {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-flow-result__summary dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.course-created-code {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 22%, white);
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-soft);
+}
+
+.course-created-code > div {
+  display: grid;
+  gap: 5px;
+}
+
+.course-created-code span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.course-created-code strong {
+  color: var(--color-brand-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(26px, 5vw, 34px);
+  letter-spacing: 0.16em;
+}
+
+.course-created-code p {
+  color: var(--color-danger);
+}
+
+.course-flow-result__actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .course-form {
@@ -2592,9 +2849,14 @@
   .foundation-grid,
   .auth-grid,
   .account-layout,
-  .course-detail-grid {
+  .course-detail-grid,
+  .course-onboarding-layout {
     grid-template-columns: 1fr;
     align-content: center;
+  }
+
+  .course-onboarding-guide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .course-grid {
@@ -2680,9 +2942,25 @@
   .dashboard-hero,
   .course-detail-hero,
   .dashboard-actions,
-  .form-actions {
+  .form-actions,
+  .course-onboarding-form__footer,
+  .course-created-code,
+  .course-flow-result__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .course-onboarding-guide,
+  .course-flow-result__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .course-onboarding-form__footer > p {
+    max-width: none;
+  }
+
+  .course-created-code strong {
+    overflow-wrap: anywhere;
   }
 
   .course-grid {

@@ -364,8 +364,8 @@ describe('Course role flows', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Course 만들기' }))
     expect(
-      await screen.findByText('이 Course의 유일한 교수자 owner입니다.', {
-        exact: false,
+      await screen.findByRole('heading', {
+        name: '알고리즘 Course를 만들었습니다',
       }),
     ).toBeInTheDocument()
 

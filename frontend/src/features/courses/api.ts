@@ -5,18 +5,11 @@ import { apiErrorFromResponse, normalizeApiError } from '../../api/errors'
 export type Course = components['schemas']['Course']
 export type CourseRoleFilter = components['schemas']['CourseRoleFilter']
 export type CourseCreateInput = components['schemas']['CourseCreateRequest']
+export type CourseJoinInput = components['schemas']['CourseJoinRequest']
 export type LectureSession = components['schemas']['LectureSession']
 export type LectureSessionStatus = components['schemas']['LectureSessionStatus']
 export type LectureSessionCreateInput =
   components['schemas']['LectureSessionCreateRequest']
-
-export interface CourseJoinInput {
-  join_code: string
-}
-
-function idempotencyHeaders(key?: string) {
-  return key ? { 'Idempotency-Key': key } : undefined
-}
 
 export async function listCourses(
   role: CourseRoleFilter,
@@ -64,7 +57,7 @@ export async function createCourse(
   try {
     const { data, error, response } = await apiClient.POST('/api/v1/courses', {
       body: input,
-      headers: idempotencyHeaders(idempotencyKey),
+      params: { header: { 'Idempotency-Key': idempotencyKey } },
     })
     if (error) throw apiErrorFromResponse(response, error)
     return data
@@ -82,7 +75,7 @@ export async function joinCourse(
       '/api/v1/courses/join',
       {
         body: input,
-        headers: idempotencyHeaders(idempotencyKey),
+        params: { header: { 'Idempotency-Key': idempotencyKey } },
       },
     )
     if (error) throw apiErrorFromResponse(response, error)
