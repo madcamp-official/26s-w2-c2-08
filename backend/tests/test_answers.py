@@ -2,7 +2,7 @@
 
 import asyncio
 import base64
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -175,7 +175,9 @@ def test_answer_capture_completion_cancellation_and_record_text_conflict(
             worker = QuestionClusteringWorker(
                 database.session_factory, FakeQuestionClusteringProvider()
             )
-            assert asyncio.run(worker.run_once()) is True
+            assert (
+                asyncio.run(worker.run_once(now=datetime.now(UTC) + timedelta(seconds=6))) is True
+            )
             clusters = client.get(f"/api/v1/sessions/{session_id}/question-clusters")
             assert clusters.status_code == 200
             representative = clusters.json()["items"][0]["representative_question"]
