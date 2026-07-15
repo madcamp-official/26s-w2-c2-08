@@ -22,7 +22,8 @@
     "test:watch": "vitest",
     "visual:install": "playwright install chromium",
     "visual:test": "playwright test",
-    "visual:foundation": "playwright test e2e/foundation.visual.spec.ts"
+    "visual:foundation": "playwright test e2e/foundation.visual.spec.ts",
+    "visual:prototypes": "playwright test --config playwright.prototypes.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-kr": "^5.2.10",

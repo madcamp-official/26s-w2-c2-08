@@ -145,7 +145,7 @@ PROCESSING Prototype은 `/record` 본문에 큰 배열을 embed하지 않고 cou
 
 ## 완료 기록 정책 검토 경로
 
-교수자와 학생은 같은 manifest·녹음 player·canonical Transcript·질문 마인드맵·Answer·개인 REVIEW Chat 구조를 사용한다. 녹음 역할별 접근은 미정이므로 기본 상태는 `checking`이며 `playback=ready`는 허용 정책이 아니라 상호작용 검토 fixture다.
+교수자와 학생은 같은 manifest·녹음 player·canonical Transcript·질문 마인드맵·Answer·개인 REVIEW Chat 구조를 사용한다. 현재 Course 멤버는 playback할 수 있지만 재생 시작과 Transcript seek마다 인증·Course 멤버십을 다시 확인하므로 기본 fixture는 `checking`이다. `playback=ready|forbidden`은 이 요청별 허용·거부 상호작용을 검토한다.
 
 | 검토 항목                                 | 교수자 경로                                                                                                                                                                                                                                                                       | 학생 경로                                                                                                                                                                                                                                                                   |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -163,7 +163,7 @@ PROCESSING Prototype은 `/record` 본문에 큰 배열을 embed하지 않고 cou
 
 Evidence의 공개 `source_kind`는 `MATERIAL|TRANSCRIPT|QUESTION|ANSWER`만 사용한다. `TRANSCRIPT` link는 Session·Transcript version·stable sequence 범위에 고정하고 `QUESTION` link는 학생 질문 또는 AI 대표질문 단건 경로를 사용한다. 안전한 `label`을 유지하되 `link=null`은 비활성화한다. Final Cluster member는 `source_kind=STUDENT_QUESTION|AI_REPRESENTATIVE`로 구분한다.
 
-Transcript seek는 player와 독립된 `idle → seeking → active|seek-error` 상태이며 `active`가 되어도 사용자가 재생을 선택하기 전에는 player를 재생 중으로 바꾸지 않는다. 실패한 `RECORDING_TRANSCRIPTION`은 문서화된 system-orchestrated recovery만 표시하고 교수자 public retry control을 제공하지 않는다. 학생 DOM에는 제목·class 삭제, Material 추가·삭제, text Answer, shared Job retry control이 없다.
+Transcript seek는 player와 독립된 `idle → seeking → active|seek-error` 상태이며 `active`가 되어도 사용자가 재생을 선택하기 전에는 player를 재생 중으로 바꾸지 않는다. 실패한 `RECORDING_TRANSCRIPTION`은 별도 HQ 전용 endpoint가 아니라 교수자 공용 Job 목록의 generic retry control로 같은 Job·다음 attempt를 재시도한다. 교수자 Prototype은 inline text Answer 작성·수정·철회와 완료 녹음 조기 삭제를 제공한다. 학생 DOM에는 제목·class 삭제, Material 추가·삭제, 완료 녹음 조기 삭제, text Answer, shared Job retry control이 없다.
 
 ## 프로토타입과 실제 구현의 경계
 

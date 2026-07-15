@@ -5,7 +5,8 @@
 bundle에는 fixture, scenario query 또는 demo 분기를 추가하지 않는다.
 
 - 로컬 브라우저 설치: `pnpm visual:install`
-- 7개 기반 화면 × 3 viewport: `pnpm visual:foundation`
+- 15개 화면 계약을 포함한 production route 시나리오 × 3 viewport: `pnpm visual:foundation`
+- 완료 화면 정적 Prototype·상태 전환 × 3 viewport: `pnpm visual:prototypes`
 - 전체 visual suite: `pnpm visual:test`
 
 각 scenario는 화면 heading, 실제 사용한 HTTP 계약, 미등록 요청, browser error,

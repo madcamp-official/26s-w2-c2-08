@@ -7,12 +7,13 @@
     <link rel="stylesheet" href="assets/css/tokens.css" />
     <link rel="stylesheet" href="assets/css/base.css" />
     <link rel="stylesheet" href="assets/css/components.css" />
+    <link rel="stylesheet" href="assets/css/ended-class.css" />
     <script type="module" src="assets/js/class-ended-student.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
     <div class="prototype-bar">
-      Static prototype · 녹음 접근 정책은 미정 ·
+      Static prototype · 현재 Course 멤버 playback · 요청마다 권한 확인 ·
       <a href="?playback=checking">권한 확인</a> ·
       <a href="?playback=ready">재생 허용 fixture</a> ·
       <a href="?playback=forbidden">녹음만 거부</a>
@@ -33,7 +34,7 @@
       </div>
     </header>
 
-    <main class="container page-main" id="mainContent">
+    <main class="container page-main ended-class-page" id="mainContent">
       <header class="record-header">
         <div>
           <p class="eyebrow">ENDED_CLASS_PAGE_STUD · COMPLETED</p>
@@ -56,6 +57,40 @@
         >
       </header>
 
+      <section class="review-hero" aria-labelledby="studentReviewHeroTitle">
+        <div class="review-hero__intro">
+          <span class="review-hero__icon" aria-hidden="true">✓</span>
+          <div>
+            <p class="eyebrow">Review workspace</p>
+            <h2 id="studentReviewHeroTitle">
+              복습할 수업 기록이 준비되었습니다
+            </h2>
+            <p class="review-hero__description">
+              최종 Transcript와 질문·답변·요약을 영역별로 불러옵니다. 한 영역의
+              문제는 준비된 다른 기록과 복습 AI를 가리지 않습니다.
+            </p>
+          </div>
+        </div>
+        <dl class="review-hero__timeline">
+          <div>
+            <dt>수업 날짜</dt>
+            <dd>2026년 7월 12일</dd>
+          </div>
+          <div>
+            <dt>시작</dt>
+            <dd>2026. 7. 12. 오후 2:00</dd>
+          </div>
+          <div>
+            <dt>종료</dt>
+            <dd>2026. 7. 12. 오후 3:03</dd>
+          </div>
+          <div>
+            <dt>기록 확정</dt>
+            <dd>2026. 7. 12. 오후 3:03</dd>
+          </div>
+        </dl>
+      </section>
+
       <nav class="record-toc" aria-label="완료 기록 목차">
         <a href="#studentMaterialsTitle">강의자료</a>
         <a href="#studentRecordingTitle">녹음</a>
@@ -64,6 +99,7 @@
         <a href="#studentQuestionsTitle">질문</a>
         <a href="#studentClustersTitle">마인드맵</a>
         <a href="#studentAnswersTitle">답변</a>
+        <a href="#studentJobsTitle">작업 상태</a>
         <a href="#studentReviewTitle">복습 AI</a>
       </nav>
 
@@ -175,8 +211,8 @@
                   <div>
                     <h2 id="studentRecordingTitle">수업 녹음</h2>
                     <p>
-                      학생 접근 허용 여부는 미정이며 실제 재생마다 현재 권한을
-                      확인합니다.
+                      현재 Course 멤버는 재생할 수 있으며 재생과 Transcript
+                      seek마다 현재 인증·멤버십을 다시 확인합니다.
                     </p>
                   </div>
                   <span class="record-region-status">다운로드 없음</span>
@@ -969,8 +1005,8 @@
                         <span data-recording-job-status>SUCCEEDED</span>
                       </h3>
                       <p data-recording-job-meta>
-                        attempt 1 · blocks_session_completion=true · public
-                        retry control 없음
+                        attempt 1 · 실패 시 Course 교수자만 공용 Job 목록에서
+                        재시도
                       </p>
                     </div>
                   </li>
