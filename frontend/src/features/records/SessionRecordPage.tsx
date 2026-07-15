@@ -28,7 +28,7 @@ import {
   listFinalSummaries,
   type SessionRecord,
 } from './api'
-import { FinalQuestionMindmap } from './FinalQuestionMindmap'
+import { FinalQuestionClusterList } from './FinalQuestionClusterList'
 import {
   RecordAnswerPanel,
   type TranscriptFocusTarget,
@@ -956,7 +956,7 @@ export function SessionRecordPage({
           sessionId={data.session.id}
           sessionStatus={status}
         />
-        <FinalQuestionMindmap
+        <FinalQuestionClusterList
           sessionId={data.session.id}
           sessionStatus={status}
         />

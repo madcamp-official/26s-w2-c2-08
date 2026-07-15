@@ -696,7 +696,7 @@
             >
               <header class="live-panel__header">
                 <div>
-                  <h2 id="questionsTitle">질문 마인드맵</h2>
+                  <h2 id="questionsTitle">질문 목록</h2>
                   <p>질문 commit이 자동으로 다음 클러스터링을 예약합니다.</p>
                 </div>
               </header>
@@ -971,15 +971,15 @@
                   </p>
                   <ul>
                     <li
-                      class="live-mindmap__node"
-                      data-node-kind="student-question"
+                      class="question-cluster-list__item"
+                      data-member-kind="student-question"
                       data-answer-target
                       data-answer-target-kind="question"
                       data-answer-target-id="question-105"
                       data-answer-target-status="open"
                       data-question-id="question-105"
                     >
-                      <div class="live-node-meta">
+                      <div class="question-cluster-list__meta">
                         <span>STUDENT_QUESTION · UNCLUSTERED</span
                         ><span data-answer-status-label>OPEN</span
                         ><span>궁금해요 3</span>
@@ -996,15 +996,15 @@
                       </button>
                     </li>
                     <li
-                      class="live-mindmap__node"
-                      data-node-kind="student-question"
+                      class="question-cluster-list__item"
+                      data-member-kind="student-question"
                       data-answer-target
                       data-answer-target-kind="question"
                       data-answer-target-id="question-106"
                       data-answer-target-status="open"
                       data-question-id="question-106"
                     >
-                      <div class="live-node-meta">
+                      <div class="question-cluster-list__meta">
                         <span>STUDENT_QUESTION · UNCLUSTERED</span
                         ><span data-answer-status-label>OPEN</span
                         ><span>궁금해요 1</span>
@@ -1024,12 +1024,12 @@
                 </section>
 
                 <div
-                  class="live-mindmap"
+                  class="question-cluster-list"
                   role="group"
                   aria-labelledby="questionsTitle"
                 >
                   <article
-                    class="live-mindmap__center"
+                    class="question-cluster-list__representative"
                     data-answer-target
                     data-answer-target-kind="representative"
                     data-answer-target-id="rep-7-12"
@@ -1051,16 +1051,16 @@
                       이 대표질문 답변
                     </button>
                   </article>
-                  <ul class="live-mindmap__branches">
+                  <ul class="question-cluster-list__members">
                     <li
-                      class="live-mindmap__node"
-                      data-node-kind="student-question"
+                      class="question-cluster-list__item"
+                      data-member-kind="student-question"
                       data-answer-target
                       data-answer-target-kind="question"
                       data-answer-target-id="question-103"
                       data-answer-target-status="open"
                     >
-                      <div class="live-node-meta">
+                      <div class="question-cluster-list__meta">
                         <span>STUDENT_QUESTION</span
                         ><span data-answer-status-label>OPEN</span
                         ><span>궁금해요 9</span>
@@ -1077,14 +1077,14 @@
                       </button>
                     </li>
                     <li
-                      class="live-mindmap__node"
-                      data-node-kind="student-question"
+                      class="question-cluster-list__item"
+                      data-member-kind="student-question"
                       data-answer-target
                       data-answer-target-kind="question"
                       data-answer-target-id="question-104"
                       data-answer-target-status="open"
                     >
-                      <div class="live-node-meta">
+                      <div class="question-cluster-list__meta">
                         <span>STUDENT_QUESTION</span
                         ><span data-answer-status-label>OPEN</span
                         ><span>궁금해요 5</span>
@@ -1101,11 +1101,11 @@
                       </button>
                     </li>
                     <li
-                      class="live-mindmap__node"
-                      data-node-kind="representative-preserved"
+                      class="question-cluster-list__item"
+                      data-member-kind="representative-preserved"
                       data-answer-target-status="answered"
                     >
-                      <div class="live-node-meta">
+                      <div class="question-cluster-list__meta">
                         <span
                           >source_kind=AI_REPRESENTATIVE ·
                           created_in_generation=6 · PRESERVED</span

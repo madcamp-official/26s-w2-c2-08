@@ -7,7 +7,7 @@ import { listQuestionClusterMembers, listQuestionClusters } from './api'
 import { questionKeys } from './queries'
 import type { AnswerTarget } from '../answers/api'
 
-interface QuestionMindmapProps {
+interface QuestionClusterListProps {
   sessionId: string
   scope?: 'CURRENT' | 'FINAL'
   onStartVoiceAnswer?: (target: AnswerTarget) => void
@@ -25,12 +25,12 @@ function clusteringStatus(
   return '현재 질문 분류 결과'
 }
 
-export function QuestionMindmap({
+export function QuestionClusterList({
   sessionId,
   scope = 'CURRENT',
   onStartVoiceAnswer,
   answerCapturePending = false,
-}: QuestionMindmapProps) {
+}: QuestionClusterListProps) {
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
     null,
   )
@@ -50,34 +50,35 @@ export function QuestionMindmap({
   })
 
   if (clusters.isPending) {
-    return <StatePanel kind="loading" title="질문 마인드맵을 불러오는 중" />
+    return <StatePanel kind="loading" title="질문 목록을 불러오는 중" />
   }
   if (clusters.isError) {
-    return (
-      <StatePanel kind="error" title="질문 마인드맵을 불러오지 못했습니다" />
-    )
+    return <StatePanel kind="error" title="질문 목록을 불러오지 못했습니다" />
   }
 
   const state = clusters.data.clustering_state
   return (
-    <section className="panel question-mindmap" aria-labelledby="mindmap-title">
+    <section
+      className="panel question-cluster-list"
+      aria-labelledby="question-cluster-list-title"
+    >
       <header className="question-panel__heading">
         <div>
           <p className="eyebrow">
-            {scope === 'FINAL' ? 'Final question map' : 'Question map'}
+            {scope === 'FINAL' ? 'Final question list' : 'Question list'}
           </p>
-          <h2 id="mindmap-title">
-            {scope === 'FINAL' ? '최종 질문 마인드맵' : '질문 마인드맵'}
+          <h2 id="question-cluster-list-title">
+            {scope === 'FINAL' ? '최종 질문 목록' : '질문 목록'}
           </h2>
           <p>
-            AI 대표질문을 중심으로 익명 질문을 묶어 보여줍니다. 질문 원문은 별도
-            목록에서도 그대로 확인할 수 있습니다.
+            비슷한 익명 질문을 Cluster별로 묶고, 대표질문과 포함된 질문을
+            목록으로 보여줍니다.
           </p>
         </div>
         <span className="input-hint">{clusteringStatus(state)}</span>
       </header>
 
-      <p className="question-mindmap__meta" aria-live="polite">
+      <p className="question-cluster-list__meta" aria-live="polite">
         generation {clusters.data.generation ?? '-'} · revision{' '}
         {state.current_revision}
         {state.last_job &&
@@ -91,13 +92,13 @@ export function QuestionMindmap({
           description={
             state.pending
               ? '질문 저장은 완료되었습니다. 분류 결과가 준비되면 자동으로 표시됩니다.'
-              : '수업 중 질문이 등록되면 AI가 마인드맵을 만듭니다.'
+              : '수업 중 질문이 등록되면 AI가 비슷한 질문끼리 묶어 보여줍니다.'
           }
         />
       ) : (
-        <div className="question-mindmap__content">
+        <div className="question-cluster-list__content">
           <ol
-            className="question-mindmap__clusters"
+            className="question-cluster-list__clusters"
             aria-label="AI 대표질문 목록"
           >
             {clusters.data.items.map((cluster) => (
@@ -130,13 +131,17 @@ export function QuestionMindmap({
               </li>
             ))}
           </ol>
-          <div className="question-mindmap__members" aria-live="polite">
+          <div
+            className="question-cluster-list__members"
+            aria-label="선택한 Cluster의 질문 목록"
+            aria-live="polite"
+          >
             {members.isPending && <p>질문 연결을 불러오는 중…</p>}
             {members.isError && (
               <p className="form-error">질문 연결을 불러오지 못했습니다.</p>
             )}
             {members.data && (
-              <ol aria-label="선택한 대표질문의 연결 질문">
+              <ol aria-label="선택한 Cluster에 포함된 질문">
                 {members.data.items.map((member) => (
                   <li key={`${member.source_kind}-${member.ordinal}`}>
                     {member.source_kind === 'STUDENT_QUESTION' ? (
