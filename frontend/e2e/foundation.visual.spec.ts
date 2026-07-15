@@ -207,7 +207,6 @@ const scenarios: FoundationScenario[] = [
     path: `/sessions/${processingStudentSession.id}`,
     auth: 'signed-in',
     heading: processingStudentSession.title,
-    checkpoint: { level: 2, name: '수업 후처리 작업' },
     realtime: true,
     requiredRequests: [
       'GET /api/v1/me',
@@ -219,7 +218,6 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/sessions/${processingStudentSession.id}/questions?sort=RECENT&limit=20`,
       `GET /api/v1/sessions/${processingStudentSession.id}/question-clusters?scope=FINAL&limit=20`,
       `GET /api/v1/sessions/${processingStudentSession.id}/answers?limit=20`,
-      `GET /api/v1/sessions/${processingStudentSession.id}/jobs?limit=20`,
       'POST /api/v1/realtime-tickets',
     ],
   },
@@ -265,7 +263,6 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/sessions/${studentEndedSession.id}/questions?sort=RECENT&limit=20`,
       `GET /api/v1/sessions/${studentEndedSession.id}/question-clusters?scope=FINAL&limit=20`,
       `GET /api/v1/sessions/${studentEndedSession.id}/answers?limit=20`,
-      `GET /api/v1/sessions/${studentEndedSession.id}/jobs?limit=20`,
       `GET /api/v1/sessions/${studentEndedSession.id}/chats?limit=20`,
     ],
   },
