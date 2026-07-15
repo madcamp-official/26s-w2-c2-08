@@ -215,6 +215,17 @@ def test_answer_capture_completion_cancellation_and_record_text_conflict(
             assert another_capture.status_code == 409
             assert another_capture.json()["error"]["code"] == "ANSWER_CAPTURE_ACTIVE"
 
+            blocked_end = client.post(
+                f"/api/v1/sessions/{session_id}/end",
+                headers={
+                    **TRUSTED_ORIGIN,
+                    "Idempotency-Key": "answer-capture-blocks-end-001",
+                },
+            )
+            assert blocked_end.status_code == 409
+            assert blocked_end.json()["error"]["code"] == "ANSWER_CAPTURE_ACTIVE"
+            assert client.get(f"/api/v1/sessions/{session_id}").json()["status"] == "LIVE"
+
             asyncio.run(_add_final_segment(migrated_database_url, session_id))
             completed = client.post(
                 f"/api/v1/answers/{voice.json()['id']}/complete",

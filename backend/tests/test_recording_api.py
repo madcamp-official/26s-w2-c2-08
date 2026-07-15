@@ -141,6 +141,32 @@ async def _expire_upload(database_url: str, tmp_path: Path, upload_id: UUID) -> 
         await database.dispose()
 
 
+async def _mark_recording_failed_for_completed_retry(
+    database_url: str, tmp_path: Path, session_id: UUID
+) -> None:
+    database = create_database(_settings(database_url, tmp_path))
+    try:
+        async with database.session_factory() as session:
+            async with session.begin():
+                recording = await session.scalar(
+                    select(SessionRecording)
+                    .where(SessionRecording.session_id == session_id)
+                    .with_for_update()
+                )
+                assert recording is not None
+                recording.status = "FAILED"
+                recording.content_type = None
+                recording.byte_size = None
+                recording.duration_ms = None
+                recording.storage_key = None
+                recording.uploaded_at = None
+                recording.retention_expires_at = None
+                recording.failed_at = datetime.now(UTC)
+                recording.version += 1
+    finally:
+        await database.dispose()
+
+
 async def _recording_orphans(
     database_url: str, tmp_path: Path, storage: Storage
 ) -> tuple[StorageKey, ...]:
@@ -217,6 +243,20 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
             socket.send_json(_audio_start("recording-publisher-tab"))
             assert socket.receive_json()["type"] == "audio.ready"
 
+        create_payload = {
+            "client_stream_id": "recording-publisher-tab",
+            "content_type": "audio/webm;codecs=opus",
+            "total_bytes": len(recording_bytes),
+            "duration_ms": 500,
+        }
+        capturing_upload = client.post(
+            f"/api/v1/sessions/{session_id}/recording/uploads",
+            headers={**TRUSTED_ORIGIN, "Idempotency-Key": "recording-upload-capturing"},
+            json=create_payload,
+        )
+        assert capturing_upload.status_code == 409
+        assert capturing_upload.json()["error"]["code"] == "RECORDING_STATE_CONFLICT"
+
         assert (
             client.post(
                 f"/api/v1/sessions/{session_id}/end",
@@ -229,12 +269,6 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
         assert metadata.json()["status"] == "UPLOAD_PENDING"
         assert "storage_key" not in metadata.json()
 
-        create_payload = {
-            "client_stream_id": "recording-publisher-tab",
-            "content_type": "audio/webm;codecs=opus",
-            "total_bytes": len(recording_bytes),
-            "duration_ms": 500,
-        }
         created = client.post(
             f"/api/v1/sessions/{session_id}/recording/uploads",
             headers={**TRUSTED_ORIGIN, "Idempotency-Key": "recording-upload-create"},
@@ -294,6 +328,14 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
         assert complete.json()["transcript_version"]["source"] == "RECORDING"
         assert complete.json()["job"]["job_type"] == "RECORDING_TRANSCRIPTION"
         assert complete.json()["job"]["blocks_session_completion"] is True
+
+        uploaded_retry = client.post(
+            f"/api/v1/sessions/{session_id}/recording/uploads",
+            headers={**TRUSTED_ORIGIN, "Idempotency-Key": "recording-upload-after-uploaded"},
+            json=create_payload,
+        )
+        assert uploaded_retry.status_code == 409
+        assert uploaded_retry.json()["error"]["code"] == "RECORDING_STATE_CONFLICT"
 
         orphan = StorageKey.new(StorageNamespace.TEMPORARY)
         asyncio.run(storage.create_temporary(orphan))
@@ -387,6 +429,27 @@ def test_recording_upload_replays_completion_and_proxies_member_playback(
     assert summary_job.status == "SUCCEEDED"
     assert summary.summary_type == "FINAL"
     assert summary.source_transcript_version_id == processed_version.id
+
+    asyncio.run(
+        _mark_recording_failed_for_completed_retry(
+            migrated_database_url, tmp_path, UUID(session_id)
+        )
+    )
+    current_user["id"] = professor_id
+    with TestClient(app) as client:
+        recovered_upload = client.post(
+            f"/api/v1/sessions/{session_id}/recording/uploads",
+            headers={
+                **TRUSTED_ORIGIN,
+                "Idempotency-Key": "recording-upload-completed-failed-retry",
+            },
+            json=create_payload,
+        )
+        assert recovered_upload.status_code == 201, recovered_upload.text
+        assert recovered_upload.json()["offset_bytes"] == 0
+        assert (
+            client.get(f"/api/v1/sessions/{session_id}/recording").json()["status"] == "UPLOADING"
+        )
     asyncio.run(database.dispose())
 
 

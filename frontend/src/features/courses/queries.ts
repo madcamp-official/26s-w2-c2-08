@@ -18,7 +18,11 @@ export const courseKeys = {
 export function sessionNeedsStatusPolling(
   session: Pick<LectureSession, 'status'> | undefined,
 ) {
-  return session?.status === 'READY'
+  return (
+    session?.status === 'READY' ||
+    session?.status === 'LIVE' ||
+    session?.status === 'PROCESSING'
+  )
 }
 
 export function courseSessionsQueryOptions(courseId: string) {
@@ -48,6 +52,8 @@ export function sessionQueryOptions(sessionId: string) {
     queryFn: ({ signal }) => getSession(sessionId, signal),
     refetchInterval: (query) =>
       sessionNeedsStatusPolling(query.state.data) ? 5_000 : false,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   })
 }
 

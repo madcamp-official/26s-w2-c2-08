@@ -8,11 +8,15 @@ import { StatePanel } from '../../components/feedback/StatePanel'
 import { useToast } from '../../components/feedback/toast-context'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
-import { createVoiceAnswer, type AnswerTarget } from '../answers/api'
+import {
+  createVoiceAnswer,
+  type AnswerListResponse,
+  type AnswerTarget,
+} from '../answers/api'
 import { answerKeys } from '../answers/queries'
 import { AuthenticationExpiredRedirect } from '../auth/AuthenticationExpiredRedirect'
-import { MaterialPanel } from '../materials/MaterialPanel'
 import { questionKeys } from '../questions/queries'
+import { purgeLivePersonalAiClientState } from '../personal-ai/client-state'
 import { deleteSession, endSession, updateSessionTitle } from './api'
 import {
   courseDetailQueryOptions,
@@ -20,7 +24,11 @@ import {
   sessionQueryOptions,
 } from './queries'
 import { useSessionRealtime } from '../realtime/useSessionRealtime'
-import { LiveClassRoom } from '../live/LiveClassRoom'
+import {
+  ProfessorLiveClassView,
+  StudentLiveClassView,
+} from '../live/LiveClassRoom'
+import { clearAudioPublisherClientState } from '../live/audio-publisher'
 import { LocalRecordingPanel } from '../recordings/LocalRecordingPanel'
 import { SessionRecordPage } from '../records/SessionRecordPage'
 import { ReadyClassView } from './ReadyClassView'
@@ -49,6 +57,10 @@ function statusCopy(status: string) {
 
 export function SessionDetailPage() {
   const { sessionId = '' } = useParams()
+  return <SessionDetailContent key={sessionId} sessionId={sessionId} />
+}
+
+function SessionDetailContent({ sessionId }: { sessionId: string }) {
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -62,6 +74,10 @@ export function SessionDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const endKey = useRef<string | null>(null)
   const deleteKey = useRef<string | null>(null)
+  const startAnswerKey = useRef<{
+    target: string
+    key: string
+  } | null>(null)
 
   useSessionRealtime({
     sessionId,
@@ -83,8 +99,11 @@ export function SessionDetailPage() {
   }
 
   const rename = useMutation({
-    mutationFn: () =>
-      updateSessionTitle(sessionId, title ?? session.data?.title ?? ''),
+    mutationFn: (nextTitle?: string) =>
+      updateSessionTitle(
+        sessionId,
+        nextTitle ?? title ?? session.data?.title ?? '',
+      ),
     onSuccess: (updated) => {
       queryClient.setQueryData(courseKeys.session(sessionId), updated)
       setTitle(null)
@@ -96,12 +115,23 @@ export function SessionDetailPage() {
     mutationFn: () =>
       endSession(sessionId, (endKey.current ??= crypto.randomUUID())),
     onSuccess: (accepted) => {
+      endKey.current = null
+      clearAudioPublisherClientState(sessionId)
+      purgeLivePersonalAiClientState(queryClient, sessionId)
       queryClient.setQueryData(courseKeys.session(sessionId), accepted.session)
       refreshCourse()
       showToast({
         tone: 'success',
         message: '수업을 종료하고 기록 정리를 시작했습니다.',
       })
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'ANSWER_CAPTURE_ACTIVE') {
+        endKey.current = null
+        void queryClient.invalidateQueries({
+          queryKey: answerKeys.session(sessionId),
+        })
+      }
     },
   })
   const remove = useMutation({
@@ -119,9 +149,30 @@ export function SessionDetailPage() {
     },
   })
   const startAnswer = useMutation({
-    mutationFn: (target: AnswerTarget) =>
-      createVoiceAnswer(sessionId, target, crypto.randomUUID()),
-    onSuccess: () => {
+    mutationFn: (target: AnswerTarget) => {
+      const signature = JSON.stringify(target)
+      if (startAnswerKey.current?.target !== signature) {
+        startAnswerKey.current = {
+          target: signature,
+          key: crypto.randomUUID(),
+        }
+      }
+      return createVoiceAnswer(sessionId, target, startAnswerKey.current.key)
+    },
+    onSuccess: (created) => {
+      startAnswerKey.current = null
+      queryClient.setQueryData<AnswerListResponse>(
+        answerKeys.session(sessionId),
+        (current) => ({
+          items: current
+            ? [
+                ...current.items.filter((item) => item.id !== created.id),
+                created,
+              ]
+            : [created],
+          next_cursor: null,
+        }),
+      )
       void queryClient.invalidateQueries({
         queryKey: answerKeys.session(sessionId),
       })
@@ -131,6 +182,14 @@ export function SessionDetailPage() {
       showToast({
         tone: 'success',
         message: '음성 Answer 캡처를 시작했습니다.',
+      })
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({
+        queryKey: answerKeys.session(sessionId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: questionKeys.session(sessionId),
       })
     },
   })
@@ -223,9 +282,57 @@ export function SessionDetailPage() {
     )
   }
 
+  const professor = courseData.role === 'PROFESSOR'
+
+  if (data.status === 'LIVE') {
+    const common = {
+      session: data,
+      courseTitle: courseData.title,
+      refreshWarning: canonicalRefreshWarning,
+    }
+    if (!professor) return <StudentLiveClassView key={data.id} {...common} />
+    return (
+      <ProfessorLiveClassView
+        key={data.id}
+        {...common}
+        onStartVoiceAnswer={(target) => startAnswer.mutate(target)}
+        answerCapturePending={startAnswer.isPending}
+        answerCaptureError={
+          startAnswer.isError
+            ? startAnswer.error instanceof ApiError
+              ? startAnswer.error.message
+              : '음성 Answer 캡처를 시작하지 못했습니다.'
+            : null
+        }
+        onEnd={() => end.mutateAsync()}
+        resolveEndFailure={async () => {
+          const refreshed = await session.refetch()
+          if (refreshed.isError || !refreshed.data) return 'unknown'
+          return refreshed.data.status === 'LIVE' ? 'live' : 'ended'
+        }}
+        endPending={end.isPending}
+        endError={
+          end.isError
+            ? end.error instanceof ApiError
+              ? end.error.message
+              : '수업 상태를 변경하지 못했습니다.'
+            : null
+        }
+        onRename={(nextTitle) => rename.mutateAsync(nextTitle)}
+        renamePending={rename.isPending}
+        renameError={
+          rename.isError
+            ? rename.error instanceof ApiError
+              ? rename.error.message
+              : 'class 제목을 저장하지 못했습니다.'
+            : null
+        }
+      />
+    )
+  }
+
   const [statusTitle, statusDescription] = statusCopy(data.status)
   const canDelete = data.status === 'COMPLETED'
-  const professor = courseData.role === 'PROFESSOR'
   const isRecordView =
     data.status === 'PROCESSING' || data.status === 'COMPLETED'
 
@@ -282,7 +389,7 @@ export function SessionDetailPage() {
               <Button
                 variant="secondary"
                 disabled={rename.isPending}
-                onClick={() => rename.mutate()}
+                onClick={() => rename.mutate(title ?? data.title)}
               >
                 {rename.isPending ? '저장 중…' : '제목 저장'}
               </Button>
@@ -327,13 +434,6 @@ export function SessionDetailPage() {
           </p>
         )}
       </div>
-      {!isRecordView && (
-        <MaterialPanel
-          sessionId={data.id}
-          professor={professor}
-          sessionStatus={data.status}
-        />
-      )}
       {professor && data.status === 'PROCESSING' && (
         <LocalRecordingPanel
           sessionId={data.id}
@@ -342,25 +442,8 @@ export function SessionDetailPage() {
           sessionStatus="PROCESSING"
         />
       )}
-      {data.status === 'LIVE' && (
-        <LiveClassRoom
-          session={data}
-          professor={professor}
-          onStartVoiceAnswer={(target) => startAnswer.mutate(target)}
-          answerCapturePending={startAnswer.isPending}
-          onEnd={() => end.mutate()}
-          endPending={end.isPending}
-        />
-      )}
       {isRecordView && (
         <SessionRecordPage sessionId={data.id} professor={professor} />
-      )}
-      {startAnswer.isError && (
-        <p className="form-error" role="alert">
-          {startAnswer.error instanceof ApiError
-            ? startAnswer.error.message
-            : '음성 Answer 캡처를 시작하지 못했습니다.'}
-        </p>
       )}
       {professor && (
         <Dialog

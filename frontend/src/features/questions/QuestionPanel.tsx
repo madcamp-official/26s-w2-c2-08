@@ -3,7 +3,7 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ApiError } from '../../api/errors'
 import { StatePanel } from '../../components/feedback/StatePanel'
@@ -66,15 +66,17 @@ export function QuestionPanel({
   )
   const [draftHelpError, setDraftHelpError] = useState<string | null>(null)
   const [interactionError, setInteractionError] = useState<string | null>(null)
+  const [sort, setSort] = useState<'POPULAR' | 'RECENT'>('POPULAR')
+  const createRequest = useRef<{ content: string; key: string } | null>(null)
   const contentLength = normalizedLength(content)
   const draftLength = normalizedLength(draft)
   const questions = useInfiniteQuery({
-    queryKey: questionKeys.list(sessionId, 'POPULAR'),
+    queryKey: questionKeys.list(sessionId, sort),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam, signal }) =>
       listSessionQuestions({
         sessionId,
-        sort: 'POPULAR',
+        sort,
         cursor: pageParam,
         signal,
       }),
@@ -88,8 +90,18 @@ export function QuestionPanel({
   }
 
   const create = useMutation({
-    mutationFn: () => createQuestion(sessionId, content, crypto.randomUUID()),
+    mutationFn: () => {
+      const normalized = content.normalize('NFC')
+      if (createRequest.current?.content !== normalized) {
+        createRequest.current = {
+          content: normalized,
+          key: crypto.randomUUID(),
+        }
+      }
+      return createQuestion(sessionId, content, createRequest.current.key)
+    },
     onSuccess: () => {
+      createRequest.current = null
       setContent('')
       setInteractionError(null)
       refresh()
@@ -143,7 +155,22 @@ export function QuestionPanel({
             등록됩니다.
           </p>
         </div>
-        <span className="input-hint">공감 많은 순</span>
+        <div className="question-sort" aria-label="질문 정렬">
+          <Button
+            variant={sort === 'POPULAR' ? 'secondary' : 'ghost'}
+            aria-pressed={sort === 'POPULAR'}
+            onClick={() => setSort('POPULAR')}
+          >
+            공감 많은 순
+          </Button>
+          <Button
+            variant={sort === 'RECENT' ? 'secondary' : 'ghost'}
+            aria-pressed={sort === 'RECENT'}
+            onClick={() => setSort('RECENT')}
+          >
+            최신 순
+          </Button>
+        </div>
       </header>
 
       {student && (
@@ -232,7 +259,7 @@ export function QuestionPanel({
             <textarea
               id="question-content"
               value={content}
-              maxLength={MAX_QUESTION_LENGTH + 1}
+              disabled={create.isPending}
               onChange={(event) => setContent(event.target.value)}
               placeholder="지금 이해가 안 되는 내용을 남겨 보세요."
               rows={3}
@@ -282,7 +309,18 @@ export function QuestionPanel({
           <ol className="question-list" aria-label="수업 질문 목록">
             {items.map((question) => (
               <li key={question.id}>
-                <p>{question.content}</p>
+                <div className="question-list__copy">
+                  <span
+                    className={`status-chip status-chip--${question.status.toLowerCase()}`}
+                  >
+                    {question.status === 'OPEN'
+                      ? '질문'
+                      : question.status === 'SELECTED'
+                        ? '답변 중'
+                        : '답변 완료'}
+                  </span>
+                  <p>{question.content}</p>
+                </div>
                 <div className="question-list__meta">
                   <span>공감 {question.reaction_count}</span>
                   {student && (
@@ -297,20 +335,22 @@ export function QuestionPanel({
                       {question.reacted_by_me ? '공감 취소' : '나도 궁금해요'}
                     </Button>
                   )}
-                  {!student && onStartVoiceAnswer && (
-                    <Button
-                      variant="secondary"
-                      disabled={answerCapturePending}
-                      onClick={() =>
-                        onStartVoiceAnswer({
-                          type: 'STUDENT_QUESTION',
-                          question_id: question.id,
-                        })
-                      }
-                    >
-                      음성 답변 시작
-                    </Button>
-                  )}
+                  {!student &&
+                    onStartVoiceAnswer &&
+                    question.status === 'OPEN' && (
+                      <Button
+                        variant="secondary"
+                        disabled={answerCapturePending}
+                        onClick={() =>
+                          onStartVoiceAnswer({
+                            type: 'STUDENT_QUESTION',
+                            question_id: question.id,
+                          })
+                        }
+                      >
+                        음성 답변 시작
+                      </Button>
+                    )}
                 </div>
               </li>
             ))}

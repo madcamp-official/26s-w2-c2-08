@@ -5,6 +5,7 @@ import { courseKeys } from '../courses/queries'
 import { questionKeys } from '../questions/queries'
 import { answerKeys } from '../answers/queries'
 import { materialKeys } from '../materials/queries'
+import { applySessionUpdatedEvent } from './session-event'
 
 import { createRealtimeTicket } from './api'
 import {
@@ -68,6 +69,7 @@ export function useSessionRealtime({
           resume_cursor: resumeCursor,
         }),
       onEvent: (event) => {
+        applySessionUpdatedEvent(queryClient, sessionId, event)
         onEvent?.(event)
         // partial STT is intentionally transient and has no REST representation.
         // Refetching on it would erase a newer in-memory revision before its final arrives.

@@ -415,6 +415,47 @@ def test_reconnect_rejects_unprocessed_audio_after_stt_state_is_lost(
     assert [(gap.reason, gap.start_ms, gap.end_ms) for gap in gaps] == [("SERVER_STATE_LOST", 0, 0)]
 
 
+def test_reconnect_before_the_first_frame_accepts_the_public_null_watermark(
+    migrated_database_url: str,
+) -> None:
+    user_id, session_id = asyncio.run(_seed_live_session(migrated_database_url))
+    settings = _settings(migrated_database_url)
+    app = create_app(
+        settings=settings,
+        database=create_database(settings),
+        streaming_stt_provider=DeterministicStreamingSTTProvider(),
+    )
+    app.dependency_overrides[get_current_user_id] = lambda: user_id
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/api/v1/ws/sessions/{session_id}/audio?ticket={_audio_ticket(client, session_id)}"
+        ) as websocket:
+            websocket.send_json(_start("empty-publisher"))
+            claimed = websocket.receive_json()
+            assert claimed["publisher_status"] == "CLAIMED"
+            assert claimed["last_received_sequence"] is None
+
+        with client.websocket_connect(
+            f"/api/v1/ws/sessions/{session_id}/audio?ticket={_audio_ticket(client, session_id)}"
+        ) as websocket:
+            websocket.send_json(_start("empty-publisher"))
+            resumed = websocket.receive_json()
+            assert resumed["type"] == "audio.ready"
+            assert resumed["publisher_status"] == "RESUMED"
+            assert resumed["last_received_sequence"] is None
+            websocket.send_json({"type": "audio.stop", "request_id": "audio-stop-empty"})
+            stopped = websocket.receive_json()
+            assert stopped["type"] == "audio.stopped"
+            assert stopped["last_received_sequence"] is None
+
+    recording, segments, gaps = asyncio.run(_audio_rows(migrated_database_url, session_id))
+    assert recording.last_received_sequence == -1
+    assert recording.last_processed_sequence == -1
+    assert segments == []
+    assert gaps == []
+
+
 def test_stt_timeout_returns_a_safe_error_without_advancing_processed_ack(
     migrated_database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

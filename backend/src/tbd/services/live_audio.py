@@ -167,7 +167,10 @@ class LiveAudioService:
             raise AudioPublisherConflictError
         if recording.status != "CAPTURING":
             raise LiveAudioSessionClosingError
-        if resume_from_sequence != recording.last_received_sequence:
+        expected_resume_sequence = (
+            None if recording.last_received_sequence < 0 else recording.last_received_sequence
+        )
+        if resume_from_sequence != expected_resume_sequence:
             raise AudioResumeRejectedError
         if recording.last_processed_sequence < recording.last_received_sequence:
             raise AudioServerStateLostError

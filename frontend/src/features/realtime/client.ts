@@ -132,6 +132,8 @@ export class RealtimeSessionClient {
         error instanceof ApiError &&
         (error.status === 401 || error.status === 403 || error.status === 404)
       ) {
+        this.stopped = true
+        this.options.onConnectionState?.('stopped')
         return
       }
       this.attempt += 1

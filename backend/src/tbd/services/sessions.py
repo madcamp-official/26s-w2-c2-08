@@ -29,6 +29,7 @@ from tbd.repositories.idempotency import IdempotencyRepository
 from tbd.repositories.outbox import OutboxRepository
 from tbd.repositories.sessions import SessionCursorPosition, SessionRepository
 from tbd.schemas.sessions import LectureSessionResponse
+from tbd.services.answers import AnswerCaptureActiveError
 from tbd.services.courses import (
     CourseAccessDeniedError,
     CourseNotFoundError,
@@ -356,6 +357,16 @@ class SessionService:
         await self._require_owner(session, course_id=course.id, user_id=user_id, course=course)
         if lecture_session.status != "LIVE":
             raise SessionStateConflictError
+        capturing_answer_id = await session.scalar(
+            select(Answer.id)
+            .where(
+                Answer.session_id == lecture_session.id,
+                Answer.status == "CAPTURING",
+            )
+            .limit(1)
+        )
+        if capturing_answer_id is not None:
+            raise AnswerCaptureActiveError
 
         await personal_ai.purge_live(
             session,

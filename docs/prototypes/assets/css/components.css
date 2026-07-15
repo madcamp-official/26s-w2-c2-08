@@ -1170,7 +1170,7 @@
 }
 .record-evidence-link {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   padding: 8px 11px;
   border: 1px solid var(--color-line);
@@ -2330,7 +2330,7 @@
   display: flex;
   width: max-content;
   max-width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   margin: var(--space-4) auto 0;
   align-items: center;
   justify-content: center;

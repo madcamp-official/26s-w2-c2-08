@@ -253,7 +253,7 @@ class RecordingService:
         )
         if lecture_session.status not in {"PROCESSING", "COMPLETED"}:
             raise RecordingStateConflictError
-        if recording.status == "UPLOADED":
+        if recording.status not in {"UPLOAD_PENDING", "UPLOADING", "FAILED"}:
             raise RecordingStateConflictError
 
         replaced_temporary_key: StorageKey | None = None
