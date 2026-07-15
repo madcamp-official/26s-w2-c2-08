@@ -213,8 +213,8 @@ class AIJob(UUIDPrimaryKeyMixin, TimestampMixin, VersionMixin, Base):
             "(job_type IN ('ANSWER_ORGANIZATION', 'LIVE_SUMMARY') "
             "AND input_transcript_version_id IS NOT NULL AND input_start_segment_id IS NOT NULL "
             "AND input_end_segment_id IS NOT NULL) OR (job_type = 'FINAL_SUMMARY' "
-            "AND input_transcript_version_id IS NOT NULL AND input_start_segment_id IS NULL "
-            "AND input_end_segment_id IS NULL) OR (job_type NOT IN "
+            "AND input_start_segment_id IS NULL AND input_end_segment_id IS NULL) "
+            "OR (job_type NOT IN "
             "('ANSWER_ORGANIZATION', 'LIVE_SUMMARY', 'FINAL_SUMMARY') "
             "AND input_transcript_version_id IS NULL "
             "AND input_start_segment_id IS NULL AND input_end_segment_id IS NULL)",
