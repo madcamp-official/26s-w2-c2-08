@@ -73,6 +73,8 @@
 
 ## HQ STT·canonical 후처리 운영 경계
 
+Faster-Whisper GPU Worker는 CUDA 12 cuBLAS와 cuDNN 9 동적 라이브러리를 함께 로드해야 한다. 운영 systemd unit은 Ollama CUDA 12 runtime의 cuBLAS와 backend 가상환경 `nvidia-cudnn-cu12` package의 library directory를 `LD_LIBRARY_PATH`로 제공한다.
+
 RTX 3090은 local Faster-Whisper adapter를 실행할 수 있는 확인 자원이다. `STT_PROVIDER=faster_whisper`, `STT_HQ_MODEL=large-v3`, `STT_LIVE_MODEL=large-v3-turbo`를 설정하면 API의 세션별 PCM window와 `RECORDING_TRANSCRIPTION` Worker가 각각 local model을 lazy load한다. 실제 model download·VRAM 동시 실행 수·품질 검증은 VM 운영자가 수행한다. Recording upload가 완료된 뒤 Worker는 전체 녹음을 읽어 비canonical TranscriptVersion 아래 Segment·Gap을 준비하고, 검증에 성공해 RECORDING version이 `FINALIZED` 또는 `EMPTY`가 되는 transaction에서만 canonical 포인터를 교체한다. HQ `FAILED`·무결과 deadline에는 LIVE 포인터를 보존하되 이를 완료 기록의 final source로 인정할지는 미정이다.
 
 - `RECORDING_TRANSCRIPTION`은 `SHARED`, `blocks_session_completion=true`인 후처리 Job이다. 다른 후처리와 동일하게 Worker는 15초마다 lease를 갱신하고 60초 동안 갱신되지 않으면 watchdog이 `FAILED`로 끝낸다.

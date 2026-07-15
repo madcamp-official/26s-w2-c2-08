@@ -39,6 +39,16 @@ HQ_STT_WORKER_LEASE = timedelta(seconds=60)
 SESSION_PROCESSING_DEADLINE = timedelta(minutes=10)
 
 
+def transcription_deadline(
+    *, session_status: str, attempt: int, ended_at: datetime, claimed_at: datetime
+) -> datetime:
+    """Keep the initial Session deadline while giving explicit completed retries fresh time."""
+
+    if session_status == "COMPLETED" and attempt > 1:
+        return claimed_at + SESSION_PROCESSING_DEADLINE
+    return ended_at + SESSION_PROCESSING_DEADLINE
+
+
 @dataclass(frozen=True, slots=True)
 class ClaimedRecordingTranscriptionWork:
     job_id: UUID
@@ -212,7 +222,12 @@ class RecordingTranscriptionWorker:
                     content_type=recording.content_type,
                     byte_size=recording.byte_size,
                     duration_ms=recording.duration_ms,
-                    deadline=lecture_session.ended_at + SESSION_PROCESSING_DEADLINE,
+                    deadline=transcription_deadline(
+                        session_status=lecture_session.status,
+                        attempt=run.attempt,
+                        ended_at=lecture_session.ended_at,
+                        claimed_at=now,
+                    ),
                 )
 
     async def _finish_success(
