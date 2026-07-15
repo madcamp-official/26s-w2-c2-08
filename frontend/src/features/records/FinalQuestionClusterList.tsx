@@ -17,7 +17,7 @@ function clusteringCopy(status: string) {
   return null
 }
 
-export function FinalQuestionMindmap({
+export function FinalQuestionClusterList({
   sessionId,
   sessionStatus,
 }: {
@@ -69,16 +69,16 @@ export function FinalQuestionMindmap({
 
   return (
     <section
-      className="panel final-mindmap"
-      aria-labelledby="final-mindmap-title"
+      className="panel final-question-cluster-list"
+      aria-labelledby="final-question-cluster-list-title"
     >
       <header className="question-panel__heading">
         <div>
-          <p className="eyebrow">Final question map</p>
-          <h2 id="final-mindmap-title">최종 질문 마인드맵</h2>
+          <p className="eyebrow">Final question list</p>
+          <h2 id="final-question-cluster-list-title">최종 질문 목록</h2>
           <p>
-            후처리에서 확정된 분류만 표시하며, 수업 중 분류 결과와 섞지
-            않습니다.
+            후처리에서 확정된 Cluster의 대표질문과 포함된 질문을 목록으로
+            표시합니다.
           </p>
         </div>
         {firstPage?.generation !== null &&
@@ -137,8 +137,11 @@ export function FinalQuestionMindmap({
         />
       )}
       {clusterItems.length > 0 && (
-        <div className="final-mindmap__layout">
-          <ol className="mindmap-clusters" aria-label="최종 Cluster 목록">
+        <div className="final-question-cluster-list__layout">
+          <ol
+            className="question-cluster-list__clusters"
+            aria-label="최종 Cluster 목록"
+          >
             {clusterItems.map((cluster) => (
               <li key={cluster.id}>
                 <button
@@ -163,7 +166,7 @@ export function FinalQuestionMindmap({
                 ? `final-cluster-members-${selectedCluster.id}`
                 : undefined
             }
-            className="mindmap-members"
+            className="question-cluster-list__members"
             aria-live="polite"
           >
             {!selectedCluster && (

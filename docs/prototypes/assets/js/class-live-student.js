@@ -16,7 +16,7 @@ const draftState = document.querySelector("#draftState");
 const draftInput = document.querySelector("#draftInput");
 const draftEdit = document.querySelector("#draftEdit");
 const questions = document.querySelector("#studentQuestions");
-const questionBranches = document.querySelector("[data-question-branches]");
+const clusterMembers = document.querySelector("[data-question-members]");
 const unclusteredQuestions = document.querySelector(
   "[data-unclustered-questions]",
 );
@@ -124,21 +124,21 @@ function createReactionButton() {
   return reaction;
 }
 
-function createQuestionNode(
+function createQuestionItem(
   text,
   questionId,
   { unclustered = false, backlog = false } = {},
 ) {
   const item = document.createElement("li");
-  item.className = "live-mindmap__node";
-  item.dataset.nodeKind = "student-question";
+  item.className = "question-cluster-list__item";
+  item.dataset.memberKind = "student-question";
   item.dataset.questionId = questionId;
   item.dataset.localQuestion = "true";
   if (unclustered) item.dataset.runtimeUnclustered = "true";
   if (backlog) item.dataset.clusteringBacklog = "true";
 
   const meta = document.createElement("div");
-  meta.className = "live-node-meta";
+  meta.className = "question-cluster-list__meta";
   const kind = document.createElement("span");
   const status = document.createElement("span");
   kind.textContent = "STUDENT_QUESTION";
@@ -261,7 +261,9 @@ function applyPendingQuestions() {
   captured.reverse().forEach((item) => {
     delete item.dataset.runtimeUnclustered;
     item.removeAttribute("data-question-fixture-unclustered");
-    const status = item.querySelector(".live-node-meta span:last-child");
+    const status = item.querySelector(
+      ".question-cluster-list__meta span:last-child",
+    );
     if (status) status.textContent = "OPEN · 배치 완료";
     const questionId = item.dataset.questionId;
     const priorityItem = questionPriorityList?.querySelector(
@@ -276,7 +278,7 @@ function applyPendingQuestions() {
         priorityMeta.textContent = "OPEN · Cluster 배치 완료 · 익명 질문";
       }
     }
-    questionBranches.prepend(item);
+    clusterMembers.prepend(item);
   });
   if (queued.length === 0) return;
 
@@ -347,7 +349,7 @@ function applyPendingQuestions() {
     setQuestionState("normal");
     questions.dataset.fixtureApplied = "true";
     announce(
-      "클러스터링 성공 결과를 적용해 captured 질문을 대표질문의 branch에 배치했습니다.",
+      "클러스터링 성공 결과를 적용해 captured 질문을 대표질문의 member list에 배치했습니다.",
     );
   }
   refreshQuestionPriority();
@@ -395,7 +397,7 @@ function submitQuestion({
   ].includes(previousQuestionState);
   const questionId = `question-local-${++localQuestionSequence}`;
   unclusteredQuestions.prepend(
-    createQuestionNode(value, questionId, {
+    createQuestionItem(value, questionId, {
       unclustered: true,
       backlog,
     }),

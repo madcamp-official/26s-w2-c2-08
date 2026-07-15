@@ -540,17 +540,17 @@
                     >
                       <summary>Final Cluster</summary>
                       <p data-show-state="running">
-                        성공한 final_generation이 생긴 뒤에만 중앙 대표질문과
-                        typed child를 표시합니다.
+                        성공한 final_generation이 생긴 뒤에만 대표질문과 typed
+                        child를 표시합니다.
                       </p>
                       <div data-show-state="succeeded" hidden>
                         <p>
                           is_final=true · finalized_at 10:54:22 · ordinal 1 / 4
                         </p>
-                        <div class="record-cluster-map">
-                          <div class="record-cluster-map__center">
+                        <div class="record-cluster-detail">
+                          <div class="record-cluster-detail__representative">
                             <span class="badge"
-                              >AI 대표질문 · 중앙 ·
+                              >AI 대표질문 · Cluster 대표 ·
                               created_in_generation=7</span
                             >
                             <strong
@@ -559,8 +559,8 @@
                             >
                           </div>
                           <ul
-                            class="record-cluster-map__branches"
-                            aria-label="최종 대표질문의 하위 질문"
+                            class="record-cluster-detail__members"
+                            aria-label="최종 Cluster에 포함된 질문 목록"
                           >
                             <li>
                               <small>source_kind=STUDENT_QUESTION</small

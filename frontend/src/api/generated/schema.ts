@@ -1008,7 +1008,7 @@ export interface paths {
         };
         /**
          * AI 대표질문 단건 조회
-         * @description 현재 Cluster 중앙 대표질문과 Answer target으로 보존된 과거 대표질문을
+         * @description 현재 Cluster 대표질문과 Answer target으로 보존된 과거 대표질문을
          *     해당 Course 멤버가 불투명 ID로 조회한다. generation 배열 위치나
          *     pagination cursor에 의존하지 않는 Evidence 경로다. 교체 또는 PRESERVED
          *     Answer 취소로 폐기된 대표질문은 Evidence provenance용 내부 DISCARDED
@@ -1040,7 +1040,7 @@ export interface paths {
         };
         /**
          * 현재 또는 최종 질문 Cluster 목록
-         * @description Course 멤버가 마인드맵의 중앙 노드인 immutable AI 대표질문과
+         * @description Course 멤버가 질문 목록의 대표 항목인 immutable AI 대표질문과
          *     Cluster 메타데이터를 조회한다. Cluster는 ordinal ASC, id ASC로 정렬한다.
          *     응답의 clustering_state는 requested·applied watermark, active Job과 마지막
          *     Job ID·attempt·status를 포함한다. scope=FINAL은 후처리에서 전체 input을
@@ -1922,7 +1922,7 @@ export interface components {
         /** @enum {string} */
         QuestionClusteringMode: "LIVE_INCREMENTAL" | "FINAL";
         /**
-         * @description ACTIVE는 현재 Cluster 중앙, PRESERVED는 Answer 때문에 보존된 child.
+         * @description ACTIVE는 현재 Cluster 대표, PRESERVED는 Answer 때문에 보존된 child.
          *     Evidence provenance만 유지하는 내부 DISCARDED tombstone은 이 공개 enum과
          *     대표질문 응답에 절대 노출하지 않는다.
          * @enum {string}
@@ -2630,7 +2630,7 @@ export interface components {
             next_cursor: string | null;
         };
         /**
-         * @description AI가 Cluster 중앙 노드로 생성한 immutable 질문. 대표 문구가 바뀌면
+         * @description AI가 Cluster 대표 노드로 생성한 immutable 질문. 대표 문구가 바뀌면
          *     기존 행을 수정하지 않고 새 행을 생성한다. CAPTURING 또는 완료 Answer가 있는
          *     과거 대표질문은 lifecycle_status=PRESERVED인 Cluster child로 계속 노출한다.
          *     폐기된 미답변 대표질문의 내부 DISCARDED tombstone은 이 스키마로 반환하지 않는다.
@@ -2663,7 +2663,7 @@ export interface components {
             status?: "SELECTED" | "ANSWERED";
             answer_id?: string;
         });
-        /** @description 현재 generation의 Cluster 중앙에 있는 AI 대표질문 */
+        /** @description 현재 generation에서 Cluster를 대표하는 AI 대표질문 */
         ActiveAIRepresentativeQuestion: components["schemas"]["AIRepresentativeQuestion"] & {
             /** @constant */
             lifecycle_status?: "ACTIVE";

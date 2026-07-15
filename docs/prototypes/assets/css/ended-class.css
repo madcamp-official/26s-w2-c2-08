@@ -516,7 +516,7 @@ body {
   .record-material,
   .record-job-card,
   .record-question .split,
-  .record-cluster-map,
+  .record-cluster-detail,
   .record-timeline__segment,
   .record-timeline__gap {
     grid-template-columns: minmax(0, 1fr);

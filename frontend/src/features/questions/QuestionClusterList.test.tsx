@@ -4,13 +4,13 @@ import { describe, expect, it } from 'vitest'
 
 import { AppProviders } from '../../app/providers'
 import { server } from '../../test/server'
-import { QuestionMindmap } from './QuestionMindmap'
+import { QuestionClusterList } from './QuestionClusterList'
 
 const sessionId = '30000000-0000-0000-0000-000000000001'
 const clusterId = '40000000-0000-0000-0000-000000000001'
 
-describe('QuestionMindmap', () => {
-  it('shows public representative text and typed anonymous children', async () => {
+describe('QuestionClusterList', () => {
+  it('shows representative questions and cluster members as lists', async () => {
     server.use(
       http.get(`*/api/v1/sessions/${sessionId}/question-clusters`, () =>
         HttpResponse.json({
@@ -94,12 +94,18 @@ describe('QuestionMindmap', () => {
 
     render(
       <AppProviders>
-        <QuestionMindmap sessionId={sessionId} />
+        <QuestionClusterList sessionId={sessionId} />
       </AppProviders>,
     )
 
     expect(await screen.findByText('네트워크 관련 질문')).toBeInTheDocument()
     expect(await screen.findByText('패킷이 무엇인가요?')).toBeInTheDocument()
     expect(screen.getByText('학생 질문')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '질문 목록' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('list', { name: 'AI 대표질문 목록' }),
+    ).toBeInTheDocument()
   })
 })

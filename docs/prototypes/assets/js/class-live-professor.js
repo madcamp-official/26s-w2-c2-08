@@ -35,7 +35,9 @@ const questionPriorityList = document.querySelector(
 const unclusteredQuestionList = document.querySelector(
   "#profUnclusteredQuestionsTitle + p + ul",
 );
-const questionBranches = document.querySelector(".live-mindmap__branches");
+const clusterMembers = document.querySelector(
+  ".question-cluster-list__members",
+);
 
 const { announce } = initLiveCommon({ announcer: announcement });
 
@@ -97,28 +99,29 @@ function updateTargetStatus(target, status) {
 }
 
 function replaceProfessorRepresentative() {
-  const central = questionsPanel.querySelector(
-    ".live-mindmap__center[data-answer-target]",
+  const representative = questionsPanel.querySelector(
+    ".question-cluster-list__representative[data-answer-target]",
   );
-  if (!central) return;
-  const previousStatus = central.dataset.answerTargetStatus;
-  const previousId = central.dataset.answerTargetId;
-  const previousGeneration = central.dataset.createdInGeneration || "7";
+  if (!representative) return;
+  const previousStatus = representative.dataset.answerTargetStatus;
+  const previousId = representative.dataset.answerTargetId;
+  const previousGeneration = representative.dataset.createdInGeneration || "7";
   const previousText = normalizeLiveInput(
-    central.querySelector("[data-answer-target-text]")?.textContent || "",
+    representative.querySelector("[data-answer-target-text]")?.textContent ||
+      "",
   );
 
   if (["selected", "answered"].includes(previousStatus)) {
     const preserved = document.createElement("li");
-    preserved.className = "live-mindmap__node";
-    preserved.dataset.nodeKind = "representative-preserved";
+    preserved.className = "question-cluster-list__item";
+    preserved.dataset.memberKind = "representative-preserved";
     preserved.dataset.answerTarget = "";
     preserved.dataset.answerTargetKind = "representative";
     preserved.dataset.answerTargetId = previousId;
     preserved.dataset.answerTargetStatus = previousStatus;
 
     const meta = document.createElement("div");
-    meta.className = "live-node-meta";
+    meta.className = "question-cluster-list__meta";
     const kind = document.createElement("span");
     kind.textContent = `source_kind=AI_REPRESENTATIVE · created_in_generation=${previousGeneration} · PRESERVED`;
     const status = document.createElement("span");
@@ -136,23 +139,26 @@ function replaceProfessorRepresentative() {
     answer.textContent = "이 보존 대표질문 답변";
     answer.disabled = true;
     preserved.append(meta, copy, answer);
-    questionBranches?.append(preserved);
-    if (activeAnswer?.target === central) activeAnswer.target = preserved;
+    clusterMembers?.append(preserved);
+    if (activeAnswer?.target === representative)
+      activeAnswer.target = preserved;
   }
 
-  central.dataset.answerTargetId = "rep-8-13";
-  central.dataset.answerTargetStatus = "open";
-  central.dataset.createdInGeneration = String(Number(previousGeneration) + 1);
+  representative.dataset.answerTargetId = "rep-8-13";
+  representative.dataset.answerTargetStatus = "open";
+  representative.dataset.createdInGeneration = String(
+    Number(previousGeneration) + 1,
+  );
   const status = document.createElement("span");
   status.dataset.answerStatusLabel = "";
   status.textContent = "OPEN";
   central
     .querySelector("small")
     ?.replaceChildren(
-      `AI 대표질문 · ACTIVE · created_in_generation=${central.dataset.createdInGeneration} · `,
+      `AI 대표질문 · ACTIVE · created_in_generation=${representative.dataset.createdInGeneration} · `,
       status,
     );
-  const copy = central.querySelector("[data-answer-target-text]");
+  const copy = representative.querySelector("[data-answer-target-text]");
   if (copy) {
     copy.textContent =
       "음수 간선과 음수 사이클을 고려한 최단 경로 선택 기준은 무엇인가요?";
@@ -164,7 +170,9 @@ function applyProfessorPendingQuestions() {
   const pending = [...(unclusteredQuestionList?.children || [])];
   pending.reverse().forEach((item) => {
     item.removeAttribute("data-question-fixture-unclustered");
-    const kind = item.querySelector(".live-node-meta span:first-child");
+    const kind = item.querySelector(
+      ".question-cluster-list__meta span:first-child",
+    );
     if (kind) kind.textContent = "STUDENT_QUESTION";
     const questionId = item.dataset.questionId;
     const priorityItem = questionPriorityList?.querySelector(
@@ -185,7 +193,7 @@ function applyProfessorPendingQuestions() {
         );
       }
     }
-    questionBranches?.prepend(item);
+    clusterMembers?.prepend(item);
   });
   if (pending.length > 0) {
     replaceProfessorRepresentative();
@@ -239,7 +247,7 @@ function applyProfessorPendingQuestions() {
     questionsPanel.dataset.fixtureApplied = "true";
     refreshQuestionPriority();
     announce(
-      "클러스터링 성공 결과를 적용해 미배치 질문을 대표질문의 branch에 배치했습니다.",
+      "클러스터링 성공 결과를 적용해 미배치 질문을 대표질문의 member list에 배치했습니다.",
     );
   }
 }
@@ -293,7 +301,7 @@ function cancelAnswer() {
     return;
   }
   const { target, returnButton } = activeAnswer;
-  if (target.dataset.nodeKind === "representative-preserved") {
+  if (target.dataset.memberKind === "representative-preserved") {
     target.remove();
   } else {
     updateTargetStatus(target, "open");

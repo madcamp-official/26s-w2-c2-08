@@ -170,7 +170,7 @@
 .record-page__content--processing .record-questions,
 .record-page__content--processing .record-answers,
 .record-page__content--processing .record-jobs,
-.record-page__content--processing .final-mindmap {
+.record-page__content--processing .final-question-cluster-list {
   grid-column: 1 / -1;
 }
 
@@ -200,7 +200,7 @@
   .record-page__content--processing .record-questions,
   .record-page__content--processing .record-answers,
   .record-page__content--processing .record-jobs,
-  .record-page__content--processing .final-mindmap {
+  .record-page__content--processing .final-question-cluster-list {
     grid-column: auto;
   }
 }

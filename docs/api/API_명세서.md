@@ -347,7 +347,7 @@ READY → LIVE → PROCESSING → COMPLETED
 - 다른 상태에서의 전이는 `409 SESSION_STATE_CONFLICT`로 거부한다.
 - 한 Course에는 `READY`, `LIVE`, `PROCESSING` 중 하나인 active Session이 합계 최대 1개만 존재한다.
 - active Session이 이미 있을 때 class 생성은 `409 ACTIVE_SESSION_EXISTS`로 거부한다.
-- `PROCESSING`과 `COMPLETED`에서는 새 음성과 반응을 받지 않지만 Course `STUDENT`의 새 익명 질문은 허용한다. 이 질문은 종료 시점 FINAL clustering watermark 밖에 순서를 받아 기존 FINAL 마인드맵을 소급 변경하지 않는다.
+- `PROCESSING`과 `COMPLETED`에서는 새 음성과 반응을 받지 않지만 Course `STUDENT`의 새 익명 질문은 허용한다. 이 질문은 종료 시점 FINAL clustering watermark 밖에 순서를 받아 기존 FINAL 질문 목록을 소급 변경하지 않는다.
 - Session 종료 transaction은 `SESSION_POSTPROCESSING`을 `PENDING`, `visibility=SHARED`, `blocks_session_completion=true`인 coordinator Job으로 먼저 생성한다. Recording이 있으면 upload·HQ source가 terminal이 될 때까지, 없으면 LIVE Transcript drain이 terminal이 될 때까지 worker가 이 Job을 claim하지 않는다.
 - 첫 `audio.start`로 Recording이 생긴 Session은 Recording이 `UPLOAD_PENDING` 또는 `UPLOADING`인 동안 `PROCESSING`을 유지한다. upload complete는 `RECORDING_TRANSCRIPTION` Job과 `source=RECORDING`, `status=FINALIZING`인 Transcript version을 함께 만든다.
 - `RECORDING_TRANSCRIPTION`은 `visibility=SHARED`, `blocks_session_completion=true`이다. 이 Job은 Segment·Gap과 Segment의 녹음 시간 mapping을 저장하고 정상 HQ version의 canonical 전환을 먼저 commit한다. 그 뒤 `SESSION_POSTPROCESSING`이 Answer mapping과 Knowledge 연결을 수행한다.
@@ -902,13 +902,13 @@ GET /api/v1/sessions/{session_id}/question-clusters?scope=CURRENT&cursor=<cursor
 - 권한: Course 멤버. `scope` 기본값은 LIVE의 `CURRENT`이고 `FINAL`은 후처리 최종 generation을 선택한다.
 - 응답은 `clustering_state`, generation 메타데이터, `ordinal ASC, id ASC`로 정렬한 Cluster, `next_cursor`를 포함한다.
 - `clustering_state`는 requested·applied watermark, current revision, `pending`, active Job ID, retry-reserved Job ID, 마지막 clustering Job ID·attempt·mode·status를 포함한다. active와 retry ID는 동시에 non-null일 수 없고 scheduler가 retry를 requeue하면 같은 ID가 retry 필드에서 active 필드로 이동한다.
-- Cluster는 중앙에 표시할 immutable `representative_question`, child 개수와 members 조회 경로, 선택 generation을 공개한 `clustering_state.current_revision` projection인 `revision`, `is_final`, `finalized_at`, 생성 Job provenance를 반환한다. 대표질문의 `created_in_generation`은 해당 immutable 문장을 처음 만든 Cluster generation이며 이후 `PRESERVED` child로 이동해도 바뀌지 않는다. `lifecycle_status=ACTIVE|PRESERVED`와 Answer 상태인 `status=OPEN|SELECTED|ANSWERED`는 서로 독립이다.
+- Cluster는 목록에 표시할 immutable `representative_question`, child 개수와 members 조회 경로, 선택 generation을 공개한 `clustering_state.current_revision` projection인 `revision`, `is_final`, `finalized_at`, 생성 Job provenance를 반환한다. 대표질문의 `created_in_generation`은 해당 immutable 문장을 처음 만든 Cluster generation이며 이후 `PRESERVED` child로 이동해도 바뀌지 않는다. `lifecycle_status=ACTIVE|PRESERVED`와 Answer 상태인 `status=OPEN|SELECTED|ANSWERED`는 서로 독립이다.
 - 공개 Cluster `id`는 LIVE generation 사이 같은 semantic Cluster가 계승하는 logical ID다. 새 LIVE Cluster와 모든 입력을 다시 배치하는 FINAL Cluster는 새 logical ID를 사용하고, 내부 generation row ID는 노출하지 않는다.
 - LIVE Job은 captured watermark까지의 **새 학생 질문만** 기존 Cluster에 배치하고 기존 질문을 다른 Cluster로 옮기지 않는다. 새 member가 추가된 Cluster의 대표질문만 새 immutable 행으로 생성한다.
 - Job 실행 중 등록된 질문은 다음 Job에 한꺼번에 처리한다. 대표질문 생성까지 성공해야 watermark를 적용하고 Job을 `SUCCEEDED`로 끝낸다.
-- 답변 없는 교체 대표질문은 폐기한다. 새 generation 공개 transaction부터 Cluster 중앙·child, 대표질문 단건 조회와 새 RAG 검색에서 즉시 제외한다. Evidence 참조가 없으면 hard delete하고, 있으면 내부 `DISCARDED` tombstone과 해당 KnowledgeChunk만 provenance로 보존하되 `ChatEvidence.source_kind`·`label`은 유지하고 `link=null`로 반환한다. 마지막 Evidence를 삭제하는 transaction은 tombstone과 Chunk도 원자적으로 hard delete해 `DISCARDED`는 항상 Evidence가 1개 이상일 때만 남는다. `DISCARDED`는 내부 정리 상태이며 공개 `lifecycle_status`는 `ACTIVE|PRESERVED`만 유지한다.
+- 답변 없는 교체 대표질문은 폐기한다. 새 generation 공개 transaction부터 Cluster 대표·child, 대표질문 단건 조회와 새 RAG 검색에서 즉시 제외한다. Evidence 참조가 없으면 hard delete하고, 있으면 내부 `DISCARDED` tombstone과 해당 KnowledgeChunk만 provenance로 보존하되 `ChatEvidence.source_kind`·`label`은 유지하고 `link=null`로 반환한다. 마지막 Evidence를 삭제하는 transaction은 tombstone과 Chunk도 원자적으로 hard delete해 `DISCARDED`는 항상 Evidence가 1개 이상일 때만 남는다. `DISCARDED`는 내부 정리 상태이며 공개 `lifecycle_status`는 `ACTIVE|PRESERVED`만 유지한다.
 - `CAPTURING` 대표질문은 Answer가 종료될 때까지 child로 보존하고, `COMPLETED` Answer가 있는 과거 대표질문은 일반 child 질문처럼 보존한다.
-- FINAL Job은 성공 commit 전에 eligible 학생 질문과 cutoff까지 Answer가 완료된 AI 대표질문의 예상 집합과 공개 membership이 일치하는지 검증한다. 각 input은 정확히 한 번 등장해야 하며 누락·중복이 있으면 Job을 `SUCCEEDED`로 바꾸지 않는다. 모델이 분류하지 못한 input은 누락 대신 하나의 명시적이고 안정적인 `기타` Cluster에 배치하며 이 중앙 표시문은 임의 생성 문구가 아닌 정확한 `기타`를 사용한다.
+- FINAL Job은 성공 commit 전에 eligible 학생 질문과 cutoff까지 Answer가 완료된 AI 대표질문의 예상 집합과 공개 membership이 일치하는지 검증한다. 각 input은 정확히 한 번 등장해야 하며 누락·중복이 있으면 Job을 `SUCCEEDED`로 바꾸지 않는다. 모델이 분류하지 못한 input은 누락 대신 하나의 명시적이고 안정적인 `기타` Cluster에 배치하며 이 대표 표시문은 임의 생성 문구가 아닌 정확한 `기타`를 사용한다.
 - FINAL 대상 학생 질문과 답변된 AI 대표질문이 모두 0건일 때 Job 생략 여부, 빈 성공 결과 원장과 `generation` 표현은 TBD이다.
 - 잘못된 UUID·`scope`·cursor·`limit` 형식은 `422 VALIDATION_ERROR`로 거부하고, 서명은 맞지 않거나 다른 generation의 cursor는 `400 INVALID_CURSOR`로 처리한다.
 
@@ -921,7 +921,7 @@ GET /api/v1/sessions/{session_id}/question-clusters/{cluster_id}/members?cursor=
 - 권한: Course 멤버
 - generation 안에서 유일한 `ordinal ASC`로 안정적으로 정렬한다. 공개 `ordinal`은 DB membership `position` projection이다. member 공개 discriminator는 `source_kind`이고 값은 `STUDENT_QUESTION` 또는 답변이 있어 보존된 `AI_REPRESENTATIVE`이다. 내부 typed FK 이름과 `AI_REPRESENTATIVE_QUESTION`을 이 membership enum으로 노출하지 않는다.
 - 경로의 `{cluster_id}`는 해당 `{session_id}` 안에서 공개하는 logical ID이며, 서버는 Session·logical ID로 요청 scope의 현재 물리 generation row를 해석한다. 다른 Session의 logical ID는 일치하지 않는 리소스로 처리한다. generation 교체 중 기존 cursor 만료·재시작 정책은 TBD이다.
-- 대표질문과 각 child의 Answer 상태는 독립적이다. 공통 `limit`은 기본 20·최대 100이다. generation 교체 중 기존 cursor의 만료·재시작 정책과 큰 마인드맵의 preload page 수·점진 loading·자동 축소 layout은 TBD이다.
+- 대표질문과 각 child의 Answer 상태는 독립적이다. 공통 `limit`은 기본 20·최대 100이다. generation 교체 중 기존 cursor의 만료·재시작 정책과 큰 Cluster·member 목록의 preload page 수·점진 loading은 TBD이다.
 - 잘못된 Session·Cluster UUID 또는 `limit` 형식은 `422 VALIDATION_ERROR`다.
 
 ### 10.8 AI 대표질문 단건 조회
@@ -931,7 +931,7 @@ GET /api/v1/representative-questions/{representative_question_id}
 ```
 
 - 권한: 해당 대표질문이 속한 Course 멤버
-- 현재 Cluster 중앙 대표질문과 Answer target으로 보존된 과거 대표질문을 ID로 조회한다. generation 배열 위치나 pagination cursor에 의존하지 않는다.
+- 현재 Cluster 대표질문과 Answer target으로 보존된 과거 대표질문을 ID로 조회한다. generation 배열 위치나 pagination cursor에 의존하지 않는다.
 - 응답의 `created_in_generation`(정수, 1 이상)은 이 immutable 대표질문이 처음 생성된 Cluster generation을 나타내며 `PRESERVED`로 바뀌어도 유지한다.
 - 인증되지 않은 요청은 `401`을 반환한다. 비멤버·권한 밖 요청, 비가시·존재하지 않는 대표질문, 교체 후 폐기되었거나 `PRESERVED` Answer 취소로 공개에서 제거된 대표질문은 모두 `404 RESOURCE_NOT_FOUND`로 응답해 존재를 숨긴다. Evidence provenance용 내부 tombstone이 남아도 같다.
 - 잘못된 대표질문 UUID는 `422 VALIDATION_ERROR`다.
@@ -1821,7 +1821,7 @@ remaining bytes PCM_S16LE 16000 Hz mono payload
 | 종료 후 텍스트 Answer              | `COMPLETED`에서 생성·보강은 확정; 최대 길이, 빈 문자열·삭제, KnowledgeChunk 재생성 세부 정책 TBD                                                                                                | Answer 요청·응답              |
 | 음성 Answer AI 정리                | Answer별 자동 SHARED blocking Job·HQ 우선/LIVE fallback·실패 재시도·교수자 text 분리는 확정; 정리문 형식·최대 길이·model·prompt·품질 기준과 KnowledgeChunk 재색인 여부·producer·transaction TBD | Answer 응답·AI worker·검색    |
 | LIVE clustering 실패 재시도        | pending watermark·같은 Job 행 `attempt + 1` 재사용은 확정; backoff·최대 attempt 횟수 TBD                                                                                                        | Job scheduler·운영 UI         |
-| 클러스터 품질·대형 마인드맵        | cursor 기본 20·최대 100은 확정; 유사도 threshold·model·prompt·품질 지표, generation 교체 중 cursor 만료·재시작, preload page 수·점진 loading·자동 축소 layout TBD                               | AI worker·Cluster 화면        |
+| 클러스터 품질·대형 Cluster 목록    | cursor 기본 20·최대 100은 확정; 유사도 threshold·model·prompt·품질 지표, generation 교체 중 cursor 만료·재시작, preload page 수·Cluster와 member 목록의 점진 loading TBD                        | AI worker·Cluster 화면        |
 | FINAL clustering 입력 0건          | Job 생략 또는 모델 호출 없는 성공 빈 원장, `final_generation`·`finalized_at` 표현 TBD                                                                                                           | coordinator·Cluster 응답      |
 | 녹음 형식·저장                     | codec·container·브라우저 로컬 저장·최대 크기, 물리 단일 파일 또는 fragment+manifest 구조 TBD                                                                                                    | upload 검증·storage·playback  |
 | 녹음 upload                        | offset 조회 `GET`/`HEAD`, chunk method·header·Content-Type·크기, checksum algorithm·status, expiry 값 TBD                                                                                       | resumable protocol·정리       |

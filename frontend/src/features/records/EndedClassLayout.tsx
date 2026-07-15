@@ -39,7 +39,7 @@ const recordSections = [
   ['#record-summary-title', '요약'],
   ['#record-transcript-title', 'Transcript'],
   ['#record-questions-title', '질문'],
-  ['#final-mindmap-title', '질문 맵'],
+  ['#final-question-cluster-list-title', '질문 목록'],
   ['#record-answers-title', '답변'],
   ['#record-jobs-title', '작업 상태'],
   ['#personal-ai-REVIEW', '복습 AI'],
