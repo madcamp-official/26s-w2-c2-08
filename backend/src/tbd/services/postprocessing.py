@@ -49,7 +49,18 @@ COORDINATOR_LEASE = timedelta(minutes=1)
 FINAL_AI_LEASE = timedelta(minutes=1)
 DEFAULT_FINAL_AI_TIMEOUT = timedelta(seconds=60)
 PROCESSING_DEADLINE = timedelta(minutes=10)
-FINAL_SUMMARY_PROMPT_VERSION = "final-summary-v1"
+FINAL_SUMMARY_PROMPT_VERSION = "final-summary-v2"
+FINAL_SUMMARY_SYSTEM_PROMPT = """당신은 강의 Transcript를 학습용 강의 노트로 정리하는 편집자입니다.
+아래 규칙을 반드시 지키세요.
+- Transcript에서 실제로 다룬 내용만 요약하고 외부 지식이나 추측을 추가하지 마세요.
+- 강의의 중심 주제와 핵심 설명, 개념 사이의 관계가 드러나도록 구체적으로 정리하세요.
+- 단순한 감상이나 칭찬 대신 학생이 강의 내용을 복습할 수 있는 정보 중심의 문장으로 작성하세요.
+- 사용자에게 질문하거나 추가 질문을 제안하거나 도움을 제안하지 마세요.
+- "궁금한 점이 있다면", "알려주세요" 같은 대화형 표현과 이모지를 사용하지 마세요.
+- 출력은 '핵심 요약'과 '주요 내용' 두 부분으로 구성하세요. 핵심 요약은 짧은 문단으로,
+  주요 내용은 구체적인 글머리표로 작성하세요.
+- Transcript만으로 확실하지 않은 내용은 사실처럼 만들어 내지 말고 생략하세요.
+"""
 ANSWER_ORGANIZATION_PROMPT_VERSION = "answer-organization-v1"
 
 
@@ -733,9 +744,15 @@ class SessionPostprocessingWorker:
             text = await self._input_text(claimed)
             result = await self.llm_provider.generate(
                 LLMGenerationRequest(
-                    purpose="final-summary-v1",
+                    purpose="final-summary-v2",
                     prompt_version=FINAL_SUMMARY_PROMPT_VERSION,
-                    messages=(LLMMessage(role="user", content=text),),
+                    messages=(
+                        LLMMessage(role="system", content=FINAL_SUMMARY_SYSTEM_PROMPT),
+                        LLMMessage(
+                            role="user",
+                            content=f"다음 강의 Transcript를 요약하세요.\n\n<transcript>\n{text}\n</transcript>",
+                        ),
+                    ),
                 ),
                 timeout=self.provider_timeout,
             )

@@ -17,13 +17,23 @@ from tbd.models.knowledge import LectureSummary
 from tbd.models.materials import TranscriptSegment, TranscriptVersion
 from tbd.models.questions import AIJob
 from tbd.models.sessions import LectureSession
-from tbd.providers.ai import FakeLLMProvider
+from tbd.providers.ai import FakeLLMProvider, LLMGenerationRequest
 from tbd.services.courses import CourseService
 from tbd.services.postprocessing import SessionPostprocessingWorker
 from tbd.services.sessions import ActiveSessionExistsError, SessionService
 
 pytestmark = pytest.mark.integration
 TRUSTED_ORIGIN = {"Origin": "http://localhost:5173"}
+
+
+class _CapturingLLMProvider(FakeLLMProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.requests: list[LLMGenerationRequest] = []
+
+    async def generate(self, request: LLMGenerationRequest, *, timeout: timedelta):
+        self.requests.append(request)
+        return await super().generate(request, timeout=timeout)
 
 
 def _settings(database_url: str) -> Settings:
@@ -154,9 +164,21 @@ def test_session_api_persists_lifecycle_and_never_uses_job_count_as_completion(
             == 409
         )
 
-    worker = SessionPostprocessingWorker(database.session_factory, FakeLLMProvider())
+    provider = _CapturingLLMProvider()
+    worker = SessionPostprocessingWorker(database.session_factory, provider)
     assert asyncio.run(worker.run_once()) is True
     assert asyncio.run(worker.run_once()) is True
+
+    final_summary_request = next(
+        request for request in provider.requests if request.purpose == "final-summary-v2"
+    )
+    assert final_summary_request.prompt_version == "final-summary-v2"
+    assert [message.role for message in final_summary_request.messages] == ["system", "user"]
+    system_prompt = final_summary_request.messages[0].content
+    assert "실제로 다룬 내용만 요약" in system_prompt
+    assert "추가 질문을 제안" in system_prompt
+    assert "이모지를 사용하지 마세요" in system_prompt
+    assert "<transcript>" in final_summary_request.messages[1].content
 
     async def final_summary_rows() -> tuple[AIJob, LectureSummary]:
         async with database.session_factory() as session:
