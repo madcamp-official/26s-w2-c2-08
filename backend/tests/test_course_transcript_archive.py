@@ -343,10 +343,7 @@ async def _complete_session(database_url: str, tmp_path: Path, session_id: UUID)
     try:
         async with database.engine.begin() as connection:
             started_at = await connection.scalar(
-                text(
-                    "SELECT started_at FROM lecture_sessions "
-                    "WHERE id = :session_id"
-                ),
+                text("SELECT started_at FROM lecture_sessions WHERE id = :session_id"),
                 {"session_id": session_id},
             )
             assert isinstance(started_at, datetime)
