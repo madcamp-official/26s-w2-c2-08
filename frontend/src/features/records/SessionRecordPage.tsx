@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { apiUrl } from '../../api/client'
 import { ApiError } from '../../api/errors'
@@ -130,7 +130,6 @@ function summaryCopy(record: SessionRecord) {
 }
 
 function RecordProcessingPanel({ record }: { record: SessionRecord }) {
-  const completed = record.session.status === 'COMPLETED'
   return (
     <section
       className={`record-processing record-processing--${record.session.status.toLowerCase()}`}
@@ -142,16 +141,6 @@ function RecordProcessingPanel({ record }: { record: SessionRecord }) {
           <p className="eyebrow">Record status</p>
           <SessionStatusBadge status={record.session.status} />
         </div>
-        <h2>
-          {completed
-            ? '수업 기록이 준비되었습니다'
-            : '수업 기록을 정리하고 있습니다'}
-        </h2>
-        <p>
-          {completed
-            ? '이제 최종 Transcript와 복습 AI를 사용할 수 있습니다.'
-            : '작업 개수로 완료 여부를 추측하지 않습니다. class 상태가 완료되면 자동으로 전환됩니다.'}
-        </p>
       </div>
       <dl className="record-processing__steps">
         {processingCopy(record).map(([label, value]) => (
@@ -186,12 +175,14 @@ function RecordOverview({ record }: { record: SessionRecord }) {
 }
 
 function RecordRecordingPanel({
+  embedded = false,
   recording,
   professor,
   seekRequest,
   sessionId,
   sessionStatus,
 }: {
+  embedded?: boolean
   recording: SessionRecording | null
   professor: boolean
   seekRequest: RecordingSeekRequest | null
@@ -209,6 +200,10 @@ function RecordRecordingPanel({
     'idle' | 'active' | 'positioned' | 'seek-error' | 'seeking'
   >('idle')
   const deleteKey = useRef<string | null>(null)
+  const Heading = embedded ? 'h3' : 'h2'
+  const panelClassName = `panel recording-playback${
+    embedded ? ' recording-playback--embedded' : ''
+  }`
   const playbackUrl = recording?.playback_url ?? null
   const playbackAccess = useQuery({
     queryKey: ['recording-playback-access', recording?.id ?? 'none'],
@@ -294,11 +289,11 @@ function RecordRecordingPanel({
   if (!recording)
     return (
       <section
-        className="panel recording-playback"
+        className={panelClassName}
         aria-labelledby="recording-playback-title"
       >
         <p className="eyebrow">Recording playback</p>
-        <h2 id="recording-playback-title">수업 녹음</h2>
+        <Heading id="recording-playback-title">수업 녹음</Heading>
         {sessionStatus === 'PROCESSING' ? (
           <StatePanel
             kind="loading"
@@ -317,11 +312,11 @@ function RecordRecordingPanel({
   if (!recording.playback_url)
     return (
       <section
-        className="panel recording-playback"
+        className={panelClassName}
         aria-labelledby="recording-playback-title"
       >
         <p className="eyebrow">Recording playback</p>
-        <h2 id="recording-playback-title">수업 녹음</h2>
+        <Heading id="recording-playback-title">수업 녹음</Heading>
         {recording.status === 'FAILED' ? (
           <StatePanel
             kind="error"
@@ -347,12 +342,12 @@ function RecordRecordingPanel({
 
   return (
     <section
-      className="panel recording-playback"
+      className={panelClassName}
       aria-labelledby="recording-playback-title"
     >
       <header>
         <p className="eyebrow">Recording playback</p>
-        <h2 id="recording-playback-title">수업 녹음</h2>
+        <Heading id="recording-playback-title">수업 녹음</Heading>
       </header>
       {playbackAccess.isPending && (
         <StatePanel
@@ -552,11 +547,13 @@ function FinalSummaryPanel({ record }: { record: SessionRecord }) {
 }
 
 function RecordTranscriptPanel({
+  recordingPanel,
   record,
   onSeek,
   focusTarget,
   onClearFocus,
 }: {
+  recordingPanel?: ReactNode
   record: SessionRecord
   onSeek: (offset: number) => void
   focusTarget: TranscriptFocusTarget | null
@@ -643,15 +640,22 @@ function RecordTranscriptPanel({
           item.kind === 'segment' && item.value.id === focusTarget.endSegmentId,
       )
     : -1
+  const embeddedRecording = recordingPanel ? (
+    <div className="record-transcript__recording">{recordingPanel}</div>
+  ) : null
+  const transcriptClassName = `panel record-transcript${
+    embeddedRecording ? ' record-transcript--with-recording' : ''
+  }`
 
   if (!transcriptState)
     return (
       <section
-        className="panel record-transcript"
+        className={transcriptClassName}
         aria-labelledby="record-transcript-title"
       >
         <p className="eyebrow">Final transcript</p>
         <h2 id="record-transcript-title">강의 Transcript</h2>
+        {embeddedRecording}
         <StatePanel
           kind={record.session.status === 'PROCESSING' ? 'loading' : 'empty'}
           title={
@@ -667,11 +671,12 @@ function RecordTranscriptPanel({
   if (completedWithFinalizingTranscript) {
     return (
       <section
-        className="panel record-transcript"
+        className={transcriptClassName}
         aria-labelledby="record-transcript-title"
       >
         <p className="eyebrow">Final transcript</p>
         <h2 id="record-transcript-title">강의 Transcript</h2>
+        {embeddedRecording}
         <StatePanel
           kind="error"
           title="완료 기록의 Transcript 상태를 확인할 수 없습니다"
@@ -683,7 +688,7 @@ function RecordTranscriptPanel({
 
   return (
     <section
-      className="panel record-transcript"
+      className={transcriptClassName}
       aria-labelledby="record-transcript-title"
     >
       <header className="record-transcript__heading">
@@ -693,6 +698,7 @@ function RecordTranscriptPanel({
         </div>
         <span className="input-hint">{transcriptState.status}</span>
       </header>
+      {embeddedRecording}
       {focusTarget && (
         <div className="record-transcript__focus-state" role="status">
           <p className="input-hint">
@@ -820,6 +826,50 @@ function RecordTranscriptPanel({
   )
 }
 
+function EndedRecordUtilityRail({
+  professor,
+  sessionId,
+  sessionStatus,
+}: {
+  professor: boolean
+  sessionId: string
+  sessionStatus: 'PROCESSING' | 'COMPLETED'
+}) {
+  const [materialsOpen, setMaterialsOpen] = useState(false)
+
+  return (
+    <>
+      <div className="record-study-utilities" aria-label="수업 보조 도구">
+        <button
+          type="button"
+          className="record-study-utilities__button"
+          aria-haspopup="dialog"
+          aria-expanded={materialsOpen}
+          onClick={() => setMaterialsOpen(true)}
+        >
+          <span aria-hidden="true">▤</span>
+          <span>자료·PDF</span>
+        </button>
+      </div>
+
+      {materialsOpen && (
+        <Dialog
+          open={materialsOpen}
+          title="강의자료와 PDF"
+          description="자료 열람과 교수자 전용 관리 기능은 학습 화면을 벗어나지 않고 여기에서 사용할 수 있습니다."
+          onOpenChange={setMaterialsOpen}
+        >
+          <MaterialPanel
+            sessionId={sessionId}
+            professor={professor}
+            sessionStatus={sessionStatus}
+          />
+        </Dialog>
+      )}
+    </>
+  )
+}
+
 export function SessionRecordPage({
   sessionId,
   professor,
@@ -906,6 +956,90 @@ export function SessionRecordPage({
   const seek = (offset: number) =>
     setRecordingSeek({ id: ++seekRequestId.current, offset })
 
+  const recordingPanel = (
+    <RecordRecordingPanel
+      key={data.recording?.id ?? 'no-recording'}
+      recording={data.recording}
+      professor={professor}
+      seekRequest={recordingSeek}
+      sessionId={data.session.id}
+      sessionStatus={status}
+    />
+  )
+  const transcriptPanel = (
+    <RecordTranscriptPanel
+      recordingPanel={
+        presentation !== 'default' ? (
+          <RecordRecordingPanel
+            key={data.recording?.id ?? 'no-recording'}
+            embedded
+            recording={data.recording}
+            professor={professor}
+            seekRequest={recordingSeek}
+            sessionId={data.session.id}
+            sessionStatus={status}
+          />
+        ) : undefined
+      }
+      record={data}
+      onSeek={seek}
+      focusTarget={transcriptFocus}
+      onClearFocus={() => setTranscriptFocus(null)}
+    />
+  )
+
+  if (presentation === 'ended' || presentation === 'processing') {
+    const completed = presentation === 'ended'
+    return (
+      <section
+        className={`record-page record-page--${presentation}`}
+        aria-label={completed ? '수업 복습 공간' : '수업 기록 정리 공간'}
+      >
+        {refreshWarning}
+        <div className="record-study-layout">
+          <div className="record-study-column record-study-column--transcript">
+            <EndedRecordUtilityRail
+              sessionId={data.session.id}
+              professor={professor}
+              sessionStatus={status}
+            />
+            {transcriptPanel}
+          </div>
+          <div className="record-study-column record-study-column--questions">
+            <RecordQuestionPanel
+              student={!professor}
+              sessionId={data.session.id}
+              sessionStatus={status}
+            />
+            <FinalQuestionClusterList
+              sessionId={data.session.id}
+              sessionStatus={status}
+            />
+            <RecordAnswerPanel
+              sessionId={data.session.id}
+              professor={professor}
+              sessionStatus={status}
+              onFocusTranscript={setTranscriptFocus}
+            />
+          </div>
+          <div className="record-study-column record-study-column--ai">
+            <FinalSummaryPanel record={data} />
+            {professor && (
+              <RecordJobsPanel
+                sessionId={data.session.id}
+                professor={professor}
+                sessionStatus={status}
+              />
+            )}
+            {completed && (
+              <PersonalAiPanel sessionId={data.session.id} mode="REVIEW" />
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section
       className={`record-page record-page--${presentation}`}
@@ -936,21 +1070,9 @@ export function SessionRecordPage({
           professor={professor}
           sessionStatus={data.session.status}
         />
-        <RecordRecordingPanel
-          key={data.recording?.id ?? 'no-recording'}
-          recording={data.recording}
-          professor={professor}
-          seekRequest={recordingSeek}
-          sessionId={data.session.id}
-          sessionStatus={status}
-        />
+        {recordingPanel}
         <FinalSummaryPanel record={data} />
-        <RecordTranscriptPanel
-          record={data}
-          onSeek={seek}
-          focusTarget={transcriptFocus}
-          onClearFocus={() => setTranscriptFocus(null)}
-        />
+        {transcriptPanel}
         <RecordQuestionPanel
           student={!professor}
           sessionId={data.session.id}

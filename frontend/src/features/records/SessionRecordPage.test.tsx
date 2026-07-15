@@ -453,10 +453,7 @@ describe('SessionRecordPage', () => {
     renderPage()
 
     expect(
-      await screen.findByText('수업 기록을 정리하고 있습니다'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('원본 녹음 저장 상태를 확인하는 중'),
+      await screen.findByText('원본 녹음 저장 상태를 확인하는 중'),
     ).toBeInTheDocument()
     expect(
       screen.getByText('최종 Transcript를 기준으로 요약을 준비하고 있습니다.'),

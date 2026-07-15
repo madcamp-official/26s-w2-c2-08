@@ -97,6 +97,22 @@ h4 {
   padding-block: 40px 80px;
 }
 
+/* Class study views use the available desktop canvas for their fixed study columns. */
+.page-main:has(.ended-class-page),
+.page-main:has(.processing-class-page) {
+  width: calc(100% - 32px);
+  max-width: none;
+  padding-block: 24px 32px;
+}
+
+@media (max-width: 720px) {
+  .page-main:has(.ended-class-page),
+  .page-main:has(.processing-class-page) {
+    width: calc(100% - 28px);
+    padding-block: 20px 28px;
+  }
+}
+
 .eyebrow {
   display: inline-flex;
   margin: 0;

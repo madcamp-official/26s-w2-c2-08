@@ -2710,28 +2710,16 @@
 .record-processing {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(420px, 1fr);
-  gap: var(--space-6);
+  gap: var(--space-4);
   align-items: center;
-  padding: clamp(20px, 3vw, 30px);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
   background: var(--color-surface-soft);
 }
 
-.record-processing h2,
 .record-processing p {
   margin: 0;
-}
-
-.record-processing h2 {
-  margin-top: var(--space-2);
-  font-size: 24px;
-}
-
-.record-processing p:last-child {
-  margin-top: var(--space-2);
-  color: var(--color-muted);
-  line-height: 1.6;
 }
 
 .record-processing__steps,
@@ -2751,7 +2739,7 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 14px;
+  padding: 9px 11px;
   background: var(--color-surface);
 }
 

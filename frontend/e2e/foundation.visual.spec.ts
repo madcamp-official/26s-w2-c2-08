@@ -192,8 +192,6 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/sessions/${processingProfessorSession.id}`,
       `GET /api/v1/courses/${professorProcessingCourse.id}`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/record`,
-      `GET /api/v1/sessions/${processingProfessorSession.id}/materials?limit=100`,
-      `GET /api/v1/sessions/${processingProfessorSession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/transcript?transcript_version_id=${processingProfessorSession.canonical_transcript_version_id}&limit=100`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/questions?sort=RECENT&limit=20`,
       `GET /api/v1/sessions/${processingProfessorSession.id}/question-clusters?scope=FINAL&limit=20`,
@@ -213,7 +211,6 @@ const scenarios: FoundationScenario[] = [
       `GET /api/v1/sessions/${processingStudentSession.id}`,
       `GET /api/v1/courses/${studentProcessingCourse.id}`,
       `GET /api/v1/sessions/${processingStudentSession.id}/record`,
-      `GET /api/v1/sessions/${processingStudentSession.id}/materials?limit=100`,
       `GET /api/v1/sessions/${processingStudentSession.id}/transcript?transcript_version_id=${processingStudentSession.canonical_transcript_version_id}&limit=100`,
       `GET /api/v1/sessions/${processingStudentSession.id}/questions?sort=RECENT&limit=20`,
       `GET /api/v1/sessions/${processingStudentSession.id}/question-clusters?scope=FINAL&limit=20`,
@@ -226,14 +223,12 @@ const scenarios: FoundationScenario[] = [
     path: `/sessions/${professorEndedSession.id}`,
     auth: 'signed-in',
     heading: professorEndedSession.title,
-    checkpoint: { level: 2, name: '복습할 수업 기록이 준비되었습니다' },
+    checkpoint: { level: 2, name: 'AI 수업 요약' },
     requiredRequests: [
       'GET /api/v1/me',
       `GET /api/v1/sessions/${professorEndedSession.id}`,
       `GET /api/v1/courses/${professorEndedCourse.id}`,
       `GET /api/v1/sessions/${professorEndedSession.id}/record`,
-      `GET /api/v1/sessions/${professorEndedSession.id}/materials?limit=100`,
-      `GET /api/v1/sessions/${professorEndedSession.id}/jobs?job_type=MATERIAL_PROCESSING&limit=100`,
       `GET /api/v1/recordings/80000000-0000-0000-0000-000000000009/playback`,
       `GET /api/v1/sessions/${professorEndedSession.id}/summaries?summary_type=FINAL&limit=20`,
       `GET /api/v1/sessions/${professorEndedSession.id}/transcript?transcript_version_id=${professorEndedSession.canonical_transcript_version_id}&limit=100`,
@@ -250,13 +245,12 @@ const scenarios: FoundationScenario[] = [
     path: `/sessions/${studentEndedSession.id}`,
     auth: 'signed-in',
     heading: studentEndedSession.title,
-    checkpoint: { level: 2, name: '복습할 수업 기록이 준비되었습니다' },
+    checkpoint: { level: 2, name: 'AI 수업 요약' },
     requiredRequests: [
       'GET /api/v1/me',
       `GET /api/v1/sessions/${studentEndedSession.id}`,
       `GET /api/v1/courses/${studentEndedCourse.id}`,
       `GET /api/v1/sessions/${studentEndedSession.id}/record`,
-      `GET /api/v1/sessions/${studentEndedSession.id}/materials?limit=100`,
       `GET /api/v1/recordings/80000000-0000-0000-0000-000000000010/playback`,
       `GET /api/v1/sessions/${studentEndedSession.id}/summaries?summary_type=FINAL&limit=20`,
       `GET /api/v1/sessions/${studentEndedSession.id}/transcript?transcript_version_id=${studentEndedSession.canonical_transcript_version_id}&limit=100`,
@@ -507,7 +501,10 @@ test('ENDED_CLASS_PAGE_PROF delete dialog traps and returns keyboard focus', asy
     }),
   ).toBeVisible()
 
-  const trigger = page.getByRole('button', { name: 'class 삭제' })
+  const managementTrigger = page.getByRole('button', { name: 'class 관리' })
+  await managementTrigger.click()
+  const management = page.getByRole('dialog', { name: '완료 class 관리' })
+  const trigger = management.getByRole('button', { name: 'class 삭제' })
   await trigger.click()
   const dialog = page.getByRole('dialog', {
     name: '완료 class를 삭제할까요?',
