@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import timedelta
 
 from tbd.core.config import get_settings
 from tbd.db import create_database
@@ -27,6 +28,8 @@ async def run(
         database.session_factory,
         providers.llm,
         providers.embedding,
+        provider_timeout=timedelta(seconds=settings.personal_ai_provider_timeout_seconds),
+        embedding_timeout=timedelta(seconds=settings.knowledge_embedding_timeout_seconds),
     )
     try:
         while True:

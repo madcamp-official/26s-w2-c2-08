@@ -2,7 +2,7 @@
 
 import asyncio
 import base64
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -24,6 +24,7 @@ from tbd.providers.ai import FakeEmbeddingProvider, FakeProviderBehavior, Provid
 from tbd.providers.stt import STTFinal
 from tbd.services.courses import CourseService
 from tbd.services.knowledge import (
+    KNOWLEDGE_EMBEDDING_TIMEOUT,
     KnowledgeIndexingWorker,
     KnowledgeRetrievalService,
     enqueue_knowledge_indexing,
@@ -35,6 +36,17 @@ from tbd.services.sessions import SessionService
 from tbd.storage import InMemoryStorage, StorageKey, StorageNamespace, sha256_bytes
 
 pytestmark = pytest.mark.integration
+
+
+def test_knowledge_embedding_timeout_is_injected_into_workers_and_retrieval() -> None:
+    """Workers and RAG retrieval must not retain a hidden short embedding deadline."""
+
+    timeout = timedelta(seconds=75)
+    provider = FakeEmbeddingProvider()
+    retrieval = KnowledgeRetrievalService(provider, embedding_timeout=timeout)
+
+    assert retrieval.embedding_timeout == timeout
+    assert KNOWLEDGE_EMBEDDING_TIMEOUT == timedelta(seconds=60)
 
 
 def _settings(database_url: str, tmp_path: Path) -> Settings:

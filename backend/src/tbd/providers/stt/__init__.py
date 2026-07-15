@@ -12,10 +12,16 @@ from tbd.providers.stt.batch import (
     UnavailableBatchSTTProvider,
     validate_batch_segments,
 )
+from tbd.providers.stt.factory import STTProviders, create_stt_providers
+from tbd.providers.stt.faster_whisper import (
+    FasterWhisperBatchSTTProvider,
+    FasterWhisperStreamingSTTProvider,
+)
 from tbd.providers.stt.streaming import (
     DeterministicStreamingSTTProvider,
     StreamingSTTInvalidResultError,
     StreamingSTTProvider,
+    StreamingSTTRequest,
     StreamingSTTResult,
     StreamingSTTUnavailableError,
     STTFinal,
@@ -34,14 +40,19 @@ __all__ = [
     "BatchSTTUnavailableError",
     "DeterministicBatchSTTProvider",
     "DeterministicStreamingSTTProvider",
+    "FasterWhisperBatchSTTProvider",
+    "FasterWhisperStreamingSTTProvider",
     "STTFinal",
     "STTPartial",
+    "STTProviders",
+    "StreamingSTTRequest",
     "StreamingSTTProvider",
     "StreamingSTTResult",
     "StreamingSTTInvalidResultError",
     "StreamingSTTUnavailableError",
     "UnavailableStreamingSTTProvider",
     "UnavailableBatchSTTProvider",
+    "create_stt_providers",
     "validate_batch_segments",
     "validate_streaming_results",
 ]

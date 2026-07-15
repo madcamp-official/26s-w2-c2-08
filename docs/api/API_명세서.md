@@ -1199,7 +1199,7 @@ Idempotency-Key: <key>
 - 서버는 3.1.1절에 따라 `content`의 앞뒤 공백 제거·Unicode NFC 정규화 후 1~2,000 code point를 검증한다. 초과·빈 결과는 잘라 저장하지 않고 `422 VALIDATION_ERROR`와 안정적인 details를 반환하며, USER Message `content`에는 정규화 결과를 저장한다.
 - Chat mode와 Session 상태는 메시지 수락 시점에도 다시 검증한다. `LIVE` Chat은 Session `LIVE`, `REVIEW` Chat은 Session `COMPLETED`에서만 허용하며 다르면 `409 SESSION_STATE_CONFLICT`를 반환한다. Session 종료 transaction이 먼저 LIVE Chat을 삭제한 경쟁에서 이전 ID 요청은 존재를 숨기는 `404`를 반환한다. 이미 terminal인 동일 멱등 요청은 `410 LIVE_AI_RESULT_PURGED`를 replay한다.
 - 서버는 같은 Session에 연결되고 `READY`인 PDF, final Transcript와 Q&A만 검색한다. `UPLOADED`, `PROCESSING`, `FAILED` 또는 분리된 자료는 제외한다.
-- 근거가 부족하면 확인할 수 없음을 응답한다.
+- 검색 결과가 질문을 직접 뒷받침하면 Assistant Message는 `강의 근거에 의하면, ...`으로 시작하고 해당 Evidence를 함께 저장·반환한다. 검색 결과가 없거나 질문과의 관련성이 약·불충분하면 LLM은 일반 지식으로 답변할 수 있으며, Assistant Message는 `강의 내용에는 직접적인 근거가 없지만, 일반적으로 ...`으로 시작하고 Evidence는 비운다. 일반 답변도 성공한 최종 Assistant Message로 저장한다.
 - 성공: `202 Accepted`. 앞뒤 공백 제거·Unicode NFC 정규화·검증을 거친 사용자 Message, `REQUESTER_ONLY CHAT_RESPONSE` AIJob, outbox와 terminal 멱등성 응답을 한 transaction에서 commit하고 함께 반환한다. USER Message의 `response_job_id`는 Job ID와 같고 Job `target.resource_type=CHAT_MESSAGE`, `target.resource_id=USER Message ID`로 immutable 입력 turn을 가리킨다.
 - 요청자는 반환된 Job ID를 16.8절 규칙으로 polling하고 `SUCCEEDED` Job의 `result.resource_url`로 저장된 최종 Assistant Message를 조회한다. 생성 중 token·부분 Assistant Message는 저장·공유·streaming하지 않는다.
 - 인증되지 않은 요청은 `401`을 반환한다. 비소유자·비멤버와 Session 종료로 삭제된 기존 LIVE Chat ID에는 존재를 숨기고 `404 RESOURCE_NOT_FOUND`를 반환한다.

@@ -54,16 +54,20 @@ from tbd.schemas.personal_ai import (
     SummaryRange,
 )
 from tbd.services.knowledge import (
+    KNOWLEDGE_EMBEDDING_TIMEOUT,
     KnowledgeRetrievalService,
     KnowledgeSearchResult,
     project_evidence,
 )
 
 PERSONAL_AI_LEASE = timedelta(minutes=1)
-PERSONAL_AI_PROVIDER_TIMEOUT = timedelta(seconds=15)
+PERSONAL_AI_PROVIDER_TIMEOUT = timedelta(seconds=60)
 LIVE_SUMMARY_PROMPT_VERSION = "live-summary-v1"
-CHAT_PROMPT_VERSION = "rag-chat-v1"
-NO_EVIDENCE_RESPONSE = "저장된 강의 근거에서 확인할 수 없습니다."
+CHAT_PROMPT_VERSION = "rag-chat-v2"
+COURSE_ANSWER_TAG = "[[COURSE]]"
+GENERAL_ANSWER_TAG = "[[GENERAL]]"
+COURSE_ANSWER_PREFIX = "강의 근거에 의하면, "
+GENERAL_ANSWER_PREFIX = "강의 내용에는 직접적인 근거가 없지만, 일반적으로 "
 
 
 class PersonalAINotFoundError(Exception):
@@ -122,6 +126,34 @@ class _ChatGeneration:
     content: str
     model_name: str | None
     evidence: tuple[KnowledgeSearchResult, ...]
+
+
+def _resolve_chat_answer(
+    content: str,
+    *,
+    evidence_available: bool,
+) -> tuple[str, bool]:
+    """Apply the visible source policy and decide whether to publish Evidence.
+
+    The model makes the relevance judgement because vector search can return a
+    nearest Chunk even when it does not directly support the user's question.
+    An untagged or invalid ``COURSE`` response falls back to a clearly labeled
+    general answer so the UI never presents unrelated source links as support.
+    """
+
+    normalized = content.strip()
+    if not normalized:
+        raise ProviderInvalidResponseError
+    if normalized.startswith(COURSE_ANSWER_TAG):
+        answer = normalized.removeprefix(COURSE_ANSWER_TAG).strip()
+        if answer and evidence_available:
+            return f"{COURSE_ANSWER_PREFIX}{answer}", True
+        normalized = answer or normalized
+    elif normalized.startswith(GENERAL_ANSWER_TAG):
+        normalized = normalized.removeprefix(GENERAL_ANSWER_TAG).strip()
+        if not normalized:
+            raise ProviderInvalidResponseError
+    return f"{GENERAL_ANSWER_PREFIX}{normalized}", False
 
 
 class PersonalAIService:
@@ -786,11 +818,21 @@ class PersonalAIWorker:
         embedding_provider: EmbeddingProvider,
         *,
         jobs: JobRepository | None = None,
+        provider_timeout: timedelta = PERSONAL_AI_PROVIDER_TIMEOUT,
+        embedding_timeout: timedelta = KNOWLEDGE_EMBEDDING_TIMEOUT,
     ) -> None:
+        if provider_timeout.total_seconds() <= 0:
+            raise ValueError("provider_timeout must be positive")
+        if embedding_timeout.total_seconds() <= 0:
+            raise ValueError("embedding_timeout must be positive")
         self.session_factory = session_factory
         self.llm_provider = llm_provider
-        self.retrieval = KnowledgeRetrievalService(embedding_provider)
+        self.retrieval = KnowledgeRetrievalService(
+            embedding_provider,
+            embedding_timeout=embedding_timeout,
+        )
         self.jobs = jobs or JobRepository()
+        self.provider_timeout = provider_timeout
 
     async def run_once(self, *, now: datetime | None = None) -> bool:
         """Claim and process one requester-only Job, if a due Job exists."""
@@ -961,7 +1003,7 @@ class PersonalAIWorker:
                     LLMMessage(role="user", content=source),
                 ),
             ),
-            timeout=PERSONAL_AI_PROVIDER_TIMEOUT,
+            timeout=self.provider_timeout,
         )
         content = result.content.strip()
         if not content:
@@ -998,12 +1040,6 @@ class PersonalAIWorker:
                     query=message.content,
                 )
             )
-            if not evidence:
-                return _ChatGeneration(
-                    content=NO_EVIDENCE_RESPONSE,
-                    model_name=None,
-                    evidence=(),
-                )
             history = list(
                 await session.scalars(
                     select(ChatMessage)
@@ -1019,18 +1055,24 @@ class PersonalAIWorker:
             history_text = "\n".join(
                 f"{history_message.role}: {history_message.content}" for history_message in history
             )
-            context = "\n\n".join(result.chunk.content for result in evidence)
+            context = "\n\n".join(result.chunk.content for result in evidence) or "(없음)"
             question = message.content
         result = await self.llm_provider.generate(
             LLMGenerationRequest(
-                purpose="rag-chat-v1",
+                purpose="rag-chat-v2",
                 prompt_version=CHAT_PROMPT_VERSION,
                 messages=(
                     LLMMessage(
                         role="system",
                         content=(
-                            "제공된 강의 근거만 사용해 답하세요. 근거가 충분하지 않으면 "
-                            "확인할 수 없다고 답하세요."
+                            "사용자의 질문에 한국어로 최대한 도움이 되게 답하세요. 제공된 강의 "
+                            "근거가 질문의 핵심 주장에 직접적으로 충분하면 첫 줄을 [[COURSE]]로 "
+                            "시작하고, 그 근거에만 기반한 답변을 이어 쓰세요. 이 경우에만 강의 "
+                            "근거를 사용했다고 말할 수 있습니다. 근거가 없거나 질문과 관련이 "
+                            "약하거나 불완전하면 첫 줄을 [[GENERAL]]로 시작하고, 일반 지식에 "
+                            "기반한 답변을 이어 쓰세요. [[GENERAL]]에서는 제공된 강의 근거를 "
+                            "사실의 출처처럼 사용하지 마세요. 태그 뒤에는 답변 본문만 쓰고, "
+                            "두 태그 중 하나는 반드시 선택하세요."
                         ),
                     ),
                     LLMMessage(
@@ -1042,12 +1084,18 @@ class PersonalAIWorker:
                     ),
                 ),
             ),
-            timeout=PERSONAL_AI_PROVIDER_TIMEOUT,
+            timeout=self.provider_timeout,
         )
         content = result.content.strip()
-        if not content:
-            raise ProviderInvalidResponseError
-        return _ChatGeneration(content=content, model_name=result.model_name, evidence=evidence)
+        answer, use_evidence = _resolve_chat_answer(
+            content,
+            evidence_available=bool(evidence),
+        )
+        return _ChatGeneration(
+            content=answer,
+            model_name=result.model_name,
+            evidence=evidence if use_evidence else (),
+        )
 
     async def _persist_summary(
         self,

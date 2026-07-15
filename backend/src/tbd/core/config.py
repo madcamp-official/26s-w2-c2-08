@@ -36,6 +36,13 @@ class AIProviderRuntime(StrEnum):
     OLLAMA = "ollama"
 
 
+class STTProviderRuntime(StrEnum):
+    """STT runtime selectable independently from the LLM/embedding profile."""
+
+    UNAVAILABLE = "unavailable"
+    FASTER_WHISPER = "faster_whisper"
+
+
 class Settings(BaseSettings):
     """Runtime settings with production-safe database validation."""
 
@@ -63,6 +70,17 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_llm_model: str = "mistral-small3.2:24b"
     ollama_embedding_model: str = "embeddinggemma"
+    knowledge_embedding_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    personal_ai_provider_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    stt_provider: STTProviderRuntime = STTProviderRuntime.UNAVAILABLE
+    stt_hq_model: str = "large-v3"
+    stt_live_model: str = "large-v3-turbo"
+    stt_device: str = "cuda"
+    stt_compute_type: str = "float16"
+    stt_language: str = "ko"
+    stt_live_window_ms: int = Field(default=2000, ge=500, le=10_000)
+    stt_live_finalize_ms: int = Field(default=6000, ge=1000, le=30_000)
+    stt_live_timeout_seconds: int = Field(default=5, ge=1, le=30)
     frontend_origin: str = "http://localhost:5173"
     auth_allowed_origins: str = "http://localhost:5173"
     auth_secret_key: SecretStr = SecretStr(DEFAULT_AUTH_SECRET)
@@ -187,6 +205,8 @@ class Settings(BaseSettings):
     def _validate_ai_provider(self) -> None:
         """Validate an Ollama origin and model tags without contacting the runtime."""
 
+        if self.stt_live_finalize_ms < self.stt_live_window_ms:
+            raise ValueError("STT_LIVE_FINALIZE_MS must be at least STT_LIVE_WINDOW_MS")
         if self.ai_provider is not AIProviderRuntime.OLLAMA:
             return
         parsed = urlsplit(self.ollama_base_url.strip().rstrip("/"))

@@ -1,10 +1,15 @@
 """Fast contract checks for audio framing and fake Streaming STT behavior."""
 
 import asyncio
+from uuid import uuid4
 
 import pytest
 
-from tbd.providers.stt import DeterministicStreamingSTTProvider, STTFinal
+from tbd.providers.stt import (
+    DeterministicStreamingSTTProvider,
+    StreamingSTTRequest,
+    STTFinal,
+)
 from tbd.realtime.audio import (
     FRAME_HEADER,
     PCM_CHUNK_BYTES,
@@ -45,7 +50,15 @@ def test_deterministic_streaming_stt_never_requires_a_network_provider() -> None
     )
     provider = DeterministicStreamingSTTProvider({0: [final]})
 
-    results = asyncio.run(provider.transcribe(parse_audio_frame(_frame())))
+    results = asyncio.run(
+        provider.transcribe(
+            StreamingSTTRequest(
+                session_id=uuid4(),
+                recording_id=uuid4(),
+                frame=parse_audio_frame(_frame()),
+            )
+        )
+    )
 
     assert results == (final,)
     assert provider.frames == [0]

@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 from tbd.realtime.audio import AudioFrame
 
@@ -39,6 +40,15 @@ class STTFinal:
 type StreamingSTTResult = STTPartial | STTFinal
 
 
+@dataclass(frozen=True)
+class StreamingSTTRequest:
+    """One live PCM frame with the durable scope required for provider state."""
+
+    session_id: UUID
+    recording_id: UUID
+    frame: AudioFrame
+
+
 def validate_streaming_results(
     results: Sequence[StreamingSTTResult],
 ) -> tuple[StreamingSTTResult, ...]:
@@ -63,16 +73,16 @@ def validate_streaming_results(
 
 
 class StreamingSTTProvider(Protocol):
-    """Translate one fixed PCM frame without exposing a provider SDK upstream."""
+    """Translate one scoped PCM frame without exposing a provider SDK upstream."""
 
-    async def transcribe(self, frame: AudioFrame) -> Sequence[StreamingSTTResult]: ...
+    async def transcribe(self, request: StreamingSTTRequest) -> Sequence[StreamingSTTResult]: ...
 
 
 class UnavailableStreamingSTTProvider:
     """Safe default until an external live STT runtime is selected and configured."""
 
-    async def transcribe(self, frame: AudioFrame) -> Sequence[StreamingSTTResult]:
-        del frame
+    async def transcribe(self, request: StreamingSTTRequest) -> Sequence[StreamingSTTResult]:
+        del request
         raise StreamingSTTUnavailableError
 
 
@@ -83,6 +93,6 @@ class DeterministicStreamingSTTProvider:
         self._results = dict(results or {})
         self.frames: list[int] = []
 
-    async def transcribe(self, frame: AudioFrame) -> Sequence[StreamingSTTResult]:
-        self.frames.append(frame.sequence)
-        return tuple(self._results.get(frame.sequence, ()))
+    async def transcribe(self, request: StreamingSTTRequest) -> Sequence[StreamingSTTResult]:
+        self.frames.append(request.frame.sequence)
+        return tuple(self._results.get(request.frame.sequence, ()))
