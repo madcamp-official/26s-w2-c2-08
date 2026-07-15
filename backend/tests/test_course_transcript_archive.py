@@ -340,9 +340,20 @@ async def _seed_archive(
 
 async def _complete_session(database_url: str, tmp_path: Path, session_id: UUID) -> None:
     database = create_database(_settings(database_url, tmp_path))
-    completed_at = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
     try:
         async with database.engine.begin() as connection:
+            started_at = await connection.scalar(
+                text(
+                    "SELECT started_at FROM lecture_sessions "
+                    "WHERE id = :session_id"
+                ),
+                {"session_id": session_id},
+            )
+            assert isinstance(started_at, datetime)
+            completed_at = max(
+                datetime(2026, 7, 15, 12, 0, tzinfo=UTC),
+                started_at + timedelta(seconds=1),
+            )
             await connection.execute(
                 text(
                     """
