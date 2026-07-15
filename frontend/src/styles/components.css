@@ -729,19 +729,6 @@
 .recording-playback p {
   margin: 4px 0 0;
 }
-.recording-consent {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  color: var(--color-ink);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.recording-consent input {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-}
 .recording-playback audio {
   width: 100%;
 }

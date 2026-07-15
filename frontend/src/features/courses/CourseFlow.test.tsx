@@ -1315,7 +1315,7 @@ describe('Course role flows', () => {
     expect(screen.getByLabelText('class 제목 (선택)')).toHaveValue('')
   })
 
-  it('allows a READY class with no PDF to start', async () => {
+  it('requires recording acknowledgement before a READY class with no PDF can start', async () => {
     authenticate()
     server.use(
       http.get('*/api/v1/sessions/:sessionId', () =>
@@ -1334,6 +1334,13 @@ describe('Course role flows', () => {
     renderAt(`/sessions/${readySession.id}`)
 
     const start = await screen.findByRole('button', { name: '수업 시작' })
+    expect(start).toBeDisabled()
+    expect(
+      screen.getByText(
+        '수업을 시작하려면 원본 녹음 저장 동의를 확인해 주세요.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/수업 원본 녹음 저장에 동의합니다/))
     await waitFor(() => expect(start).toBeEnabled())
     expect(screen.getByText('연결된 강의자료가 없습니다')).toBeInTheDocument()
   })
@@ -1415,7 +1422,10 @@ describe('Course role flows', () => {
 
     const title = await screen.findByLabelText('class 제목')
     fireEvent.change(title, { target: { value: '저장 전 제목' } })
-    expect(screen.getByRole('button', { name: '수업 시작' })).toBeEnabled()
+    const start = screen.getByRole('button', { name: '수업 시작' })
+    expect(start).toBeDisabled()
+    fireEvent.click(screen.getByLabelText(/수업 원본 녹음 저장에 동의합니다/))
+    expect(start).toBeEnabled()
 
     expect(
       await screen.findByText(
@@ -1427,7 +1437,7 @@ describe('Course role flows', () => {
       ),
     ).toBeInTheDocument()
     expect(title).toHaveValue('저장 전 제목')
-    expect(screen.getByRole('button', { name: '수업 시작' })).toBeEnabled()
+    expect(start).toBeEnabled()
     expect(sessionRequests).toBeGreaterThanOrEqual(3)
   }, 10_000)
 
@@ -1669,6 +1679,9 @@ describe('Course role flows', () => {
     expect(
       screen.getByRole('region', { name: '수업 원본 녹음' }),
     ).toBeInTheDocument()
+    expect(
+      screen.queryByLabelText(/수업 원본 녹음 저장에 동의합니다/),
+    ).not.toBeInTheDocument()
     expect(
       await screen.findByRole('button', { name: '수업 종료' }),
     ).toBeInTheDocument()
@@ -2118,6 +2131,13 @@ describe('Course role flows', () => {
     const start = screen.getByRole('button', { name: '수업 시작' })
     expect(start).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '자료 목록 다시 시도' }))
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(/수업 원본 녹음 저장에 동의합니다/),
+      ).toBeEnabled(),
+    )
+    expect(start).toBeDisabled()
+    fireEvent.click(screen.getByLabelText(/수업 원본 녹음 저장에 동의합니다/))
     await waitFor(() => expect(start).toBeEnabled())
     expect(materialRequests).toBe(3)
   })

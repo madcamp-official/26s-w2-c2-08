@@ -8306,7 +8306,7 @@ x-recording-contract:
     range: supports full response and byte Range when UPLOADED
     delivery: API proxy stream only; no download endpoint or signed redirect
   tbd:
-    - Browser capture uses MediaRecorder and IndexedDB fragment storage; it never stores audio in localStorage. Consent and storage-failure UI are client concerns, not proof of legal consent.
+    - The official browser flow requires a READY-stage acknowledgement of local recording and HQ Transcript processing before class start. LIVE capture then starts automatically when the professor publisher stream exists, without an in-class consent toggle. MediaRecorder uses IndexedDB fragment storage and never localStorage; this client acknowledgement is not proof of legal consent.
     - publisher disconnect lease, reacquisition and explicit takeover
     - transcript DEGRADED threshold, audio stop timeout and event replay window
     - legal recording consent, retention, deletion and operating policy remain to be decided; browser capture UI alone does not establish that policy

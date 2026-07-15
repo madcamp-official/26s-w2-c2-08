@@ -46,6 +46,7 @@ export function ReadyClassView({
     value: session.title,
   })
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [recordingAcknowledged, setRecordingAcknowledged] = useState(false)
   const deleteKey = useRef<string | null>(null)
 
   if (titleEdit.canonical !== session.title) {
@@ -124,8 +125,9 @@ export function ReadyClassView({
   const hasProcessingMaterial = materials.data?.items.some(
     (material) => material.processing_status === 'PROCESSING',
   )
-  const startBlocked =
+  const materialBlocksStart =
     materials.isPending || materials.isError || Boolean(hasProcessingMaterial)
+  const startBlocked = materialBlocksStart || !recordingAcknowledged
 
   return (
     <section
@@ -268,6 +270,24 @@ export function ReadyClassView({
                         : `${materials.data.items.length}개 PDF 상태 확인`}
                 </li>
               </ul>
+              <label className="class-ready-recording-consent">
+                <input
+                  type="checkbox"
+                  checked={recordingAcknowledged}
+                  disabled={start.isPending}
+                  onChange={(event) =>
+                    setRecordingAcknowledged(event.target.checked)
+                  }
+                />
+                <span>
+                  <strong>수업 원본 녹음 저장에 동의합니다.</strong>
+                  <small>
+                    시작 후 교수자 마이크가 연결되면 이 브라우저에 원본을 자동
+                    저장하고, 수업 종료 뒤 고품질 Transcript 처리를 위해
+                    업로드합니다.
+                  </small>
+                </span>
+              </label>
               <Button
                 className="class-ready-launch__button"
                 disabled={start.isPending || startBlocked}
@@ -275,11 +295,16 @@ export function ReadyClassView({
               >
                 {start.isPending ? '수업 시작 중…' : '수업 시작'}
               </Button>
-              {startBlocked && (
+              {materialBlocksStart && (
                 <p className="class-ready-launch__hint">
                   {hasProcessingMaterial
                     ? '처리 중인 PDF가 READY 또는 FAILED가 되면 시작할 수 있습니다.'
                     : '강의자료 목록을 확인한 뒤 시작할 수 있습니다.'}
+                </p>
+              )}
+              {!recordingAcknowledged && (
+                <p className="class-ready-launch__hint">
+                  수업을 시작하려면 원본 녹음 저장 동의를 확인해 주세요.
                 </p>
               )}
               {start.isError && (

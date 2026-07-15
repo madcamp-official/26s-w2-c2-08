@@ -80,7 +80,7 @@ form과 생성 후 `/sessions/:sessionId`의 역할별 READY view로 나뉜다. 
 Material·Job API로 복수 PDF의 파일별 업로드·부분 실패 재시도와 실패 Job 재시도를
 처리하고, 학생 DOM에는 교수자 제어를 포함하지 않는다.
 
-참여 코드는 trim·대문자화 뒤 `[A-Z]{6}`이며 자동 만료되지 않는다. READY Material은 active `N/10`, 파일당 100 MB(100,000,000 bytes), 동일 이름 suffix, 권한 확인 원본 열기와 즉시 detach 목 상태를 제공한다. `PROCESSING` Material만 class 시작을 막고 PDF가 없거나 `UPLOADED`, `READY`, `FAILED`만 있으면 시작 가능하다.
+참여 코드는 trim·대문자화 뒤 `[A-Z]{6}`이며 자동 만료되지 않는다. READY Material은 active `N/10`, 파일당 100 MB(100,000,000 bytes), 동일 이름 suffix, 권한 확인 원본 열기와 즉시 detach 목 상태를 제공한다. `PROCESSING` Material만 class 시작을 막고 PDF가 없거나 `UPLOADED`, `READY`, `FAILED`만 있으면 시작 가능하다. 또한 교수자는 원본 녹음 저장·수업 후 HQ Transcript 처리 안내를 확인해야 class를 시작할 수 있으며, LIVE에서는 별도 동의 해제 control 없이 publisher MediaStream의 로컬 녹음을 자동 시작한다.
 
 ## Course workspace 정책 검토 경로
 

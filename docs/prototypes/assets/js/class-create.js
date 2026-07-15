@@ -46,6 +46,7 @@ const readinessTitle = document.querySelector(
 const readinessCopy = document.querySelector("[data-material-readiness-copy]");
 const startFlow = document.querySelector("#startFlow");
 const startSessionButton = document.querySelector("#startSessionButton");
+const recordingConsent = document.querySelector("#recordingConsent");
 const materialDeleteDialog = document.querySelector("#materialDeleteDialog");
 const materialDeleteName = document.querySelector(
   "[data-material-delete-name]",
@@ -297,7 +298,9 @@ function syncFullMaterialCopy() {
 
 function syncStartAvailability(blocksStart) {
   materialBlocksStart = blocksStart;
-  if (startSessionButton) startSessionButton.disabled = blocksStart;
+  if (startSessionButton) {
+    startSessionButton.disabled = blocksStart || !recordingConsent?.checked;
+  }
   if (readiness) readiness.dataset.ready = blocksStart ? "warning" : "true";
   if (readinessTitle) {
     readinessTitle.textContent = blocksStart
@@ -328,6 +331,10 @@ function syncStartAvailability(blocksStart) {
     setDemoState(startFlow, "idle");
   }
 }
+
+recordingConsent?.addEventListener("change", () => {
+  syncStartAvailability(currentMaterialBlocksStart());
+});
 
 function currentMaterialBlocksStart() {
   if (!materialState) return false;

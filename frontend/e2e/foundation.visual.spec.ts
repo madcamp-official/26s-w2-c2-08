@@ -290,30 +290,47 @@ for (const scenario of scenarios) {
   })
 }
 
-test('LIVE_CLASS_PAGE_PROF keeps Transcript in document flow while scrolling', async ({
+test('LIVE_CLASS_PAGE_PROF keeps the page compact with independently scrolling study columns', async ({
   page,
 }) => {
   await installRealtimeSocketFixture(page)
   await installApiFixture(page, 'signed-in')
   await page.goto(`/sessions/${liveProfessorSession.id}`)
-  const transcript = page.locator('.live-transcript')
-  await expect(transcript).toBeVisible()
+  const workspace = page.locator('.live-workspace')
+  const transcriptColumn = page.locator('.live-study-column--transcript')
+  await expect(workspace).toBeVisible()
+  await expect(transcriptColumn).toBeVisible()
   await settleVisualPage(page)
 
-  const before = await transcript.evaluate((element) => ({
-    position: getComputedStyle(element).position,
-    top: element.getBoundingClientRect().top,
+  const viewport = page.viewportSize()
+  const expectedColumns =
+    viewport && viewport.width <= 720
+      ? 1
+      : viewport && viewport.width <= viewport.height
+        ? 2
+        : 3
+  const layout = await workspace.evaluate((element) => ({
+    columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+    height: element.getBoundingClientRect().height,
   }))
-  expect(before.position).toBe('static')
+  expect(layout.columns).toBe(expectedColumns)
+  expect(layout.height).toBeGreaterThan(0)
 
-  await page.evaluate(() => window.scrollTo(0, 600))
-  await expect
-    .poll(() => page.evaluate(() => window.scrollY))
-    .toBeGreaterThan(100)
-  const afterTop = await transcript.evaluate(
-    (element) => element.getBoundingClientRect().top,
-  )
-  expect(afterTop).toBeLessThan(before.top - 100)
+  const column = await transcriptColumn.evaluate((element) => ({
+    overflowY: getComputedStyle(element).overflowY,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }))
+  expect(column.overflowY).toBe(expectedColumns === 1 ? 'visible' : 'auto')
+  expect(column.clientHeight).toBeGreaterThan(0)
+  expect(column.scrollHeight).toBeGreaterThanOrEqual(column.clientHeight)
+
+  if (expectedColumns === 3) {
+    await page.evaluate(() => window.scrollTo(0, 600))
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeLessThan(100)
+  }
 })
 
 test('COURSE_CREATE_PAGE success renders from its production mutation', async ({

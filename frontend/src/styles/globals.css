@@ -99,7 +99,13 @@ h4 {
 
 /* Class study views use the available desktop canvas for their fixed study columns. */
 .page-main:has(.ended-class-page),
-.page-main:has(.processing-class-page) {
+.page-main:has(.processing-class-page),
+.page-main:has(.live-session-page),
+.page-main:has(.course-workspace-page),
+.page-main:has(.dashboard-page),
+.page-main:has(.class-ready-page),
+.page-main:has(.class-create-page),
+.page-main:has(.account-page) {
   width: calc(100% - 32px);
   max-width: none;
   padding-block: 24px 32px;
@@ -107,7 +113,13 @@ h4 {
 
 @media (max-width: 720px) {
   .page-main:has(.ended-class-page),
-  .page-main:has(.processing-class-page) {
+  .page-main:has(.processing-class-page),
+  .page-main:has(.live-session-page),
+  .page-main:has(.course-workspace-page),
+  .page-main:has(.dashboard-page),
+  .page-main:has(.class-ready-page),
+  .page-main:has(.class-create-page),
+  .page-main:has(.account-page) {
     width: calc(100% - 28px);
     padding-block: 20px 28px;
   }
