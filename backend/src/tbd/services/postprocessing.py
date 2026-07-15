@@ -8,6 +8,7 @@ uses the persisted blocking ledger—not an in-memory DAG—to complete a class.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -62,6 +63,12 @@ FINAL_SUMMARY_SYSTEM_PROMPT = """당신은 강의 Transcript를 학습용 강의
 - Transcript만으로 확실하지 않은 내용은 사실처럼 만들어 내지 말고 생략하세요.
 """
 ANSWER_ORGANIZATION_PROMPT_VERSION = "answer-organization-v1"
+
+
+def _final_summary_dedupe_key(session_id: UUID, source_version_id: UUID) -> bytes:
+    return hashlib.sha256(
+        f"{FINAL_SUMMARY_PROMPT_VERSION}:{session_id}:{source_version_id}".encode()
+    ).digest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -552,6 +559,7 @@ class SessionPostprocessingWorker:
         lecture_session: LectureSession,
         source_version: TranscriptVersion,
     ) -> None:
+        dedupe_key = _final_summary_dedupe_key(lecture_session.id, source_version.id)
         active = await session.scalar(
             select(AIJob)
             .where(
@@ -562,6 +570,15 @@ class SessionPostprocessingWorker:
             .with_for_update()
         )
         if active is not None:
+            return
+        already_scheduled = await session.scalar(
+            select(AIJob.id).where(
+                AIJob.session_id == lecture_session.id,
+                AIJob.job_type == AIJobType.FINAL_SUMMARY,
+                AIJob.dedupe_key_hash == dedupe_key,
+            )
+        )
+        if already_scheduled is not None:
             return
         latest_summary = await session.scalar(
             select(LectureSummary)
@@ -575,6 +592,7 @@ class SessionPostprocessingWorker:
         if (
             latest_summary is not None
             and latest_summary.source_transcript_version_id == source_version.id
+            and latest_summary.prompt_version == FINAL_SUMMARY_PROMPT_VERSION
         ):
             return
         await self.kernel.enqueue(
@@ -587,13 +605,14 @@ class SessionPostprocessingWorker:
                 attempt=1,
                 version=1,
                 input_transcript_version_id=source_version.id,
+                dedupe_key_hash=dedupe_key,
                 blocks_session_completion=True,
                 retryable=True,
             ),
         )
 
     async def _schedule_missing_final_summary(self) -> bool:
-        """Backfill completed sessions whose fallback path never created a summary Job."""
+        """Backfill missing summaries and results generated with an obsolete prompt."""
 
         async with self.session_factory() as session:
             async with session.begin():
@@ -607,10 +626,18 @@ class SessionPostprocessingWorker:
                         LectureSession.status == LectureSessionStatus.COMPLETED,
                         TranscriptVersion.status == TranscriptStatus.FINALIZED,
                         TranscriptVersion.last_sequence > 0,
+                        ~select(LectureSummary.id)
+                        .where(
+                            LectureSummary.session_id == LectureSession.id,
+                            LectureSummary.summary_type == SummaryType.FINAL,
+                            LectureSummary.prompt_version == FINAL_SUMMARY_PROMPT_VERSION,
+                        )
+                        .exists(),
                         ~select(AIJob.id)
                         .where(
                             AIJob.session_id == LectureSession.id,
                             AIJob.job_type == AIJobType.FINAL_SUMMARY,
+                            AIJob.dedupe_key_hash.is_not(None),
                         )
                         .exists(),
                     )
