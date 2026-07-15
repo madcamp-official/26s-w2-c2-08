@@ -296,6 +296,32 @@ for (const scenario of scenarios) {
   })
 }
 
+test('LIVE_CLASS_PAGE_PROF keeps Transcript in document flow while scrolling', async ({
+  page,
+}) => {
+  await installRealtimeSocketFixture(page)
+  await installApiFixture(page, 'signed-in')
+  await page.goto(`/sessions/${liveProfessorSession.id}`)
+  const transcript = page.locator('.live-transcript')
+  await expect(transcript).toBeVisible()
+  await settleVisualPage(page)
+
+  const before = await transcript.evaluate((element) => ({
+    position: getComputedStyle(element).position,
+    top: element.getBoundingClientRect().top,
+  }))
+  expect(before.position).toBe('static')
+
+  await page.evaluate(() => window.scrollTo(0, 600))
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(100)
+  const afterTop = await transcript.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  )
+  expect(afterTop).toBeLessThan(before.top - 100)
+})
+
 test('COURSE_CREATE_PAGE success renders from its production mutation', async ({
   page,
 }, testInfo) => {

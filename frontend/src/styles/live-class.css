@@ -246,6 +246,9 @@
 
 .live-workspace > .live-transcript {
   grid-area: transcript;
+  position: static;
+  top: auto;
+  align-self: start;
 }
 
 .live-workspace > .live-rail {
