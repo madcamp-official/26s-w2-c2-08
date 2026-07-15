@@ -2,7 +2,7 @@
 
 import asyncio
 import base64
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -111,10 +111,12 @@ def test_live_clustering_coalesces_and_exposes_canonical_clusters(
             worker = QuestionClusteringWorker(
                 database.session_factory, FakeQuestionClusteringProvider()
             )
-            claimed = asyncio.run(worker._claim(datetime.now(UTC)))
+            claimed = asyncio.run(worker._claim(datetime.now(UTC) + timedelta(seconds=6)))
             assert claimed is not None
-            assert len(claimed.inputs) == 1
-            # The first job has captured sequence 1.  These later questions must
+            assert len(claimed.inputs) == 2
+            # Questions submitted during the debounce window share one immutable
+            # provider input. Questions committed after the claim wait for the
+            # next generation and must
             # never leak into its provider input or overwrite its generation.
             assert (
                 client.post(
@@ -125,16 +127,20 @@ def test_live_clustering_coalesces_and_exposes_canonical_clusters(
                 == 201
             )
             suggestions = asyncio.run(FakeQuestionClusteringProvider().cluster(claimed.inputs))
-            asyncio.run(worker._succeed(claimed, suggestions, datetime.now(UTC)))
+            asyncio.run(
+                worker._succeed(claimed, suggestions, datetime.now(UTC) + timedelta(seconds=7))
+            )
 
             first_clusters = client.get(f"/api/v1/sessions/{session_id}/question-clusters")
             assert first_clusters.status_code == 200
             assert first_clusters.json()["generation"] == 1
-            assert first_clusters.json()["clustering_state"]["applied_through_sequence"] == 1
+            assert first_clusters.json()["clustering_state"]["applied_through_sequence"] == 2
             assert first_clusters.json()["clustering_state"]["active_job_id"] is not None
             first_ids = {item["id"] for item in first_clusters.json()["items"]}
 
-            assert asyncio.run(worker.run_once()) is True
+            assert (
+                asyncio.run(worker.run_once(now=datetime.now(UTC) + timedelta(seconds=6))) is True
+            )
             second_clusters = client.get(f"/api/v1/sessions/{session_id}/question-clusters")
             assert second_clusters.status_code == 200
             assert second_clusters.json()["generation"] == 2
@@ -211,7 +217,9 @@ def test_live_clustering_retries_same_job_and_supersedes_stale_result(
 
             provider = _FailOnceProvider()
             worker = QuestionClusteringWorker(database.session_factory, provider)
-            assert asyncio.run(worker.run_once()) is True
+            assert (
+                asyncio.run(worker.run_once(now=datetime.now(UTC) + timedelta(seconds=6))) is True
+            )
 
             async def job_by_id(job_id: UUID) -> AIJob:
                 async with database.session_factory() as session:
@@ -229,7 +237,9 @@ def test_live_clustering_retries_same_job_and_supersedes_stale_result(
             failed = asyncio.run(job_by_id(job_id))
             assert failed.status == AIJobStatus.FAILED
             assert failed.attempt == 1
-            assert asyncio.run(worker.run_once()) is True
+            assert (
+                asyncio.run(worker.run_once(now=datetime.now(UTC) + timedelta(seconds=6))) is True
+            )
             retried = asyncio.run(job_by_id(job_id))
             assert retried.status == AIJobStatus.SUCCEEDED
             assert retried.attempt == 2
@@ -244,7 +254,7 @@ def test_live_clustering_retries_same_job_and_supersedes_stale_result(
                 ).status_code
                 == 201
             )
-            claimed = asyncio.run(worker._claim(datetime.now(UTC)))
+            claimed = asyncio.run(worker._claim(datetime.now(UTC) + timedelta(seconds=6)))
             assert claimed is not None
 
             async def advance_revision() -> None:
@@ -258,7 +268,9 @@ def test_live_clustering_retries_same_job_and_supersedes_stale_result(
 
             asyncio.run(advance_revision())
             suggestions = asyncio.run(FakeQuestionClusteringProvider().cluster(claimed.inputs))
-            asyncio.run(worker._succeed(claimed, suggestions, datetime.now(UTC)))
+            asyncio.run(
+                worker._succeed(claimed, suggestions, datetime.now(UTC) + timedelta(seconds=7))
+            )
             stale = asyncio.run(job_by_id(claimed.job_id))
             assert stale.status == AIJobStatus.SUPERSEDED
     finally:
@@ -327,7 +339,9 @@ def test_session_end_freezes_and_publishes_a_final_cluster_generation(
             worker = QuestionClusteringWorker(
                 database.session_factory, FakeQuestionClusteringProvider()
             )
-            assert asyncio.run(worker.run_once()) is True
+            assert (
+                asyncio.run(worker.run_once(now=datetime.now(UTC) + timedelta(seconds=6))) is True
+            )
 
             final_clusters = client.get(
                 f"/api/v1/sessions/{session_id}/question-clusters?scope=FINAL"

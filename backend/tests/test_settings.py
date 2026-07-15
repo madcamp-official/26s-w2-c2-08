@@ -187,6 +187,19 @@ def test_postprocessing_ai_provider_timeout_is_bounded_and_configurable() -> Non
         Settings(_env_file=None, postprocessing_ai_provider_timeout_seconds=301)
 
 
+def test_question_clustering_timeout_is_bounded_and_configurable() -> None:
+    """Whole-class clustering needs an operator-controlled local-model deadline."""
+
+    assert (
+        Settings(
+            _env_file=None, question_clustering_provider_timeout_seconds=150
+        ).question_clustering_provider_timeout_seconds
+        == 150
+    )
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, question_clustering_provider_timeout_seconds=0)
+
+
 def test_knowledge_embedding_timeout_is_bounded_and_configurable() -> None:
     """Embedding cold starts need their own finite operator-controlled deadline."""
 

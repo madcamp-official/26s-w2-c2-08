@@ -7,7 +7,7 @@ import hmac
 import json
 import unicodedata
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -244,6 +244,10 @@ class QuestionService:
         await session.flush()
 
         active = await self.repository.active_clustering_job(session, session_id) if live else None
+        if live and active is not None and active.status == AIJobStatus.PENDING:
+            active.input_through_sequence = state.requested_sequence
+            active.available_at = timestamp + LIVE_CLUSTERING_DEBOUNCE
+            active.version += 1
         if live and active is None and state.retry_job_id is None:
             active = AIJob(
                 session_id=session_id,
@@ -257,6 +261,7 @@ class QuestionService:
                 base_revision=state.current_revision,
                 blocks_session_completion=False,
                 retryable=True,
+                available_at=timestamp + LIVE_CLUSTERING_DEBOUNCE,
             )
             await JobKernel(outbox=self.outbox).enqueue(session, active)
             state.last_job_id = active.id
@@ -449,3 +454,6 @@ class QuestionService:
             raise QuestionRoleRequiredError
         if status not in {"LIVE", "PROCESSING", "COMPLETED"}:
             raise QuestionSessionStateError
+
+
+LIVE_CLUSTERING_DEBOUNCE = timedelta(seconds=5)

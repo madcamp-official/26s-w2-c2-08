@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import timedelta
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -17,6 +18,7 @@ from tbd.providers.ai import (
     LLMMessage,
     OllamaEmbeddingProvider,
     OllamaLLMProvider,
+    OllamaQuestionClusteringProvider,
     ProviderErrorCode,
     ProviderInvalidResponseError,
     ProviderRateLimitedError,
@@ -24,6 +26,7 @@ from tbd.providers.ai import (
     ProviderUnavailableError,
     invoke_provider,
 )
+from tbd.providers.ai.clustering import ClusteringInput
 
 pytestmark = pytest.mark.unit
 
@@ -218,6 +221,56 @@ def test_ollama_embedding_preserves_input_order() -> None:
 
         assert result.vectors == ((0.1, -0.2), (0.3, 0.4))
         assert result.model_name == "embeddinggemma:300m"
+
+    asyncio.run(exercise())
+
+
+def test_ollama_clustering_requests_semantic_groups_instead_of_singletons() -> None:
+    """The production prompt asks the model to merge questions answerable together."""
+
+    first_id, second_id = uuid4(), uuid4()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        prompt = payload["messages"][0]["content"]
+        assert "Merge paraphrases and questions that can be answered together" in prompt
+        assert "create a singleton only when" in prompt
+        return httpx.Response(
+            200,
+            json={
+                "model": "mistral-small3.2:24b",
+                "done": True,
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {
+                            "clusters": [
+                                {
+                                    "representative": "18번 문제의 핵심 개념과 풀이 방법은 무엇인가요?",
+                                    "question_ids": [str(first_id), str(second_id)],
+                                }
+                            ]
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            },
+        )
+
+    async def exercise() -> None:
+        provider = OllamaQuestionClusteringProvider(
+            base_url="http://ollama.local:11434",
+            model="mistral-small3.2:24b",
+            timeout=timedelta(seconds=90),
+            transport=httpx.MockTransport(handler),
+        )
+        result = await provider.cluster(
+            (
+                ClusteringInput(first_id, "18번 문제는 어떻게 풀어요?"),
+                ClusteringInput(second_id, "18번 문제의 핵심 개념은 무엇인가요?"),
+            )
+        )
+        assert result[0].question_ids == (first_id, second_id)
 
     asyncio.run(exercise())
 
