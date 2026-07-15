@@ -109,6 +109,9 @@ class SessionCursorCodec:
                 altchars=b"-_",
                 validate=True,
             )
+            canonical = base64.urlsafe_b64encode(encoded).decode("ascii").rstrip("=")
+            if not hmac.compare_digest(canonical, cursor):
+                raise ValueError
             if len(encoded) <= self._SIGNATURE_BYTES:
                 raise ValueError
             raw = encoded[: -self._SIGNATURE_BYTES]
